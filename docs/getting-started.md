@@ -36,6 +36,8 @@ npm run dev
 
 ```bash
 npm start              # production-запуск (читает .env: VIMP_DOMAIN и др.)
+npm run master:dev     # мастер-сервер P2P на https://localhost:3002 (см. docs/master.md)
+npm run master:start   # production-запуск мастер-сервера
 npm run build          # сборка (обработка аудио + Vite bundle)
 npx eslint .           # линтер
 npm test               # тесты (Vitest), одиночный прогон
@@ -56,7 +58,7 @@ npm run test:coverage  # покрытие
 
 Стек: **Vitest** + happy-dom (клиентские тесты) + coverage-v8. Конфиг `vitest.config.js` делит прогон на два проекта:
 
-- `node` — `tests/server`, `tests/lib`, `tests/config` (окружение node; Rapier WASM работает в тестах);
+- `node` — `tests/server`, `tests/master`, `tests/lib`, `tests/config` (окружение node; Rapier WASM работает в тестах);
 - `client` — `tests/client` (окружение happy-dom).
 
 Тесты лежат в `tests/` и зеркалят структуру `src/`. Интеграционные — в `tests/server/integration/` (полный жизненный цикл VIMP с реальными модулями). Правило проекта: **любое изменение кода завершается зелёными `npx eslint .` и `npm test`**; при правке `Tank.updateData`/`models.js` обязателен паритет-тест `tests/server/TankPredictorParity.test.js`.

@@ -12,6 +12,7 @@
 | [server.md](server.md) | Серверные модули: VIMP-фасад, менеджеры, физика Rapier, мета-модули, инфраструктура, боты |
 | [client.md](client.md) | Клиентские модули: MVC-компоненты, интерполяция, prediction, спавн снарядов, рендеринг, звук |
 | [network.md](network.md) | Синхронизация сервер‑клиент: WebSocket-порты, бинарный snapshot-кадр (v3), форматы данных, RTT |
+| [master.md](master.md) | Мастер-сервер P2P (Этап 1 миграции): реестр комнат, REST-список серверов, сигналинг WebRTC |
 | [configuration.md](configuration.md) | Конфигурация: переменные `.env`, все файлы `src/config/`, данные `src/data/` |
 | [extending.md](extending.md) | Расширение: новая карта, оружие, звук, клиентская сущность |
 | [deployment.md](deployment.md) | Развертывание: подготовка VPS, добавление/удаление серверов, CI/CD |

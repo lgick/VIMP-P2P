@@ -68,3 +68,42 @@ describe('security.origin: продакшен', () => {
     );
   });
 });
+
+// createOriginValidator: параметризуемая версия проверки
+// (используется мастер-сервером — не зависит от config server:*)
+describe('security.createOriginValidator', () => {
+  const validate = (validator, requestOrigin) =>
+    new Promise(resolve => validator(requestOrigin, err => resolve(err)));
+
+  const params = { protocol: 'https:', domain: 'master.test', port: 3001 };
+
+  it('в разработке разрешает localhost на своём порту', async () => {
+    process.env.NODE_ENV = 'development';
+    const validator = security.createOriginValidator(params);
+
+    expect(await validate(validator, 'https://localhost:3001')).toBeNull();
+    expect(await validate(validator, 'https://127.0.0.1:3001')).toBeNull();
+  });
+
+  it('в разработке блокирует чужой порт и сторонний origin', async () => {
+    process.env.NODE_ENV = 'development';
+    const validator = security.createOriginValidator(params);
+
+    expect(await validate(validator, 'https://localhost:3000')).toMatch(
+      /invalid origin/,
+    );
+    expect(await validate(validator, 'https://evil.test')).toMatch(
+      /invalid origin/,
+    );
+  });
+
+  it('в продакшене разрешает свой домен по HTTPS', async () => {
+    process.env.NODE_ENV = 'production';
+    const validator = security.createOriginValidator(params);
+
+    expect(await validate(validator, 'https://master.test')).toBeNull();
+    expect(await validate(validator, 'https://phishing.test')).toMatch(
+      /invalid origin/,
+    );
+  });
+});

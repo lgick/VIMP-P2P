@@ -23,6 +23,7 @@ VIMP Tank Battle — a multiplayer 2D real-time online tank game. The server run
 - `docs/configuration.md` — `.env`, все `src/config/*`, `src/data/*`
 - `docs/extending.md` — добавление карт, оружия, звуков, клиентских сущностей
 - `docs/deployment.md` — развертывание VPS + CI/CD (перенесено из `.github/deployment/README.md`, там осталась ссылка)
+- `docs/master.md` — мастер-сервер P2P (Этап 1 миграции): реестр комнат, REST-список серверов, сигналинг WebRTC
 
 **СТРОГОЕ ПРАВИЛО актуализации**: при изменении функционала обновлять соответствующие страницы `docs/` в том же изменении. Соответствие «что менялось → что править»:
 
@@ -43,6 +44,10 @@ VIMP Tank Battle — a multiplayer 2D real-time online tank game. The server run
 ```bash
 # Development (nodemon watches src/server, src/lib, src/config, src/data)
 npm run dev
+
+# P2P master server (лобби + сигналинг; dev: https://localhost:3002)
+npm run master:dev
+npm run master:start
 
 # Production
 npm start
@@ -137,6 +142,10 @@ Publisher-паттерн внутри MVC-тройки:
 - **`src/data/`** — static game data: `maps/` (tiled map definitions with respawns + physics bodies), `models.js`, `weapons.js`.
 - **`src/server/player/`** — единый реестр участников: `Participant`/`HumanParticipant`/`BotParticipant`, `ParticipantManager`.
 - **`src/server/core/`** — менеджеры, выделенные из VIMP: `RoundManager`, `CommandProcessor`, `VoteCoordinator`.
+
+### Master server (`src/master/`)
+
+Мастер-сервер P2P-миграции (Этап 1 `P2P-PLAN.md`), отдельная точка входа `src/master/main.js` (`npm run master:dev`, порт 3002; конфиг `src/config/master.js`). Реестр комнат браузерных хостов (`HostRegistry`), REST `GET /servers` (поиск/регионы/пагинация), сигналинг WebRTC (`SignalingServer`: `register_host`, `webrtc_offer`/`webrtc_answer`, `ice_candidate`, `ping_host`/`pong_host`, `report_host`), rate limiting (`src/lib/rateLimiter.js`), origin-allowlist (`security.createOriginValidator`). Игровой логики нет; живёт параллельно `src/server/` до вехи демонтажа. Детали — `docs/master.md`.
 
 ### WebSocket Protocol
 

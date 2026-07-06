@@ -22,6 +22,7 @@
 | `VIMP_ROUND_TIME` | Время раунда, мс | `120000` |
 | `VIMP_MAP_TIME` | Время карты, мс | `600000` |
 | `VIMP_FRIENDLY_FIRE` | `true`/`false` — огонь по своим | `false` |
+| `VIMP_MASTER_PORT` | Порт мастер-сервера P2P (читается в `src/master/main.js`; `VIMP_DOMAIN` для него также обязательна) | `3002` |
 
 В development-режиме `main.js` дополнительно принудительно ставит `server:oneConnection = false` (разрешает несколько вкладок с одного IP) и `game:isDevMode = true`.
 
@@ -175,6 +176,18 @@
 - `protocol`, `domain`, `port` — адрес (в production переопределяются `.env`);
 - `httpsOptions` — пути к локальным сертификатам `.certs/key.pem`/`cert.pem` (только для разработки; в production HTTPS терминирует Nginx);
 - `oneConnection: true` — при новом подключении с того же IP предыдущее соединение разрывается (в dev-режиме автоматически отключено).
+
+## src/config/master.js
+
+Конфиг мастер-сервера P2P (Этап 1 миграции, см. [master.md](master.md)); читается только `src/master/main.js`:
+
+- `protocol`, `domain`, `port` — адрес; порт по умолчанию `3002` (`3000` — игровой сервер, `3001` — Vite HMR). В production домен переопределяет `VIMP_DOMAIN`, порт — `VIMP_MASTER_PORT`;
+- `httpsOptions` — локальные сертификаты для dev (как у игрового сервера);
+- `servers` — параметры `GET /servers`: `regionThreshold: 15` (комнат меньше или столько — региональный фильтр и пагинация отключаются), `defaultLimit: 10`, `maxLimit: 50`;
+- `host` — ограничения комнат: `maxNameLength: 30`, `maxPlayersLimit: 8` (рамка P2P-плана), `heartbeatTimeout: 30000` (без heartbeat дольше — комната удаляется), `sweepInterval: 10000`;
+- `regionHeader: 'x-region'` — заголовок с регионом хоста от Nginx/CDN;
+- `pingRateLimit` — лимит сигнальных `ping_host` с одного IP (`limit: 10` за `windowMs: 1000`);
+- `iceServers` — ICE-конфигурация для клиентов и хостов (STUN; TURN — опционально по итогам Этапа 0).
 
 ## src/config/auth.js
 

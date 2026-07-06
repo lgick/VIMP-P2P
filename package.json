@@ -18,6 +18,8 @@
   "scripts": {
     "dev": "NODE_ENV=development nodemon src/server/main.js -w src/server -w src/lib -w src/config -w src/data",
     "start": "NODE_ENV=production node --env-file .env src/server/main.js",
+    "master:dev": "NODE_ENV=development nodemon src/master/main.js -w src/master -w src/lib -w src/config",
+    "master:start": "NODE_ENV=production node --env-file .env src/master/main.js",
     "deploy": "npm run build && pm2 reload vimp-lgick-space",
     "test": "vitest run",
     "test:watch": "vitest",

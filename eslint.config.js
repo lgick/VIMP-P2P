@@ -40,6 +40,7 @@ export default [
   {
     files: [
       'src/server/**/*.js', // все js файлы в src/server и его подпапках
+      'src/master/**/*.js', // мастер-сервер (Node.js)
     ],
     languageOptions: {
       ecmaVersion: 'latest', // последний ECMAScript
