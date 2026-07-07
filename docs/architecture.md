@@ -33,15 +33,20 @@ src/
   config/        — общие конфиги сервера и клиента (game, client, server, auth,
                    sounds, wsports, opcodes)
   data/          — статические данные: maps/, models.js, weapons.js
+  master/        — мастер-сервер P2P: реестр комнат, REST, сигналинг (docs/master.md)
   lib/           — общие утилиты: Publisher, factory, math, vec2, raycast,
                    snapshotCodec, validators, sanitizers, security, config, …
-tests/           — Vitest (зеркалит структуру src/)
+core/            — Rust-ядро симуляции → WASM (Этап 2 P2P-миграции): физика,
+                   танки, оружие, боты, упаковка снапшотов (docs/core.md)
+tests/           — Vitest (зеркалит структуру src/; tests/core — JS↔WASM харнесс ядра)
 public/          — статика (звуки)
-scripts/         — вспомогательные скрипты (обработка аудио)
+scripts/         — вспомогательные скрипты (обработка аудио, экспорт карт в JSON)
 .github/         — CI/CD (test.yml, deploy.yml) и скрипты развертывания
 ```
 
 `src/config/`, `src/data/` и `src/lib/` — **shared-слой**: импортируются и сервером (Node.js), и клиентом (Vite-бандл). Благодаря этому кодек снапшота, математика, валидаторы и параметры моделей гарантированно совпадают на обеих сторонах.
+
+Проект мигрирует на P2P-архитектуру ([P2P-PLAN.md](../P2P-PLAN.md)): мастер-сервер (`src/master/`, Этап 1) и Rust-ядро симуляции (`core/`, Этап 2) уже в репозитории и живут **параллельно** текущему авторитетному серверу — он остаётся рабочим путём и эталоном поведения до вехи Этапа 4 (полный матч на браузерном хосте), после которой демонтируется.
 
 ## Серверная сторона
 
@@ -95,7 +100,7 @@ connect → origin-проверка → CONFIG → auth → createUser (спек
 ## Ключевые инварианты
 
 - **Источник истины по портам** — `src/config/wsports.js`; по snapshot-ключам и версии бинарного формата — `src/config/opcodes.js`.
-- **Паритет реплики движения**: `Tank.updateData` (сервер) и `TankPredictor` (клиент) обязаны совпадать численно; закреплено тестом `tests/server/TankPredictorParity.test.js` — любая правка `Tank.updateData`/`models.js` требует его прогона.
+- **Паритет реплики движения**: `Tank.updateData` (сервер) и `TankPredictor` (клиент) обязаны совпадать численно; закреплено тестом `tests/server/TankPredictorParity.test.js` — любая правка `Tank.updateData`/`models.js` требует его прогона. С Этапа 2 паритет расширен на Rust-ядро: `tests/core/serverParity.test.js` (ядро ↔ сервер) и `tests/core/predictorParity.test.js` (реплика ↔ ядро) — движение обязано совпадать во всех трёх реализациях.
 - **Rapier импортируется только через** `src/server/physics/rapier.js` (top-level await инициализации WASM).
 - **Единое числовое пространство id** для людей и ботов; различение — `isBot`/`isNetworked`.
 - Все отправки клиенту — только через `SocketManager`.

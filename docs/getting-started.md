@@ -39,6 +39,9 @@ npm start              # production-запуск (читает .env: VIMP_DOMAIN
 npm run master:dev     # мастер-сервер P2P на https://localhost:3002 (см. docs/master.md)
 npm run master:start   # production-запуск мастер-сервера
 npm run build          # сборка (обработка аудио + Vite bundle)
+npm run core:build     # сборка Rust-ядра в WASM (web + nodejs; нужен Rust-тулчейн)
+npm run core:test      # Rust-тесты ядра (cargo test)
+npm run maps:export    # экспорт карт в JSON (src/data/maps/json/) для ядра
 npx eslint .           # линтер
 npm test               # тесты (Vitest), одиночный прогон
 npm run test:watch     # тесты в watch-режиме
@@ -46,6 +49,21 @@ npm run test:coverage  # покрытие
 ```
 
 Переменные `.env` для production описаны в [configuration.md](configuration.md#переменные-окружения-env).
+
+## Rust-тулчейн (ядро core/)
+
+Для работы с Rust-ядром симуляции ([core.md](core.md)) нужны `rustup` и
+`wasm-pack`; для чистой JS-разработки они **не обязательны** — тесты ядра
+пропускаются, если `core/pkg-node/` не собран.
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # rustc + cargo
+rustup target add wasm32-unknown-unknown
+brew install wasm-pack        # или: cargo install wasm-pack
+
+npm run core:build            # сборка обоих WASM-таргетов
+npm run core:test             # Rust-тесты
+```
 
 ## Локальный мультиплеер
 
@@ -58,9 +76,9 @@ npm run test:coverage  # покрытие
 
 Стек: **Vitest** + happy-dom (клиентские тесты) + coverage-v8. Конфиг `vitest.config.js` делит прогон на два проекта:
 
-- `node` — `tests/server`, `tests/master`, `tests/lib`, `tests/config` (окружение node; Rapier WASM работает в тестах);
+- `node` — `tests/server`, `tests/master`, `tests/lib`, `tests/config`, `tests/core` (окружение node; Rapier WASM работает в тестах);
 - `client` — `tests/client` (окружение happy-dom).
 
-Тесты лежат в `tests/` и зеркалят структуру `src/`. Интеграционные — в `tests/server/integration/` (полный жизненный цикл VIMP с реальными модулями). Правило проекта: **любое изменение кода завершается зелёными `npx eslint .` и `npm test`**; при правке `Tank.updateData`/`models.js` обязателен паритет-тест `tests/server/TankPredictorParity.test.js`.
+Тесты лежат в `tests/` и зеркалят структуру `src/`. Интеграционные — в `tests/server/integration/` (полный жизненный цикл VIMP с реальными модулями). JS↔WASM харнесс Rust-ядра — в `tests/core/` (пропускается без собранного `core/pkg-node/`, см. [core.md](core.md)); Rust-тесты ядра гоняются отдельно (`npm run core:test`). Правило проекта: **любое изменение кода завершается зелёными `npx eslint .` и `npm test`**; при правке `Tank.updateData`/`models.js` обязательны паритет-тесты `tests/server/TankPredictorParity.test.js` и `tests/core/` (serverParity/predictorParity).
 
-CI (`.github/workflows/test.yml`) гоняет eslint + тесты на каждый push/PR.
+CI (`.github/workflows/test.yml`) гоняет eslint, Rust-тесты ядра, сборку nodejs-таргета ядра и Vitest на каждый push/PR.

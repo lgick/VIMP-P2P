@@ -24,6 +24,7 @@ VIMP Tank Battle — a multiplayer 2D real-time online tank game. The server run
 - `docs/extending.md` — добавление карт, оружия, звуков, клиентских сущностей
 - `docs/deployment.md` — развертывание VPS + CI/CD (перенесено из `.github/deployment/README.md`, там осталась ссылка)
 - `docs/master.md` — мастер-сервер P2P (Этап 1 миграции): реестр комнат, REST-список серверов, сигналинг WebRTC
+- `docs/core.md` — Rust-ядро симуляции (Этап 2 миграции): структура `core/`, ABI (команды/события/кадры), сборка WASM, тесты, известные отличия от JS-версии
 
 **СТРОГОЕ ПРАВИЛО актуализации**: при изменении функционала обновлять соответствующие страницы `docs/` в том же изменении. Соответствие «что менялось → что править»:
 
@@ -36,6 +37,7 @@ VIMP Tank Battle — a multiplayer 2D real-time online tank game. The server run
 | правила игры (раунды, статистика, голосования, команды чата, управление) | `gameplay.md` |
 | новые карты/оружие/звуки — если изменился сам процесс добавления | `extending.md` |
 | скрипты деплоя, workflows, npm-скрипты | `deployment.md`, `getting-started.md` |
+| Rust-ядро `core/` (ABI, события, сборка, тесты) | `core.md` |
 
 Корневой `README.md` — краткая витрина со ссылками на `docs/`; детали туда не добавлять.
 
@@ -62,6 +64,12 @@ npx eslint .
 npm test            # одиночный прогон
 npm run test:watch  # watch-режим при разработке
 npm run test:coverage
+
+# Rust-ядро (core/; нужен Rust-тулчейн: rustup + wasm32 target + wasm-pack)
+npm run core:build       # WASM-сборка обоих таргетов (web + nodejs)
+npm run core:build:node  # только nodejs-таргет (для tests/core)
+npm run core:test        # Rust-тесты ядра (cargo test)
+npm run maps:export      # экспорт карт в JSON (src/data/maps/json/)
 ```
 
 ### Dev prerequisites
@@ -147,6 +155,10 @@ Publisher-паттерн внутри MVC-тройки:
 
 Мастер-сервер P2P-миграции (Этап 1 `P2P-PLAN.md`), отдельная точка входа `src/master/main.js` (`npm run master:dev`, порт 3002; конфиг `src/config/master.js`). Реестр комнат браузерных хостов (`HostRegistry`), REST `GET /servers` (поиск/регионы/пагинация), сигналинг WebRTC (`SignalingServer`: `register_host`, `webrtc_offer`/`webrtc_answer`, `ice_candidate`, `ping_host`/`pong_host`, `report_host`), rate limiting (`src/lib/rateLimiter.js`), origin-allowlist (`security.createOriginValidator`). Игровой логики нет; живёт параллельно `src/server/` до вехи демонтажа. Детали — `docs/master.md`.
 
+### Rust core (`core/`)
+
+Единое ядро симуляции P2P-миграции (Этап 2 `P2P-PLAN.md`): физика (нативный `rapier2d` с `enhanced-determinism`, НЕ `@dimforge/rapier2d-compat`), танки, оба типа оружия, боты и упаковка бинарных кадров v3 — на Rust, компилируется wasm-pack'ом под два таргета (`pkg-web/` для браузера/Worker, `pkg-node/` для Vitest; оба генерируются, в git не входят). Публичный ABI — класс `GameCore` (`core/src/lib.rs`): команды (`load_map`/`spawn_tank`/`add_bot`/`apply_input`/`step`/…), события для меты (`take_events`: kill/health/ammo/activeWeapon/shake — здоровье и боезапас живут в ядре, панель — проекция событий), кадры (`pack_body`/`pack_frame` + zero-copy `frame_ptr`), handoff (`serialize_state`/`deserialize_state`). Конфиг ядру собирает `src/lib/coreConfig.js`, карты конвертируются в JSON (`npm run maps:export`). Живёт параллельно `src/server/` (тот остаётся эталоном поведения до вехи Этапа 4); клиент распаковывает кадры ядра существующим `unpackFrame` без изменений. При изменении `Tank.updateData`/`models.js`/`snapshotCodec.js`/`opcodes.js` соответствующая часть ядра обязана обновляться синхронно — расхождение ловят паритет-тесты `tests/core/`. Детали — `docs/core.md`.
+
 ### WebSocket Protocol
 
 All messages except the snapshot channel: `[portId, payload]` serialized as JSON. Snapshot frames (port `5`) are binary.
@@ -179,8 +191,9 @@ Port IDs live in `src/config/wsports.js` (источник истины). Server
 ## Testing
 
 - **Обязательно**: после добавления или изменения кода проверять актуальность тестов и обновлять их — покрывать новый код тестами, править/удалять устаревшие. Любое изменение завершается зелёным `npx eslint .` + `npm test`.
-- **Стек**: Vitest + happy-dom (клиент) + `@vitest/coverage-v8`. Конфиг `vitest.config.js` — два проекта: `node` (`tests/server`, `tests/lib`, `tests/config`, окружение node) и `client` (`tests/client`, окружение happy-dom). Интеграционные тесты лежат в `tests/server/integration/` и гоняются в node-проекте.
-- **Запуск**: `npm test` (одиночный прогон), `npm run test:watch`, `npm run test:coverage`. CI: `.github/workflows/test.yml` гоняет `eslint` + тесты на каждый push/PR.
+- **Стек**: Vitest + happy-dom (клиент) + `@vitest/coverage-v8`. Конфиг `vitest.config.js` — два проекта: `node` (`tests/server`, `tests/master`, `tests/lib`, `tests/config`, `tests/core`, окружение node) и `client` (`tests/client`, окружение happy-dom). Интеграционные тесты лежат в `tests/server/integration/` и гоняются в node-проекте.
+- **Запуск**: `npm test` (одиночный прогон), `npm run test:watch`, `npm run test:coverage`; Rust-тесты ядра — `npm run core:test`. CI: `.github/workflows/test.yml` гоняет `eslint`, `cargo test`, сборку nodejs-таргета ядра и Vitest на каждый push/PR.
+- **Тесты ядра** (`tests/core/` + `core/`): JS↔WASM харнесс (`core.test.js` — ABI и round-trip кадров через реальный `unpackFrame`) и два паритет-теста движения: `serverParity.test.js` (ядро против реального `Tank` в Rapier-compat) и `predictorParity.test.js` (реплика `TankPredictor` против ядра — переориентация `TankPredictorParity` по п. 2.5 плана; оригинал живёт до демонтажа сервера). Все `tests/core/` пропускаются (`describe.skipIf`), если `core/pkg-node/` не собран — `npm test` зелёный и без Rust-тулчейна. Rust-слой: юнит-тесты в модулях + сценарии симуляции `core/tests/sim.rs`.
 - **Расположение**: тесты в `tests/`, зеркалят структуру `src/` (не рядом с кодом). Файлы тестов имеют override в `eslint.config.js` (глобалы Vitest).
 - **Покрыто** (~730 тестов): вся логика `lib/` (включая `security`, round-trip `snapshotCodec` и `raycast`); `SnapshotInterpolator`, `TankPredictor` и `ShotPredictor` (клиент) + **паритет-тест** `TankPredictorParity` (реплика движения против реального Rapier — обязателен к прогону при любой правке `Tank.updateData`/`models.js`); серверные модули с логикой (Stat, Vote, RTTManager, SnapshotManager, Panel, Chat, TimerManager, Pathfinder, SpatialManager, NavigationSystem, HitscanService, BaseModel, Bomb, Map, Tank, BotManager, BotController, SocketManager, Game, VIMP); реестр участников (`ParticipantManager`) и менеджеры из `core/` (`VoteCoordinator`, `RoundManager`, `CommandProcessor`); клиентские модели (Chat, Vote, Controls, Stat, Panel, Auth, Game, CanvasManager) + InputListener, SoundManager; клиентские контроллеры и view (все 8 — DOM через happy-dom); **интеграционный слой** (`tests/server/integration/`): полный жизненный цикл VIMP с реальными модулями + протокольный слой `socket/index.js`.
 - **Не покрыто** (низкий ROI для unit-тестов): Pixi-`parts/`+`effects/`, провайдеры (`BakingProvider`/`DependencyProvider`).

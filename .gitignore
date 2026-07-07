@@ -10,3 +10,11 @@ logs
 .env
 npm-debug.log*
 .certs/
+
+# Rust-ядро (core/): артефакты сборки
+core/target/
+core/pkg-node/
+core/pkg-web/
+
+# сгенерированные JSON-карты (npm run maps:export)
+src/data/maps/json/

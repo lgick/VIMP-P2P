@@ -25,7 +25,12 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "build": "npm run audio:process && vite build",
-    "audio:process": "node scripts/process-audio.js"
+    "audio:process": "node scripts/process-audio.js",
+    "core:build": "npm run core:build:web && npm run core:build:node",
+    "core:build:web": "wasm-pack build core --release --target web --out-dir pkg-web",
+    "core:build:node": "wasm-pack build core --release --target nodejs --out-dir pkg-node",
+    "core:test": "cargo test --manifest-path core/Cargo.toml",
+    "maps:export": "node scripts/export-maps.js"
   },
   "dependencies": {
     "@dimforge/rapier2d-compat": "^0.19.3",
