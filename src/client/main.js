@@ -36,6 +36,8 @@ import TankPredictor from './TankPredictor.js';
 import ShotPredictor from './ShotPredictor.js';
 import SignalingClient from './network/SignalingClient.js';
 import WebRtcManager from './network/WebRtcManager.js';
+import HostController from './network/HostController.js';
+import LoopbackTransport from './network/LoopbackTransport.js';
 import LobbyModel from './components/model/Lobby.js';
 import LobbyView from './components/view/Lobby.js';
 import LobbyCtrl from './components/controller/Lobby.js';
@@ -846,6 +848,21 @@ function connectToHost(hostId) {
   lobby.close();
 }
 
+// поднимает комнату в этой же вкладке (Worker хоста) и играет через loopback:
+// клиентский код одинаков, отличается лишь транспорт (LoopbackTransport вместо
+// WebRtcManager). Выход хоста = смерть комнаты — как и у обычного клиента
+function connectAsHost(room) {
+  const controller = new HostController(room);
+
+  transport = new LoopbackTransport(controller);
+
+  transport.publisher.on('message', handleMessage);
+  transport.publisher.on('close', handleDisconnect);
+  transport.connect();
+
+  lobby.close();
+}
+
 // REST-запрос списка серверов у мастера (поиск игнорирует пагинацию)
 async function fetchServers({ offset, limit, search }) {
   const params = new URLSearchParams();
@@ -893,6 +910,16 @@ function initLobby() {
 
   // выбор сервера → установка P2P
   lobbyModel.publisher.on('join', connectToHost);
+
+  // создание комнаты в этой же вкладке (хост-игрок через loopback)
+  const hostBtn = document.getElementById(lobbyConfig.elems.hostBtnId);
+  const nameInput = document.getElementById(lobbyConfig.elems.nameId);
+
+  hostBtn?.addEventListener('click', () => {
+    const name = (nameInput?.value || '').trim() || lobbyConfig.create.defaultName;
+
+    connectAsHost({ name, maxPlayers: lobbyConfig.create.maxPlayers });
+  });
 
   lobby.open();
 }

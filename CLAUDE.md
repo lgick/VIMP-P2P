@@ -25,6 +25,7 @@ VIMP Tank Battle — a multiplayer 2D real-time online tank game. The server run
 - `docs/deployment.md` — развертывание VPS + CI/CD (перенесено из `.github/deployment/README.md`, там осталась ссылка)
 - `docs/master.md` — мастер-сервер P2P (Этап 1 миграции): реестр комнат, REST-список серверов, сигналинг WebRTC
 - `docs/core.md` — Rust-ядро симуляции (Этап 2 миграции): структура `core/`, ABI (команды/события/кадры), сборка WASM, тесты, известные отличия от JS-версии
+- `docs/host.md` — браузерный хост P2P (Этап 4 миграции): Worker с ядром, `GameCoreAdapter`, host-фасад, loopback хоста-игрока, роутер главного потока
 
 **СТРОГОЕ ПРАВИЛО актуализации**: при изменении функционала обновлять соответствующие страницы `docs/` в том же изменении. Соответствие «что менялось → что править»:
 
@@ -38,6 +39,7 @@ VIMP Tank Battle — a multiplayer 2D real-time online tank game. The server run
 | новые карты/оружие/звуки — если изменился сам процесс добавления | `extending.md` |
 | скрипты деплоя, workflows, npm-скрипты | `deployment.md`, `getting-started.md` |
 | Rust-ядро `core/` (ABI, события, сборка, тесты) | `core.md` |
+| браузерный хост `src/host/` (Worker, адаптер ядра, транспорт хоста) | `host.md` |
 
 Корневой `README.md` — краткая витрина со ссылками на `docs/`; детали туда не добавлять.
 
@@ -158,6 +160,10 @@ Publisher-паттерн внутри MVC-тройки:
 ### Rust core (`core/`)
 
 Единое ядро симуляции P2P-миграции (Этап 2 `P2P-PLAN.md`): физика (нативный `rapier2d` с `enhanced-determinism`, НЕ `@dimforge/rapier2d-compat`), танки, оба типа оружия, боты и упаковка бинарных кадров v3 — на Rust, компилируется wasm-pack'ом под два таргета (`pkg-web/` для браузера/Worker, `pkg-node/` для Vitest; оба генерируются, в git не входят). Публичный ABI — класс `GameCore` (`core/src/lib.rs`): команды (`load_map`/`spawn_tank`/`add_bot`/`apply_input`/`step`/…), события для меты (`take_events`: kill/health/ammo/activeWeapon/shake — здоровье и боезапас живут в ядре, панель — проекция событий), кадры (`pack_body`/`pack_frame` + zero-copy `frame_ptr`), handoff (`serialize_state`/`deserialize_state`). Конфиг ядру собирает `src/lib/coreConfig.js`, карты конвертируются в JSON (`npm run maps:export`). Живёт параллельно `src/server/` (тот остаётся эталоном поведения до вехи Этапа 4); клиент распаковывает кадры ядра существующим `unpackFrame` без изменений. При изменении `Tank.updateData`/`models.js`/`snapshotCodec.js`/`opcodes.js` соответствующая часть ядра обязана обновляться синхронно — расхождение ловят паритет-тесты `tests/core/`. Детали — `docs/core.md`.
+
+### Browser host (`src/host/`)
+
+Браузерный хост P2P-миграции (Этап 4 `P2P-PLAN.md`): авторитетная часть матча в Web Worker'е вкладки создателя комнаты. **Фаза 1 (loopback) реализована** — одиночно-вкладочный хост через postMessage без WebRTC; WebRTC-answerer для удалённых клиентов — Фаза 2. Ключевое решение — **адаптер, а не форк меты**: мета-модули (`RoundManager`, `ParticipantManager`, `Chat`, `Vote`, `Stat`, `Panel`, `TimerManager`, `CommandProcessor`, `VoteCoordinator`, `SocketManager`) инъекционны и импортируются из `src/server/` **без правок** (Worker-safe: только изоморфные API — `Date`/`Math`/`performance`/`setTimeout`/`queueMicrotask`, никаких Node-глобалов). Новый код: `host.worker.js` (загрузка WASM-ядра `core/pkg-web` + порт-машина как `socket/index.js` + игровой цикл ~120 Гц), `HostGame.js` (host-фасад — аналог `VIMP.js`, но core-driven тик), `GameCoreAdapter.js` (поверхность `Game.js`/`Bots`/`Snapshot` поверх `GameCore`; проекция `take_events()` в `panel`/фасад; `createMap` грузит уже-масштабированную карту со `scale:1`; бот/человек — по `isBot` → `add_bot`/`spawn_tank`), `HostBotManager.js` (тонкий реестр ботов, ИИ — в ядре). Главный поток (`src/client/network/`): `HostController` (роутер Worker↔клиенты) + `LoopbackTransport` (транспорт хоста-игрока с интерфейсом `WebRtcManager`). Клиентский конфиг (порт 0) собирает общий `src/lib/buildClientConfig.js` (Worker и легаси-сервер). На вехе демонтажа (после Этапа 4) `VIMP.js` удаляется, `HostGame` становится каноничным. Детали — `docs/host.md`.
 
 ### WebSocket Protocol
 

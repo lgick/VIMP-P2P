@@ -907,6 +907,39 @@ impl GameState {
         blocks
     }
 
+    /// Полный снапшот игроков в форме Game.getPlayersData:
+    /// { model: { gameId: [x, y, angle, gun, vx, vy, engineLoad,
+    /// condition, size, team] } }. Читает кеш строк, НЕ дренируя
+    /// накопители событий — для первого кадра (FIRST_SHOT_DATA).
+    pub fn players_json(&self) -> String {
+        use serde_json::{Map, Value};
+
+        let mut by_model: Map<String, Value> = Map::new();
+
+        for (game_id, (model, row)) in &self.cached_players {
+            let mut arr: Vec<Value> = Vec::with_capacity(10);
+
+            // f32 → f64 расширяется так же, как клиент читает f32 из
+            // бинарного кадра (getFloat32 → double), значения совпадают
+            for value in row.floats {
+                arr.push(Value::from(value as f64));
+            }
+
+            arr.push(Value::from(row.condition));
+            arr.push(Value::from(row.size));
+            arr.push(Value::from(row.team));
+
+            by_model
+                .entry(model.clone())
+                .or_insert_with(|| Value::Object(Map::new()))
+                .as_object_mut()
+                .unwrap()
+                .insert(game_id.to_string(), Value::Array(arr));
+        }
+
+        Value::Object(by_model).to_string()
+    }
+
     // ***** очистка ***** //
 
     /// Удаляет всех игроков и снаряды, возвращает имена для очистки

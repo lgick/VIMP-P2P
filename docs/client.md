@@ -19,6 +19,8 @@
 - **`SignalingClient`** — тонкая обёртка сигнального WebSocket мастера: `connect()`, кэш `id`/`iceServers` из `welcome`, ретрансляция входящих сообщений подписчикам по полю `type` (через `Publisher`), методы `sendOffer`/`sendIceCandidate`/`pingHost`/`reportHost`. Транспорт инъектируется фабрикой ради тестов.
 - **`WebRtcManager`** — P2P-соединение с хостом: `RTCPeerConnection` + каналы `meta` (reliable-ordered) и `state` (unreliable-unordered). Клиент — offerer: создаёт каналы/оффер, обменивается SDP/ICE через `SignalingClient`. События `Publisher`: `open` (оба канала открыты), `message` (данные из любого канала одним потоком), `close` (разрыв). `RTCPeerConnection` инъектируется фабрикой ради тестов.
 
+Роль клиента выбирается в лобби (`src/client/main.js`): **присоединиться** (`connectToHost` → `WebRtcManager`, offerer) или **создать сервер** (`connectAsHost` → браузерный хост в этой же вкладке). Для хоста игровой транспорт — **`LoopbackTransport`** (Этап 4): тот же интерфейс, что у `WebRtcManager` (`publisher` с `message`/`close`, `send`/`close`), но данные ходят через `HostController` → Web Worker постмесседжами, минуя WebRTC. Клиентский код при этом одинаков — транспорт прозрачен. Детали — [host.md](host.md).
+
 ## MVC-компоненты (src/client/components/)
 
 Девять троек `model/` + `view/` + `controller/`: **Auth**, **Lobby**, **CanvasManager**, **Controls**, **Game**, **Chat**, **Panel**, **Stat**, **Vote**.

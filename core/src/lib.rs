@@ -156,6 +156,12 @@ impl GameCore {
             .unwrap_or_default()
     }
 
+    /// Полные данные всех игроков (Game.getPlayersData) одной JSON-строкой
+    /// для первого кадра (FIRST_SHOT_DATA). Не дренирует накопители.
+    pub fn players_data(&self) -> String {
+        self.state.players_json()
+    }
+
     /// Живые игроки плоским массивом [id, teamId, x, y, ...]
     /// (аналог Game.getAlivePlayers для меты).
     pub fn alive_players(&self) -> Vec<f32> {

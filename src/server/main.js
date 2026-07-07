@@ -3,6 +3,7 @@ import http from 'http';
 import https from 'https';
 import express from 'express';
 import config from '../lib/config.js';
+import { buildClientConfig } from '../lib/buildClientConfig.js';
 import ViteExpress from 'vite-express';
 
 config.set('auth', (await import('../config/auth.js')).default);
@@ -73,20 +74,12 @@ console.info(`-> Map time: ${config.get('game:timers:mapTime')}`);
 console.info(`-> Friendly fire: ${config.get('game:parts:friendlyFire')}`);
 console.info('------------------------------------------');
 
-// время ожидания vote-модуля
+// клиентский CONFIG_DATA: базовый конфиг + время голосования + данные
+// client-side prediction (общий билдер с Worker хоста)
 config.set(
-  'client:modules:vote:params:time',
-  config.get('game:timers:voteTime'),
+  'client',
+  buildClientConfig(config.get('game'), config.get('client')),
 );
-
-// данные для client-side prediction
-// (реплика движения своего танка и визуального спавна его снарядов)
-config.set('client:prediction', {
-  timeStep: config.get('game:timers:timeStep'),
-  playerKeys: config.get('game:playerKeys'),
-  models: config.get('game:parts:models'),
-  weapons: config.get('game:parts:weapons'),
-});
 
 // EXPRESS
 const app = express();

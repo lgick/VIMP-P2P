@@ -70,6 +70,24 @@ export default [
       'no-alert': 'warn', // предупреждать об alert, confirm, prompt
     },
   },
+  // конфигурация для кода браузерного хоста (Web Worker: WASM-ядро + мета)
+  {
+    files: [
+      'src/host/**/*.js', // Worker хоста и его модули
+    ],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: {
+        ...globals.browser, // structuredClone, queueMicrotask, console...
+        ...globals.worker, // self, postMessage, importScripts
+      },
+    },
+    rules: {
+      'no-console': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
+    },
+  },
+
   {
     files: ['src/lib/**/*.js', 'src/config/**/*.js', 'scripts/*.js'],
     languageOptions: {

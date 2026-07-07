@@ -24,6 +24,7 @@ export default defineConfig({
             'tests/lib/**/*.test.js',
             'tests/config/**/*.test.js',
             'tests/core/**/*.test.js',
+            'tests/host/**/*.test.js',
           ],
         },
       },

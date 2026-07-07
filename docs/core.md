@@ -84,6 +84,7 @@ core.load_map(JSON.stringify(mapData)); // масштабирование вну
 | `step(dt)` | `Game.updateData` + `Bots.updateBots` | фикс-шаги физики + ИИ ботов + пространственная сетка |
 | `clear()` | `Game.clear` | полная очистка мира (смена карты) |
 | `remove_players_and_shots()` | `Game.removePlayersAndShots` | JSON-массив имён для очистки полотна клиентов |
+| `players_data()` | `Game.getPlayersData` | JSON `{ model: { id: [x,y,angle,gun,vx,vy,engineLoad,condition,size,team] } }` для первого кадра (`FIRST_SHOT_DATA`); читает кеш, накопители не дренирует |
 | `serialize_state()` / `deserialize_state(dump)` | — (Spike B) | дамп/восстановление симуляции для Worker Handoff (Этап 5.2); перед дампом дренировать `pack_body()` |
 
 ### События (`take_events()`)

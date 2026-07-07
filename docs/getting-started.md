@@ -64,6 +64,12 @@ npm run test:coverage  # покрытие
 `wasm-pack`; для чистой JS-разработки они **не обязательны** — тесты ядра
 пропускаются, если `core/pkg-node/` не собран.
 
+Исключение — **браузерный хост** ([host.md](host.md)): его Worker грузит
+web-таргет ядра (`core/pkg-web/`). Прод-сборка `npm run build` собирает его
+сама (`core:build:web` встроен) — деплой требует Rust-тулчейн. Для dev
+host-фичи собери ядро один раз: `npm run core:build`. Легаси-сервер
+(`npm run dev`) хост не задействует и Rust не требует.
+
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # rustc + cargo
 rustup target add wasm32-unknown-unknown

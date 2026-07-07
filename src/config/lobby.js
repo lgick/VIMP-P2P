@@ -19,5 +19,13 @@ export default {
     searchId: 'lobby-search',
     moreId: 'lobby-more',
     emptyId: 'lobby-empty',
+    nameId: 'lobby-name',
+    hostBtnId: 'lobby-host',
+  },
+
+  // создание комнаты (хост в этой же вкладке)
+  create: {
+    defaultName: 'My Server',
+    maxPlayers: 8,
   },
 };

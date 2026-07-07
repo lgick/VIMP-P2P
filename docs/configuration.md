@@ -196,7 +196,8 @@
 - `serversUrl: '/servers'` — REST-эндпоинт мастера со списком серверов;
 - `pageSize: 10` — размер страницы для «Загрузить ещё» (`offset`/`limit`);
 - `pingInterval: 5000` — минимальный интервал повторного `ping_host` одного сервера (защита от спама при скролле/перерисовке);
-- `elems` — id DOM-элементов лобби (из `lobby.pug`).
+- `elems` — id DOM-элементов лобби (из `lobby.pug`), включая `nameId`/`hostBtnId` — поле имени и кнопка «создать сервер» (браузерный хост, [host.md](host.md));
+- `create` — настройки создания комнаты: `defaultName`, `maxPlayers` (≤ 8, рамка P2P-плана).
 
 ## src/config/auth.js
 

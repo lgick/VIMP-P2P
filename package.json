@@ -24,7 +24,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "build": "npm run audio:process && vite build",
+    "build": "npm run core:build:web && npm run audio:process && vite build",
     "audio:process": "node scripts/process-audio.js",
     "core:build": "npm run core:build:web && npm run core:build:node",
     "core:build:web": "wasm-pack build core --release --target web --out-dir pkg-web",
