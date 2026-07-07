@@ -12,9 +12,17 @@ import { lerp, lerpAngle, clamp } from '../lib/math.js';
 //   камеры);
 // - game/camera: непрерывная часть (позиции танков/динамики карты, x/y
 //   камеры), интерполированная между соседними кадрами, — на каждый вызов.
+//
+// Транспорт WebRTC (каналы meta/state) не гарантирует порядок и доставку:
+// кадры вставляются в буфер по seq с дедупликацией; события опоздавшего
+// reliable-кадра, чей serverTime уже позади renderTime, выдаются немедленно
+// следующим sample() — «ровно один раз» сохраняется.
 
 // коэффициент EMA-сглаживания оффсета серверного времени
 const OFFSET_SMOOTHING = 0.1;
+
+// окно памяти выданных seq для дедупликации (кадров; ~4 c при 30 пакетах/сек)
+const SEQ_DEDUP_WINDOW = 128;
 
 // индексы данных танка: 0,1 x/y; 2 angle; 3 gunRotation; 4,5 vx/vy;
 // 6 engineLoad; 7..9 condition/size/teamId (дискретные, берутся из кадра A)
@@ -31,18 +39,38 @@ export default class SnapshotInterpolator {
     this._delay = delay;
     this._maxFrameAge = maxFrameAge;
 
-    this._frames = []; // [{ serverTime, game, camera, issued }]
+    this._frames = []; // [{ seq, serverTime, game, camera, issued }]
     this._offsetEma = null; // сглаженный (serverTime − localNow)
+    this._lastRenderTime = null; // renderTime последнего sample()
+    this._pendingLate = []; // опоздавшие кадры — на немедленную выдачу
+    this._issuedSeqs = new Set(); // seq выданных кадров (дедупликация)
   }
 
   /**
-   * Добавляет кадр сервера в буфер.
+   * Добавляет кадр сервера в буфер (вставка по seq с дедупликацией).
    * @param {Object} game - gameSnapshot кадра.
    * @param {Array|0} camera - Камера кадра.
    * @param {number} serverTime
    * @param {number} localNow - Локальное время получения (performance.now()).
+   * @param {number} seq - Номер кадра (Uint32).
    */
-  push(game, camera, serverTime, localNow) {
+  push(game, camera, serverTime, localNow, seq) {
+    if (this._issuedSeqs.has(seq)) {
+      return;
+    }
+
+    // позиция вставки по seq (кадры почти всегда приходят по порядку —
+    // поиск с конца); заодно дедупликация по буферу
+    let index = this._frames.length;
+
+    while (index > 0 && this._frames[index - 1].seq >= seq) {
+      if (this._frames[index - 1].seq === seq) {
+        return;
+      }
+
+      index -= 1;
+    }
+
     const offset = serverTime - localNow;
 
     if (this._offsetEma === null) {
@@ -51,12 +79,26 @@ export default class SnapshotInterpolator {
       this._offsetEma += (offset - this._offsetEma) * OFFSET_SMOOTHING;
     }
 
-    // кадры приходят по порядку (TCP), но страховка от дубликатов не нужна —
-    // просто добавляем в конец
-    this._frames.push({ serverTime, game, camera, issued: false });
+    // кадр опоздал (renderTime уже прошёл его serverTime): в буфере он
+    // сдвинул бы опорный кадр назад — события выдаются немедленно
+    if (this._lastRenderTime !== null && serverTime <= this._lastRenderTime) {
+      this._issuedSeqs.add(seq);
+      this._pendingLate.push({ game, camera });
+
+      return;
+    }
+
+    this._frames.splice(index, 0, {
+      seq,
+      serverTime,
+      game,
+      camera,
+      issued: false,
+    });
 
     // страховочная очистка слишком старых кадров
-    const minTime = serverTime - this._maxFrameAge;
+    const newestTime = this._frames[this._frames.length - 1].serverTime;
+    const minTime = newestTime - this._maxFrameAge;
 
     while (this._frames.length > 2 && this._frames[0].serverTime < minTime) {
       this._frames.shift();
@@ -71,11 +113,18 @@ export default class SnapshotInterpolator {
    *   game/camera — интерполированная непрерывная часть (null, если буфер пуст).
    */
   sample(localNow) {
+    // опоздавшие кадры выдаются немедленно, даже если буфер пуст
+    const frames = this._pendingLate;
+
+    this._pendingLate = [];
+
     if (this._offsetEma === null || this._frames.length === 0) {
-      return { frames: [], game: null, camera: null };
+      return { frames, game: null, camera: null };
     }
 
     const renderTime = localNow + this._offsetEma - this._delay;
+
+    this._lastRenderTime = renderTime;
 
     // индекс кадра A: последний с serverTime <= renderTime
     let indexA = -1;
@@ -90,23 +139,23 @@ export default class SnapshotInterpolator {
 
     // renderTime раньше первого кадра — мир ещё «не начался»
     if (indexA === -1) {
-      return { frames: [], game: null, camera: null };
+      return { frames, game: null, camera: null };
     }
 
     // невыданные кадры, пересечённые renderTime (события — ровно один раз)
-    const frames = [];
-
     for (let i = 0; i <= indexA; i += 1) {
       const frame = this._frames[i];
 
       if (!frame.issued) {
         frame.issued = true;
+        this._issuedSeqs.add(frame.seq);
         frames.push({ game: frame.game, camera: frame.camera });
       }
     }
 
     // кадры до A больше не нужны (A остаётся опорным)
     this._frames.splice(0, indexA);
+    this._pruneIssuedSeqs();
 
     const frameA = this._frames[0];
     const frameB = this._frames[1];
@@ -144,6 +193,20 @@ export default class SnapshotInterpolator {
   reset() {
     this._frames = [];
     this._offsetEma = null;
+    this._lastRenderTime = null;
+    this._pendingLate = [];
+    this._issuedSeqs.clear();
+  }
+
+  // выкидывает из памяти дедупликации seq далеко позади опорного кадра
+  _pruneIssuedSeqs() {
+    const minSeq = this._frames[0].seq - SEQ_DEDUP_WINDOW;
+
+    for (const seq of this._issuedSeqs) {
+      if (seq < minSeq) {
+        this._issuedSeqs.delete(seq);
+      }
+    }
   }
 
   // интерполирует непрерывную часть снапшота (танки + динамика карты)

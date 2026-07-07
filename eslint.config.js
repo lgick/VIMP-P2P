@@ -136,7 +136,9 @@ export default [
       // плагин с запретом на caps в названиях
       'no-consecutive-caps/no-consecutive-caps': [
         'error',
-        { exceptions: ['VX', 'VY', 'RTT'] }, // исключения в названиях
+        // VX/VY/RTT — свои; URL/RTC — префиксы Web API (URLSearchParams,
+        // RTCPeerConnection), переименовать нельзя
+        { exceptions: ['VX', 'VY', 'RTT', 'URL', 'RTC'] },
       ],
     },
   },

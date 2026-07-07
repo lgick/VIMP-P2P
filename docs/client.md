@@ -2,17 +2,34 @@
 
 Клиент — браузерное приложение на PixiJS (сборка Vite, шаблоны Pug в [src/client/views/](../src/client/views/)). Точка входа — [src/client/main.js](../src/client/main.js).
 
-## main.js — диспетчер и рендер-цикл
+## main.js — бутстрап, диспетчер и рендер-цикл
 
-- Открывает WebSocket и ветвит входящие сообщения по типу `e.data`: строка → JSON `[portId, payload]` → обработчик `socketMethods[portId]`; `ArrayBuffer` → `unpackFrame` → буфер `SnapshotInterpolator` (несовпадение версии — кадр отброшен).
+- **Бутстрап**: создаёт `SignalingClient`, подключается к мастеру; по `welcome` поднимает лобби (`initLobby`). Выбор сервера → `connectToHost` создаёт `WebRtcManager` и устанавливает P2P.
+- Ветвит входящие пакеты хоста (`handleMessage`) по типу данных: строка → JSON `[portId, payload]` → обработчик `socketMethods[portId]`; `ArrayBuffer` → `unpackFrame` → буфер `SnapshotInterpolator` (несовпадение версии — кадр отброшен).
 - По `CONFIG_DATA` (порт 0) инициализирует все модули: PixiJS `Application`-ы, MVC-компоненты, `BakingProvider` (запекание текстур), `SoundManager`, предикторы; отвечает `CONFIG_READY`.
 - Первый кадр (`FIRST_SHOT_DATA`, порт 4) применяется немедленно, минуя буфер интерполяции.
 - **Рендер-цикл** `renderTick` на `Ticker.shared` (rAF): `sample()` интерполятора → применение кадров/интерполяции → предсказание своего танка поверх (`applyGameData`) → камера.
 - Сбросы: смена карты (`MAP_DATA`) и `CLEAR` очищают буфер интерполяции и предикторы.
+- **Разрыв P2P** (`handleDisconnect`): выход хоста = смерть комнаты (host-migration нет) — останавливает рендер-тик и `Application`-ы, показывает заглушку и возвращает в лобби перезагрузкой.
+
+## Сетевой слой (src/client/network/, Этап 3)
+
+Игровой транспорт — WebRTC, а не WebSocket (детали каналов — [network.md](network.md#транспорт-этап-3-webrtc-вместо-websocket)):
+
+- **`SignalingClient`** — тонкая обёртка сигнального WebSocket мастера: `connect()`, кэш `id`/`iceServers` из `welcome`, ретрансляция входящих сообщений подписчикам по полю `type` (через `Publisher`), методы `sendOffer`/`sendIceCandidate`/`pingHost`/`reportHost`. Транспорт инъектируется фабрикой ради тестов.
+- **`WebRtcManager`** — P2P-соединение с хостом: `RTCPeerConnection` + каналы `meta` (reliable-ordered) и `state` (unreliable-unordered). Клиент — offerer: создаёт каналы/оффер, обменивается SDP/ICE через `SignalingClient`. События `Publisher`: `open` (оба канала открыты), `message` (данные из любого канала одним потоком), `close` (разрыв). `RTCPeerConnection` инъектируется фабрикой ради тестов.
 
 ## MVC-компоненты (src/client/components/)
 
-Восемь троек `model/` + `view/` + `controller/`: **Auth**, **CanvasManager**, **Controls**, **Game**, **Chat**, **Panel**, **Stat**, **Vote**.
+Девять троек `model/` + `view/` + `controller/`: **Auth**, **Lobby**, **CanvasManager**, **Controls**, **Game**, **Chat**, **Panel**, **Stat**, **Vote**.
+
+**Lobby** (Этап 3) — экран выбора сервера ДО подключения к хосту:
+
+- **model** — реестр серверов (ответы `GET /servers` мастера), пагинация, поиск, умный пинг. I/O не делает: публикует `fetch` (запросить REST), `ping-request` (сигнальный ping), `join` (выбран сервер), `list`/`ping-update` (для view). `latency` живёт отдельно от списка и переживает refresh/пагинацию.
+- **view** — рендер карточек, поиск, «Загрузить ещё»; **умный пинг** через `IntersectionObserver`: карточка в видимой зоне → `visible` → контроллер шлёт `ping_host`; `pong` обновляет задержку и пересортировывает карточки по возрастанию. `IntersectionObserver` инъектируется ради тестов.
+- **controller** — проксирует view-события в модель; дросселирование пинга — в модели (`pingHost` возвращает `false`, если сервер пинговали недавно, интервал `pingInterval`).
+
+Конфиг — [src/config/lobby.js](../src/config/lobby.js) (бандлится в сборку, т.к. лобби проходит до подключения к хосту). Замер пинга **приблизительный** (клиент→мастер→хост, не P2P RTT) — так и подаётся в UI.
 
 Publisher-паттерн связей внутри тройки:
 
@@ -39,7 +56,8 @@ Publisher-паттерн связей внутри тройки:
 
 - серверное время оценивается EMA-оффсетом (`serverTime − localNow`), `renderTime = serverNow − delay` (конфиг `interpolation.delay: 100` мс);
 - `sample()` выдаёт пересечённые `renderTime` кадры **целиком ровно один раз** (события `w1`/`w2e`, создания/удаления, reset/shake камеры), а непрерывные величины интерполирует между соседними кадрами: танки `m1` (x/y/vx/vy/engineLoad — `lerp`, углы — `lerpAngle` из [src/lib/math.js](../src/lib/math.js)), динамика карты `c1`/`c2`, камера;
-- классификация ключей — по `kind` из `SNAPSHOT_KEYS` (`opcodes.js`); экстраполяции нет — hold на последнем кадре; буфер сбрасывается при смене карты и `CLEAR`.
+- классификация ключей — по `kind` из `SNAPSHOT_KEYS` (`opcodes.js`); экстраполяции нет — hold на последнем кадре; буфер сбрасывается при смене карты и `CLEAR`;
+- **вставка по `seq`** (Этап 3): транспорт `state`-канала не гарантирует порядок и доставку — `push(..., seq)` вставляет кадр по `seq` с дедупликацией; события опоздавшего reliable-кадра (его `serverTime` уже позади `renderTime`) выдаются немедленно следующим `sample()`, «ровно один раз» сохраняется.
 
 ### TankPredictor
 
@@ -94,4 +112,4 @@ Publisher-паттерн связей внутри тройки:
 
 ## Иерархия UI (z-index)
 
-`vimp` (1) → `radar` (2) → `chat` (3) → `panel` (4) → `vote` (5) → `game-informer` (6) → `stat` (7) → `auth` (8) → `tech-informer` (9).
+`vimp` (1) → `radar` (2) → `chat` (3) → `panel` (4) → `vote` (5) → `game-informer` (6) → `stat` (7) → `lobby`/`auth` (8) → `tech-informer` (9). Лобби (`#lobby`, z-index 8) — стартовый экран выбора сервера, показывается до подключения к хосту и скрывается при входе в игру.

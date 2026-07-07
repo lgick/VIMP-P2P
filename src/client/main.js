@@ -34,9 +34,15 @@ import SoundManager from './SoundManager.js';
 import SnapshotInterpolator from './SnapshotInterpolator.js';
 import TankPredictor from './TankPredictor.js';
 import ShotPredictor from './ShotPredictor.js';
+import SignalingClient from './network/SignalingClient.js';
+import WebRtcManager from './network/WebRtcManager.js';
+import LobbyModel from './components/model/Lobby.js';
+import LobbyView from './components/view/Lobby.js';
+import LobbyCtrl from './components/controller/Lobby.js';
 import BakingProvider from './providers/BakingProvider.js';
 import DependencyProvider from './providers/DependencyProvider.js';
 import wsports from '../config/wsports.js';
+import lobbyConfig from '../config/lobby.js';
 import parts from './parts/index.js';
 
 // PS (server ports): порты получения данные от сервера
@@ -70,9 +76,13 @@ const PC_CHAT_DATA = wsports.client.CHAT_DATA;
 const PC_VOTE_DATA = wsports.client.VOTE_DATA;
 const PC_PONG = wsports.client.PONG;
 
+// сигнальный WebSocket мастера (лобби + установка P2P); игровой трафик идёт
+// по WebRTC (transport), не через мастер
 const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-const ws = new WebSocket(`${wsProtocol}//${location.host}/`);
-ws.binaryType = 'arraybuffer';
+const signaling = new SignalingClient(`${wsProtocol}//${location.host}/`);
+
+// активное P2P-соединение с хостом (создаётся при выборе сервера в лобби)
+let transport = null;
 
 const modules = {};
 
@@ -736,9 +746,9 @@ function openMode(mode) {
   }
 }
 
-// отправляет данные
+// отправляет данные хосту (весь клиентский протокол — по надёжному каналу meta)
 function sending(name, data) {
-  ws.send(JSON.stringify([name, data]));
+  transport?.send(JSON.stringify([name, data]));
 }
 
 // распаковывает данные
@@ -757,31 +767,24 @@ function handleVisibilityChange() {
   }
 }
 
-// ДАННЫЕ С СЕРВЕРА
+// ДАННЫЕ ОТ ХОСТА (WebRTC-транспорт)
 
-ws.onopen = () => {};
-
-ws.onclose = e => {
-  document.removeEventListener('visibilitychange', handleVisibilityChange);
-  soundManager.destroy();
-
-  if (e.reason) {
-    const msg = unpacking(e.reason);
-    socketMethods[PS_TECH_INFORM_DATA](msg);
-  } else {
-    socketMethods[PS_TECH_INFORM_DATA]('Connection lost...');
-  }
-};
-
-ws.onmessage = e => {
+// обрабатывает входящий пакет: ArrayBuffer → кадр снапшота, строка → JSON-порт
+function handleMessage(data) {
   // бинарный кадр (snapshot, порт SHOT_DATA) — в буфер интерполяции
-  if (e.data instanceof ArrayBuffer) {
-    const frame = unpackFrame(e.data);
+  if (data instanceof ArrayBuffer) {
+    const frame = unpackFrame(data);
 
     if (frame && frame.port === PS_SHOT_DATA) {
       const now = performance.now();
 
-      interpolator.push(frame.snapshot, frame.camera, frame.serverTime, now);
+      interpolator.push(
+        frame.snapshot,
+        frame.camera,
+        frame.serverTime,
+        now,
+        frame.seq,
+      );
 
       // authoritative-состояние своего танка → reconciliation предикшена
       if (frame.player && predictor) {
@@ -798,8 +801,101 @@ ws.onmessage = e => {
     return;
   }
 
-  // JSON-сообщение
-  const msg = unpacking(e.data);
+  // JSON-сообщение [portId, payload]
+  const msg = unpacking(data);
 
   socketMethods[msg[0]](msg[1]);
-};
+}
+
+// разрыв P2P: выход хоста = смерть комнаты (host-migration нет). Останавливаем
+// рендер, показываем заглушку и возвращаемся в лобби перезагрузкой
+function handleDisconnect() {
+  Ticker.shared.remove(renderTick);
+
+  for (const id in apps) {
+    if (Object.hasOwn(apps, id)) {
+      apps[id].stop();
+    }
+  }
+
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+  soundManager.destroy();
+  modules.controls?.disableKeys();
+
+  socketMethods[PS_TECH_INFORM_DATA](
+    'Host left — the room is closed. Returning to lobby…',
+  );
+
+  setTimeout(() => location.reload(), 3000);
+}
+
+// БУТСТРАП: лобби и установка P2P через мастер-сервер
+
+let lobby = null;
+
+// устанавливает P2P-соединение с выбранным хостом и уходит из лобби
+function connectToHost(hostId) {
+  transport = new WebRtcManager(signaling, {
+    iceServers: signaling.iceServers,
+  });
+
+  transport.publisher.on('message', handleMessage);
+  transport.publisher.on('close', handleDisconnect);
+  transport.connect(hostId);
+
+  lobby.close();
+}
+
+// REST-запрос списка серверов у мастера (поиск игнорирует пагинацию)
+async function fetchServers({ offset, limit, search }) {
+  const params = new URLSearchParams();
+
+  if (search) {
+    params.set('search', search);
+  } else {
+    params.set('offset', offset);
+    params.set('limit', limit);
+  }
+
+  try {
+    const res = await fetch(`${lobbyConfig.serversUrl}?${params}`);
+
+    return res.ok ? await res.json() : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// поднимает лобби после welcome от мастера (iceServers уже получены)
+function initLobby() {
+  const lobbyModel = new LobbyModel(lobbyConfig);
+  const lobbyView = new LobbyView(lobbyModel, lobbyConfig.elems);
+
+  lobby = new LobbyCtrl(lobbyModel, lobbyView);
+
+  // список серверов — REST-запросом к мастеру
+  lobbyModel.publisher.on('fetch', async query => {
+    const list = await fetchServers(query);
+
+    if (list) {
+      lobbyModel.setList(list, query.append);
+    }
+  });
+
+  // умный пинг видимого сервера — сигнальным путём (замер приблизительный)
+  lobbyModel.publisher.on('ping-request', ({ hostId, pingId }) => {
+    signaling.pingHost(hostId, pingId);
+  });
+
+  signaling.publisher.on('pong_host', msg => {
+    lobbyModel.resolvePong(msg.pingId, performance.now());
+  });
+
+  // выбор сервера → установка P2P
+  lobbyModel.publisher.on('join', connectToHost);
+
+  lobby.open();
+}
+
+signaling.publisher.on('welcome', initLobby);
+signaling.connect();

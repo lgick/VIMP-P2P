@@ -526,3 +526,97 @@
     transform: scale(1);
   }
 }
+
+/*lobby*/
+
+#lobby {
+  background-color: #222;
+  position: absolute;
+  width: 100%;
+  min-height: 100%;
+  top: 0;
+  left: 0;
+  z-index: 8;
+}
+
+#lobby-panel {
+  background-color: #333;
+  width: 400px;
+  max-width: 90%;
+  margin: 10px auto;
+  border: 1px solid #eee;
+  text-shadow: 1px 1px 1px #000;
+  padding: 10px;
+  font-size: 12px;
+  line-height: 15px;
+}
+
+#lobby-panel h2 {
+  font-size: 21px;
+  line-height: 30px;
+  margin: 0 0 10px 0;
+  text-align: center;
+}
+
+#lobby-search {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+#lobby-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.lobby-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px;
+  margin-bottom: 4px;
+  background-color: #444;
+  border: 1px solid #555;
+  cursor: pointer;
+}
+
+.lobby-card:hover {
+  background-color: #555;
+}
+
+.lobby-card-name {
+  flex: 1;
+  font-weight: bold;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lobby-card-info {
+  color: #aaa;
+  white-space: nowrap;
+}
+
+.lobby-card-latency {
+  min-width: 48px;
+  text-align: right;
+  color: #ff0;
+}
+
+#lobby-empty {
+  text-align: center;
+  color: #888;
+  margin: 20px 0;
+}
+
+#lobby-more {
+  display: block;
+  margin: 8px auto 0;
+}

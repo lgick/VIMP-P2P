@@ -69,6 +69,8 @@ IP хоста и служебные поля наружу не отдаются.
 
 `iceServers` — ICE-конфигурация для `RTCPeerConnection` (STUN обязателен; TURN — опциональный релей по итогам Этапа 0).
 
+Клиентская сторона сигналинга (Этап 3) — [src/client/network/SignalingClient.js](../src/client/network/SignalingClient.js): подключается к этому WS, потребляет `welcome`/`iceServers`, шлёт `webrtc_offer`/`ice_candidate`/`ping_host`/`report_host` и ретранслирует входящие сообщения по `type`. Игровой трафик после установки P2P идёт по WebRTC (`WebRtcManager`), минуя мастер — см. [client.md](client.md#сетевой-слой-srcclientnetwork-этап-3) и [network.md](network.md#транспорт-этап-3-webrtc-вместо-websocket).
+
 ### Сообщения хоста
 
 | → мастеру | Ответ / эффект |

@@ -189,6 +189,15 @@
 - `pingRateLimit` — лимит сигнальных `ping_host` с одного IP (`limit: 10` за `windowMs: 1000`);
 - `iceServers` — ICE-конфигурация для клиентов и хостов (STUN; TURN — опционально по итогам Этапа 0).
 
+## src/config/lobby.js
+
+Конфиг клиентского лобби (Этап 3, см. [client.md](client.md#mvc-компоненты-srcclientcomponents)). В отличие от `client.js` **бандлится в сборку**, а не приходит от хоста: лобби проходит до подключения к хосту.
+
+- `serversUrl: '/servers'` — REST-эндпоинт мастера со списком серверов;
+- `pageSize: 10` — размер страницы для «Загрузить ещё» (`offset`/`limit`);
+- `pingInterval: 5000` — минимальный интервал повторного `ping_host` одного сервера (защита от спама при скролле/перерисовке);
+- `elems` — id DOM-элементов лобби (из `lobby.pug`).
+
 ## src/config/auth.js
 
 Форма авторизации: id DOM-элементов (`elems`) и параметры формы (`params`). Каждый параметр: `name`, значение по умолчанию, `validator` (функция из [src/lib/validators.js](../src/lib/validators.js): `isValidName`, `isValidModel`) и ключ `storage` для localStorage. Валидация выполняется и на клиенте, и повторно на сервере.
