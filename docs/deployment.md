@@ -104,6 +104,23 @@
 3. На вкладке **Secrets** должны существовать секреты для SSH-доступа деплоя: `SERVER_USER` (пользователь VPS) и `SERVER_SSH_KEY` (приватный ключ).
 4. Перейдите во вкладку **Actions** и перезапустите пайплайн вручную (Re-run jobs) либо сделайте `git push` в ветку `main` — система задеплоит игру на все серверы из списка.
 
+## 🔒 Security-заголовки и CSP (Этап 5.4)
+
+Гигиена среды P2P-миграции: отсекает «уличных» злоумышленников (не хоста-читера — его WASM-память ему доступна, см. `P2P-PLAN-SAFITY.md`). В проде клиентскую статику и `.wasm` отдаёт **Nginx**, поэтому авторитетная точка Content-Security-Policy — заголовок Nginx в `server`-блоке домена. Строка политики — единый source of truth в [src/config/master.js](../src/config/master.js) (`security.csp`); мастер ставит её на свои ответы, но HTML/`.wasm` идут через Nginx.
+
+Добавьте в Nginx `server`-блок (или в общий `snippet`):
+
+```nginx
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "no-referrer" always;
+add_header X-Frame-Options "DENY" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' wss:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
+```
+
+Ключевые директивы: `script-src ... 'wasm-unsafe-eval'` (компиляция WASM-ядра в браузере), `worker-src 'self' blob:` (Web Worker хоста), `connect-src 'self' wss:` (сигнальный WebSocket мастера; WebRTC data channels CSP не гейтит). В **dev** CSP не применяется — ViteExpress + HMR требуют `'unsafe-inline'` и HMR-WebSocket.
+
+Минификация JS-оболочки — штатная у `vite build`. Усиленная обфускация осознанно вне scope: против хоста-читера она бесполезна.
+
 ## 🛠 Обслуживание и удаление
 
 ### Изменение настроек серверов

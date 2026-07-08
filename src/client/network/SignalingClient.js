@@ -88,9 +88,9 @@ export default class SignalingClient {
     this._send({ type: 'ping_host', hostId, pingId });
   }
 
-  // жалоба /ban напрямую мастеру (минуя хоста-читера)
-  reportHost(hostId) {
-    this._send({ type: 'report_host', hostId });
+  // жалоба /ban напрямую мастеру (минуя хоста-читера); reason — причина
+  reportHost(hostId, reason) {
+    this._send({ type: 'report_host', hostId, reason });
   }
 
   close() {

@@ -25,7 +25,7 @@ npm run master:start   # production: HTTP за Nginx, читает .env
 | `src/master/SignalingServer.js` | сигнальный WebSocket: жизненный цикл соединений, маршрутизация WebRTC-сообщений, rate limiting пингов |
 | `src/lib/rateLimiter.js` | общий rate limiter с фиксированным окном (лимит событий на ключ за интервал) |
 
-`HostSession`: `hostId` (uuid), `name`, `maxPlayers` (clamp к `host.maxPlayersLimit`, рамка плана — 8), `currentPlayers`, `mapName`, `region`, `ip`, `status` (`online`/`banned`), `reportCount` + `reporters` (уникальность жалоб), `lastSeen`.
+`HostSession`: `hostId` (uuid), `name`, `maxPlayers` (clamp к `host.maxPlayersLimit`, рамка плана — 8), `currentPlayers`, `mapName`, `region`, `ip`, `status` (`online`/`banned`), `reportCount` + `reporters` (`Map` репортёр → timestamp: уникальность жалоб и окно давности), `reportReasons` (причины жалоб, аудит — наружу не отдаются, capped), `lastSeen`.
 
 Регион определяется по заголовку от Nginx/CDN (`regionHeader`, по умолчанию `x-region`; например, `CF-IPCountry`) — выбран вместо `geoip-lite` как бесплатный по памяти. Без заголовка регион — `unknown`.
 
@@ -89,7 +89,7 @@ IP хоста и служебные поля наружу не отдаются.
 | --- | --- |
 | `webrtc_offer { hostId, sdp }` | пересылается хосту как `webrtc_offer { clientId, sdp }`; ошибка `unknownHost` |
 | `ping_host { hostId, pingId }` | пересылается хосту; ограничен rate limiter'ом по IP (`pingRateLimit`, ошибка `rateLimited`). Замер **приблизительный** (клиент→мастер→хост, не P2P RTT) |
-| `report_host { hostId }` | жалоба `/ban`: инкремент `reportCount`, уникальность репортёров по IP (бан-логика — Этап 5) |
+| `report_host { hostId, reason }` | жалоба `/ban` (Этап 5.3): уникальность репортёров по IP в окне `host.reportWindowMs`; при `host.banThreshold` уникальных жалобах комната банится (см. ниже). `reason` санитизируется и складывается в `reportReasons` (аудит, публично не отображается) |
 
 ### Общие сообщения
 
@@ -99,11 +99,25 @@ IP хоста и служебные поля наружу не отдаются.
 
 Ошибки приходят как `{ "type": "error", "code": "<код>" }`. Невалидный JSON и неизвестные `type` молча игнорируются.
 
+## Соц-модерация `/ban` (Этап 5.3)
+
+Единственная анти-чит-мера принятой модели «минимум»: хост физически исполняет симуляцию у себя и может читерить, поэтому защита — социальная. Жалоба перехватывается **на клиенте** (`src/client/main.js`, команда `/ban <причина>`) и уходит **напрямую мастеру** по сигнальному WS, минуя хоста: его `CommandProcessor` мог бы отфильтровать жалобу на самого себя. Причина обязательна (гейт на стороне клиента), публично не отображается.
+
+Логика бана (`HostRegistry`):
+
+- `report(hostId, reporterKey, reason)` чистит `reporters` от записей старше `host.reportWindowMs`, добавляет нового репортёра (по IP), обновляет `reportCount = reporters.size`; возвращает `{ counted, banned }`.
+- При `reporters.size >= host.banThreshold` комната переводится в `status: 'banned'` (сразу выпадает из `GET /servers`), а её IP заносится в реестр забаненных до конца окна.
+- `SignalingServer` при `banned` закрывает сигнальный WS хоста кодом `4002` — новые WebRTC-офферы к нему больше не маршрутизируются (уже установленные P2P-пиры это не рвёт, host-migration нет: читер остаётся в комнате один).
+- `isBanned(ip)` не даёт забаненному IP перерегистрировать комнату до истечения окна (`register_host` → ошибка `banned`). Протухшие записи бана чистятся лениво и в `sweepStale`.
+
+Уникальность жалоб — по IP репортёра, поэтому несколько гостей за одним NAT считаются одним. Осознанное ограничение (анти-чит «минимум»).
+
 ## Защита
 
 - **Origin-allowlist** — паттерн `src/lib/security.js` (`createOriginValidator` с параметрами мастера).
-- **1 комната на IP** — проверка в `HostRegistry.add`.
+- **1 комната на IP** — проверка в `HostRegistry.add`; забаненный IP отклоняется (`isBanned`).
 - **Rate limiting пингов** — `RateLimiter` (фиксированное окно, по умолчанию 10 запросов/с с IP).
+- **Security-заголовки** (гигиена среды, Этап 5.4) — мастер ставит `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `X-Frame-Options: DENY` на все ответы; `Content-Security-Policy` — только в проде (в dev сломала бы Vite HMR). Прод-статику и `.wasm` с CSP отдаёт Nginx — см. [deployment.md](deployment.md); строка политики — единый source of truth в `src/config/master.js` (`security.csp`).
 - Санитизация входных строк (`sanitizeMessage`), clamp числовых полей.
 
 ## Тесты

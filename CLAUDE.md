@@ -155,7 +155,7 @@ Publisher-паттерн внутри MVC-тройки:
 
 ### Master server (`src/master/`)
 
-Мастер-сервер P2P-миграции (Этап 1 `P2P-PLAN.md`), отдельная точка входа `src/master/main.js` (`npm run master:dev`, порт 3002; конфиг `src/config/master.js`). Реестр комнат браузерных хостов (`HostRegistry`), REST `GET /servers` (поиск/регионы/пагинация), сигналинг WebRTC (`SignalingServer`: `register_host`, `webrtc_offer`/`webrtc_answer`, `ice_candidate`, `ping_host`/`pong_host`, `report_host`), rate limiting (`src/lib/rateLimiter.js`), origin-allowlist (`security.createOriginValidator`). Игровой логики нет; живёт параллельно `src/server/` до вехи демонтажа. Детали — `docs/master.md`.
+Мастер-сервер P2P-миграции (Этап 1 `P2P-PLAN.md`), отдельная точка входа `src/master/main.js` (`npm run master:dev`, порт 3002; конфиг `src/config/master.js`). Реестр комнат браузерных хостов (`HostRegistry`), REST `GET /servers` (поиск/регионы/пагинация), сигналинг WebRTC (`SignalingServer`: `register_host`, `webrtc_offer`/`webrtc_answer`, `ice_candidate`, `ping_host`/`pong_host`, `report_host`), rate limiting (`src/lib/rateLimiter.js`), origin-allowlist (`security.createOriginValidator`). **Соц-модерация `/ban`** (Этап 5.3) — единственная анти-чит-мера: клиент перехватывает `/ban <причина>` и шлёт `report_host` напрямую мастеру, минуя хоста-читера; `HostRegistry` при `banThreshold` уникальных по IP жалобах за окно `reportWindowMs` банит комнату (выпадает из выдачи, WS хоста закрывается кодом 4002, IP не перерегистрируется). **Гигиена среды** (Этап 5.4) — security-заголовки на ответах мастера; CSP на статику/`.wasm` — заголовок Nginx в проде (`docs/deployment.md`). Игровой логики нет; живёт параллельно `src/server/` до вехи демонтажа. Детали — `docs/master.md`.
 
 ### Rust core (`core/`)
 

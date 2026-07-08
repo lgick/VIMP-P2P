@@ -107,6 +107,12 @@ export default class SignalingServer {
       return;
     }
 
+    // забаненный IP не может поднять комнату, пока действует бан
+    if (this._registry.isBanned(session.ip)) {
+      this._sendError(session, 'banned');
+      return;
+    }
+
     const host = this._registry.add({
       name,
       maxPlayers,
@@ -207,9 +213,15 @@ export default class SignalingServer {
     }
   }
 
-  // жалоба /ban; уникальность репортёров — по IP
-  _onReportHost(session, { hostId }) {
-    this._registry.report(hostId, session.ip);
+  // жалоба /ban; уникальность репортёров — по IP. При достижении порога хост
+  // переводится в бан и его сигнальный WS закрывается — новые офферы к нему
+  // больше не маршрутизируются (уже подключённые P2P-пиры это не рвёт)
+  _onReportHost(session, { hostId, reason }) {
+    const { banned } = this._registry.report(hostId, session.ip, reason);
+
+    if (banned) {
+      this._getHostSession(hostId)?.ws.close(4002, 'banned');
+    }
   }
 
   _getHostSession(hostId) {

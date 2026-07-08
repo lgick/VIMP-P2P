@@ -39,6 +39,7 @@ console.info(`-> Domain: ${config.get('master:domain')}`);
 console.info(`-> Port: ${config.get('master:port')}`);
 console.info(`-> Region threshold: ${config.get('master:servers:regionThreshold')}`);
 console.info(`-> Max players per host: ${config.get('master:host:maxPlayersLimit')}`);
+console.info(`-> Ban threshold: ${config.get('master:host:banThreshold')} reports`);
 console.info('------------------------------------------');
 
 const registry = new HostRegistry({
@@ -47,6 +48,8 @@ const registry = new HostRegistry({
   maxLimit: config.get('master:servers:maxLimit'),
   maxNameLength: config.get('master:host:maxNameLength'),
   maxPlayersLimit: config.get('master:host:maxPlayersLimit'),
+  banThreshold: config.get('master:host:banThreshold'),
+  reportWindowMs: config.get('master:host:reportWindowMs'),
 });
 
 const signaling = new SignalingServer(registry, {
@@ -66,6 +69,21 @@ const app = express();
 let server;
 
 const port = config.get('master:port');
+
+// гигиена среды (Этап 5.4): базовые security-заголовки на всех ответах.
+// CSP — только в проде (в dev сломала бы Vite HMR; прод-статику/.wasm с CSP
+// отдаёт Nginx, здесь — для API-ответов мастера и как исполняемая документация)
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', config.get('master:security:referrerPolicy'));
+  res.setHeader('X-Frame-Options', 'DENY');
+
+  if (isProduction) {
+    res.setHeader('Content-Security-Policy', config.get('master:security:csp'));
+  }
+
+  next();
+});
 
 // REST API: список серверов (пагинация, регионы, поиск)
 app.get('/servers', (req, res) => {

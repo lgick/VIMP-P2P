@@ -27,6 +27,31 @@ export default {
     maxPlayersLimit: 8, // целевой размер комнаты (рамка P2P-плана)
     heartbeatTimeout: 30000, // нет heartbeat дольше — комната удаляется
     sweepInterval: 10000, // период проверки протухших комнат
+
+    // соц-модерация /ban (Этап 5.3): при banThreshold уникальных по IP жалобах
+    // за окно reportWindowMs комната банится (выпадает из списка, WS хоста
+    // закрывается, IP не может перерегистрироваться до конца окна)
+    banThreshold: 5,
+    reportWindowMs: 3600000, // окно учёта жалоб и срок бана (1 час)
+  },
+
+  // заголовки безопасности (гигиена среды, Этап 5.4). CSP на статику/.wasm в
+  // проде ставит Nginx (см. docs/deployment.md) — здесь single source of truth
+  // политики; мастер применяет её к своим ответам только в проде (в dev CSP
+  // сломала бы Vite HMR). WASM требует 'wasm-unsafe-eval', Worker — 'blob:'
+  security: {
+    csp: [
+      "default-src 'self'",
+      "script-src 'self' 'wasm-unsafe-eval'",
+      "worker-src 'self' blob:",
+      "connect-src 'self' wss:",
+      "img-src 'self' data: blob:",
+      "style-src 'self' 'unsafe-inline'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+    ].join('; '),
+    referrerPolicy: 'no-referrer',
   },
 
   // заголовок с регионом хоста от Nginx/CDN (например, CF-IPCountry);

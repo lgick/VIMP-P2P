@@ -4,7 +4,8 @@
 
 ## main.js — бутстрап, диспетчер и рендер-цикл
 
-- **Бутстрап**: создаёт `SignalingClient`, подключается к мастеру; по `welcome` поднимает лобби (`initLobby`). Выбор сервера → `connectToHost` создаёт `WebRtcManager` и устанавливает P2P.
+- **Бутстрап**: создаёт `SignalingClient`, подключается к мастеру; по `welcome` поднимает лобби (`initLobby`). Выбор сервера → `connectToHost` создаёт `WebRtcManager`, устанавливает P2P и запоминает `currentHostId` (для `/ban`).
+- **Соц-модерация `/ban`** (Этап 5.3): исходящий чат идёт через `handleChatSend` — он перехватывает `/ban <причина>` и вместо отправки хосту (порт `CHAT_DATA`) шлёт жалобу напрямую мастеру (`signaling.reportHost(currentHostId, reason)`), минуя хоста-читера. Причина обязательна, доступно только гостю (`currentHostId` есть); у хоста-игрока команда даёт локальную подсказку. Остальной чат — хосту как обычно.
 - Ветвит входящие пакеты хоста (`handleMessage`) по типу данных: строка → JSON `[portId, payload]` → обработчик `socketMethods[portId]`; `ArrayBuffer` → `unpackFrame` → буфер `SnapshotInterpolator` (несовпадение версии — кадр отброшен).
 - По `CONFIG_DATA` (порт 0) инициализирует все модули: PixiJS `Application`-ы, MVC-компоненты, `BakingProvider` (запекание текстур), `SoundManager`, предикторы; отвечает `CONFIG_READY`.
 - Первый кадр (`FIRST_SHOT_DATA`, порт 4) применяется немедленно, минуя буфер интерполяции.

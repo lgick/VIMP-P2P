@@ -163,8 +163,12 @@ describe('SignalingClient: исходящие сообщения', () => {
       pingId: 42,
     });
 
-    client.reportHost('h1');
-    expect(socket.lastSent()).toEqual({ type: 'report_host', hostId: 'h1' });
+    client.reportHost('h1', 'aimbot');
+    expect(socket.lastSent()).toEqual({
+      type: 'report_host',
+      hostId: 'h1',
+      reason: 'aimbot',
+    });
   });
 
   it('отправка при закрытом сокете молча игнорируется', () => {

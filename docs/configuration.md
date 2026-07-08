@@ -184,9 +184,10 @@
 - `protocol`, `domain`, `port` — адрес; порт по умолчанию `3002` (`3000` — игровой сервер, `3001` — Vite HMR). В production домен переопределяет `VIMP_DOMAIN`, порт — `VIMP_MASTER_PORT`;
 - `httpsOptions` — локальные сертификаты для dev (как у игрового сервера);
 - `servers` — параметры `GET /servers`: `regionThreshold: 15` (комнат меньше или столько — региональный фильтр и пагинация отключаются), `defaultLimit: 10`, `maxLimit: 50`;
-- `host` — ограничения комнат: `maxNameLength: 30`, `maxPlayersLimit: 8` (рамка P2P-плана), `heartbeatTimeout: 30000` (без heartbeat дольше — комната удаляется), `sweepInterval: 10000`;
+- `host` — ограничения комнат: `maxNameLength: 30`, `maxPlayersLimit: 8` (рамка P2P-плана), `heartbeatTimeout: 30000` (без heartbeat дольше — комната удаляется), `sweepInterval: 10000`; соц-модерация `/ban` (Этап 5.3): `banThreshold: 5` (уникальных по IP жалоб для бана), `reportWindowMs: 3600000` (окно учёта жалоб и срок бана, 1 ч);
 - `regionHeader: 'x-region'` — заголовок с регионом хоста от Nginx/CDN;
 - `pingRateLimit` — лимит сигнальных `ping_host` с одного IP (`limit: 10` за `windowMs: 1000`);
+- `security` (гигиена среды, Этап 5.4) — `csp` (строка Content-Security-Policy: single source of truth политики, в проде мастер ставит её на свои ответы, авторитетно на статику/`.wasm` — Nginx, см. [deployment.md](deployment.md)) и `referrerPolicy: 'no-referrer'`; заголовки `nosniff`/`X-Frame-Options`/`Referrer-Policy` мастер шлёт всегда, CSP — только в проде (в dev сломала бы Vite HMR);
 - `iceServers` — ICE-конфигурация для клиентов и хостов (STUN; TURN — опционально по итогам Этапа 0).
 
 ## src/config/lobby.js

@@ -8,6 +8,9 @@ const OPTIONS = {
   maxLimit: 4,
   maxNameLength: 10,
   maxPlayersLimit: 8,
+  banThreshold: 3,
+  reportWindowMs: 1000,
+  maxReasons: 2,
 };
 
 let registry;
@@ -130,14 +133,108 @@ describe('HostRegistry.report', () => {
   it('считает жалобы только от уникальных репортёров', () => {
     const host = registry.add({ name: 'a', ip: '1.1.1.1' });
 
-    expect(registry.report(host.hostId, 'reporter1')).toBe(true);
-    expect(registry.report(host.hostId, 'reporter1')).toBe(false);
-    expect(registry.report(host.hostId, 'reporter2')).toBe(true);
+    expect(registry.report(host.hostId, 'reporter1')).toEqual({
+      counted: true,
+      banned: false,
+    });
+    expect(registry.report(host.hostId, 'reporter1')).toEqual({
+      counted: false,
+      banned: false,
+    });
+    expect(registry.report(host.hostId, 'reporter2')).toEqual({
+      counted: true,
+      banned: false,
+    });
     expect(host.reportCount).toBe(2);
   });
 
-  it('возвращает false для неизвестной комнаты', () => {
-    expect(registry.report('nope', 'reporter1')).toBe(false);
+  it('банит комнату при достижении порога уникальных жалоб', () => {
+    const host = registry.add({ name: 'a', ip: '1.1.1.1' });
+
+    registry.report(host.hostId, 'r1');
+    registry.report(host.hostId, 'r2');
+
+    // banThreshold = 3
+    expect(registry.report(host.hostId, 'r3')).toEqual({
+      counted: true,
+      banned: true,
+    });
+    expect(host.status).toBe('banned');
+    expect(registry.isBanned(host.ip)).toBe(true);
+  });
+
+  it('забаненная комната выпадает из getList', () => {
+    addHosts(4, 'EU'); // > regionThreshold, чтобы был общий список
+    const host = registry.add({ name: 'target', ip: '9.9.9.9' });
+
+    registry.report(host.hostId, 'r1');
+    registry.report(host.hostId, 'r2');
+    registry.report(host.hostId, 'r3');
+
+    const found = registry.getList({}).servers.find(
+      s => s.hostId === host.hostId,
+    );
+
+    expect(found).toBeUndefined();
+  });
+
+  it('не учитывает жалобы старше окна давности', () => {
+    const host = registry.add({ name: 'a', ip: '1.1.1.1' });
+
+    registry.report(host.hostId, 'r1', 'reason', 0);
+    registry.report(host.hostId, 'r2', 'reason', 800);
+
+    // reportWindowMs = 1000: к моменту 1500 первая жалоба протухла (1500 мс),
+    // поэтому третья не добивает до порога 3
+    expect(registry.report(host.hostId, 'r3', 'reason', 1500)).toEqual({
+      counted: true,
+      banned: false,
+    });
+    expect(host.reportCount).toBe(2); // r2 (700 мс) + r3, r1 удалена
+    expect(host.status).toBe('online');
+  });
+
+  it('копит причины жалоб (аудит) с ограничением maxReasons', () => {
+    const host = registry.add({ name: 'a', ip: '1.1.1.1' });
+
+    registry.report(host.hostId, 'r1', 'aim');
+    registry.report(host.hostId, 'r2', 'wall');
+    registry.report(host.hostId, 'r3', 'speed');
+
+    // maxReasons = 2: держим только последние
+    expect(host.reportReasons).toEqual(['wall', 'speed']);
+  });
+
+  it('возвращает { counted:false, banned:false } для неизвестной комнаты', () => {
+    expect(registry.report('nope', 'reporter1')).toEqual({
+      counted: false,
+      banned: false,
+    });
+  });
+});
+
+describe('HostRegistry.isBanned', () => {
+  it('снимает бан по истечении окна', () => {
+    const host = registry.add({ name: 'a', ip: '1.1.1.1' });
+
+    registry.report(host.hostId, 'r1', '', 0);
+    registry.report(host.hostId, 'r2', '', 0);
+    registry.report(host.hostId, 'r3', '', 0);
+
+    // reportWindowMs = 1000 → бан до 1000
+    expect(registry.isBanned('1.1.1.1', 500)).toBe(true);
+    expect(registry.isBanned('1.1.1.1', 1000)).toBe(false);
+  });
+
+  it('забаненный IP не может зарегистрировать новую комнату', () => {
+    const host = registry.add({ name: 'a', ip: '1.1.1.1' });
+
+    registry.report(host.hostId, 'r1');
+    registry.report(host.hostId, 'r2');
+    registry.report(host.hostId, 'r3');
+    registry.remove(host.hostId); // комната ушла (WS хоста закрыт)
+
+    expect(registry.isBanned('1.1.1.1')).toBe(true);
   });
 });
 
@@ -151,6 +248,19 @@ describe('HostRegistry.sweepStale', () => {
     expect(removed).toEqual([stale.hostId]);
     expect(registry.get(stale.hostId)).toBeUndefined();
     expect(registry.get(fresh.hostId)).toBe(fresh);
+  });
+
+  it('чистит протухшие записи бана', () => {
+    const host = registry.add({ name: 'a', ip: '1.1.1.1' }, 0);
+
+    registry.report(host.hostId, 'r1', '', 0);
+    registry.report(host.hostId, 'r2', '', 0);
+    registry.report(host.hostId, 'r3', '', 0);
+
+    // бан до 1000 (reportWindowMs); свип на 2000 снимает его
+    registry.sweepStale(10000, 2000);
+
+    expect(registry.isBanned('1.1.1.1', 2000)).toBe(false);
   });
 });
 

@@ -52,7 +52,11 @@ let registry;
 let signaling;
 
 beforeEach(() => {
-  registry = new HostRegistry({ maxPlayersLimit: 8 });
+  registry = new HostRegistry({
+    maxPlayersLimit: 8,
+    banThreshold: 3,
+    reportWindowMs: 100000,
+  });
   signaling = new SignalingServer(registry, {
     iceServers: ICE_SERVERS,
     regionHeader: 'x-region',
@@ -299,14 +303,50 @@ describe('ping_host / pong_host', () => {
 });
 
 describe('report_host', () => {
-  it('учитывает жалобу один раз на IP репортёра', async () => {
+  it('учитывает жалобу один раз на IP репортёра и хранит причину', async () => {
     const host = await connectHost();
     const client = await connect({ ip: '5.5.5.5' });
 
-    client.ws.message({ type: 'report_host', hostId: host.hostId });
+    client.ws.message({
+      type: 'report_host',
+      hostId: host.hostId,
+      reason: 'aimbot',
+    });
     client.ws.message({ type: 'report_host', hostId: host.hostId });
 
-    expect(registry.get(host.hostId).reportCount).toBe(1);
+    const room = registry.get(host.hostId);
+
+    expect(room.reportCount).toBe(1);
+    expect(room.reportReasons).toEqual(['aimbot']);
+  });
+
+  it('при достижении порога банит хоста и закрывает его сигнальный WS', async () => {
+    const host = await connectHost();
+
+    // banThreshold = 3: жалобы от трёх разных IP
+    for (let i = 0; i < 3; i += 1) {
+      const client = await connect({ ip: `5.5.5.${i}` });
+      client.ws.message({ type: 'report_host', hostId: host.hostId });
+    }
+
+    // WS хоста закрыт кодом 4002; его close-хендлер убрал комнату из реестра
+    expect(host.ws.closed.code).toBe(4002);
+    expect(registry.get(host.hostId)).toBeUndefined();
+  });
+
+  it('забаненный IP не может зарегистрировать новую комнату', async () => {
+    const host = await connectHost(); // ip 1.1.1.1
+
+    for (let i = 0; i < 3; i += 1) {
+      const client = await connect({ ip: `6.6.6.${i}` });
+      client.ws.message({ type: 'report_host', hostId: host.hostId });
+    }
+
+    // тот же IP 1.1.1.1 пробует поднять новую комнату
+    const again = await connect({ ip: '1.1.1.1' });
+    again.ws.message({ type: 'register_host', name: 'Evade' });
+
+    expect(again.ws.lastSent()).toEqual({ type: 'error', code: 'banned' });
   });
 });
 

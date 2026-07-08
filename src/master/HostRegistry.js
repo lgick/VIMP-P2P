@@ -21,8 +21,12 @@ export default class HostRegistry {
     this._maxLimit = options.maxLimit ?? 50;
     this._maxNameLength = options.maxNameLength ?? 30;
     this._maxPlayersLimit = options.maxPlayersLimit ?? 8;
+    this._banThreshold = options.banThreshold ?? 5;
+    this._reportWindowMs = options.reportWindowMs ?? 3600000;
+    this._maxReasons = options.maxReasons ?? 20;
 
     this._hosts = new Map(); // hostId -> HostSession
+    this._bannedIps = new Map(); // ip -> срок снятия бана (timestamp)
   }
 
   get size() {
@@ -47,7 +51,8 @@ export default class HostRegistry {
       ip,
       status: 'online',
       reportCount: 0,
-      reporters: new Set(), // уникальность жалоб (ключ репортёра)
+      reporters: new Map(), // ключ репортёра -> ts жалобы (уникальность + окно)
+      reportReasons: [], // причины жалоб (аудит, наружу не отдаются)
       lastSeen: now,
     };
 
@@ -100,21 +105,68 @@ export default class HostRegistry {
     return true;
   }
 
-  // жалоба на хоста (/ban); reporterKey обеспечивает уникальность репортёров
-  report(hostId, reporterKey) {
-    const host = this._hosts.get(hostId);
+  // забанен ли IP (жалобы держатся окно reportWindowMs); лениво чистит протухшие
+  isBanned(ip, now = Date.now()) {
+    const expiry = this._bannedIps.get(ip);
 
-    if (!host || host.reporters.has(reporterKey)) {
+    if (expiry === undefined) {
       return false;
     }
 
-    host.reporters.add(reporterKey);
-    host.reportCount += 1;
+    if (now >= expiry) {
+      this._bannedIps.delete(ip);
+      return false;
+    }
 
     return true;
   }
 
-  // удаляет комнаты без heartbeat дольше timeout; возвращает удалённые id
+  // жалоба на хоста (/ban); reporterKey — уникальность в окне reportWindowMs.
+  // Возвращает { counted, banned }: counted — жалоба учтена (не дубль),
+  // banned — хост достиг порога и переведён в бан
+  report(hostId, reporterKey, reason, now = Date.now()) {
+    const host = this._hosts.get(hostId);
+
+    if (!host) {
+      return { counted: false, banned: false };
+    }
+
+    // отбросить жалобы старше окна давности
+    for (const [key, ts] of host.reporters) {
+      if (now - ts >= this._reportWindowMs) {
+        host.reporters.delete(key);
+      }
+    }
+
+    if (host.reporters.has(reporterKey)) {
+      return { counted: false, banned: false };
+    }
+
+    host.reporters.set(reporterKey, now);
+    host.reportCount = host.reporters.size;
+
+    const clean = sanitizeMessage(reason);
+
+    if (clean) {
+      host.reportReasons.push(clean);
+
+      if (host.reportReasons.length > this._maxReasons) {
+        host.reportReasons.shift();
+      }
+    }
+
+    if (host.reporters.size >= this._banThreshold) {
+      host.status = 'banned';
+      this._bannedIps.set(host.ip, now + this._reportWindowMs);
+
+      return { counted: true, banned: true };
+    }
+
+    return { counted: true, banned: false };
+  }
+
+  // удаляет комнаты без heartbeat дольше timeout; возвращает удалённые id.
+  // Заодно чистит протухшие записи бана
   sweepStale(timeout, now = Date.now()) {
     const removed = [];
 
@@ -122,6 +174,12 @@ export default class HostRegistry {
       if (now - host.lastSeen >= timeout) {
         this._hosts.delete(hostId);
         removed.push(hostId);
+      }
+    }
+
+    for (const [ip, expiry] of this._bannedIps) {
+      if (now >= expiry) {
+        this._bannedIps.delete(ip);
       }
     }
 

@@ -87,6 +87,10 @@ const signaling = new SignalingClient(`${wsProtocol}//${location.host}/`);
 // активное P2P-соединение с хостом (создаётся при выборе сервера в лобби)
 let transport = null;
 
+// hostId комнаты, к которой подключён гость (для жалобы /ban напрямую мастеру).
+// У хоста-игрока (своя вкладка) остаётся null — себя забанить нельзя
+let currentHostId = null;
+
 const modules = {};
 
 // создание и инициализация SoundManager
@@ -723,7 +727,7 @@ function runModules(data) {
 
     sending(PC_KEYS_DATA, `${inputSeq}:${data}`);
   });
-  chatModel.publisher.on('socket', data => sending(PC_CHAT_DATA, data));
+  chatModel.publisher.on('socket', handleChatSend);
   voteModel.publisher.on('socket', data => sending(PC_VOTE_DATA, data));
 
   //==========================================//
@@ -752,6 +756,28 @@ function openMode(mode) {
 // отправляет данные хосту (весь клиентский протокол — по надёжному каналу meta)
 function sending(name, data) {
   transport?.send(JSON.stringify([name, data]));
+}
+
+// перехватывает /ban <причина> и шлёт жалобу напрямую мастеру по сигнальному WS,
+// минуя хоста: его CommandProcessor мог бы отфильтровать жалобу на самого себя.
+// Причина обязательна (публично не отображается). Остальной чат уходит хосту
+function handleChatSend(message) {
+  if (message === '/ban' || message.startsWith('/ban ')) {
+    const reason = message.slice(4).trim();
+
+    if (!currentHostId) {
+      modules.chat.add(['/ban is available to room guests only']);
+    } else if (!reason) {
+      modules.chat.add(['/ban requires a reason: /ban <reason>']);
+    } else {
+      signaling.reportHost(currentHostId, reason);
+      modules.chat.add(['Report sent to the master server']);
+    }
+
+    return;
+  }
+
+  sending(PC_CHAT_DATA, message);
 }
 
 // распаковывает данные
@@ -852,6 +878,8 @@ let hostHeartbeat = null;
 
 // устанавливает P2P-соединение с выбранным хостом и уходит из лобби
 function connectToHost(hostId) {
+  currentHostId = hostId;
+
   transport = new WebRtcManager(signaling, {
     iceServers: signaling.iceServers,
   });
