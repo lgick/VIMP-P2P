@@ -19,6 +19,8 @@
 
 Клиент — инициатор (offerer): создаёт каналы и SDP-оффер, обменивается с хостом SDP/ICE через `SignalingClient`. Исходящие сообщения клиента (порты 0–8 client→server) — управляющие, идут по надёжному `meta`.
 
+**Хост — answerer** (Этап 4, [host.md](host.md)): `HostConnectionManager` в главном потоке вкладки хоста через `SignalingClient` ловит `webrtc_offer`, на каждого клиента создаёт `RTCPeerConnection`, `ondatachannel` принимает каналы клиента, шлёт `webrtc_answer` + ICE. Классификация meta/state реализована так: `HostGame` вычисляет per-user флаг `reliable` = `core.body_has_events()` (событийные блоки в теле — stateless-геттер ядра, не меняет `pack_body`) ∨ `forceReset` ∨ `shake`; флаг идёт через `SocketManager.sendShot(socketId, buffer, reliable)` (легаси-ws его игнорирует) в главный поток, который выбирает канал. Бэкпрешер: позиционный кадр дропается при переполнении `bufferedAmount` state-канала, `meta` — никогда. Хост регистрирует комнату у мастера (`register_host` + heartbeat `update_host`).
+
 **Буфер интерполятора** переведён с «push в конец» (корректно только при TCP-порядке) на **вставку по `seq`** с дедупликацией: кадры из ненадёжного `state`-канала могут приходить не по порядку и дублироваться. События опоздавшего reliable-кадра, чей `serverTime` уже позади `renderTime`, выдаются немедленно следующим `sample()` — «ровно один раз» сохраняется (см. [client.md](client.md#snapshotinterpolator)).
 
 ## Порты

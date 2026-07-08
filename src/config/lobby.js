@@ -27,5 +27,9 @@ export default {
   create: {
     defaultName: 'My Server',
     maxPlayers: 8,
+
+    // период heartbeat/актуализации комнаты у мастера (мс); должен быть
+    // меньше master.host.heartbeatTimeout (30 c), иначе комнату выметет
+    heartbeatInterval: 10000,
   },
 };

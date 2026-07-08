@@ -174,3 +174,50 @@ describe('SignalingClient: исходящие сообщения', () => {
     expect(socket.sent).toEqual([]);
   });
 });
+
+describe('SignalingClient: исходящие сообщения хоста', () => {
+  beforeEach(() => {
+    client.connect();
+  });
+
+  it('registerHost шлёт register_host с настройками комнаты', () => {
+    client.registerHost({ name: 'Room', maxPlayers: 8, mapName: 'pool_mini' });
+
+    expect(socket.lastSent()).toEqual({
+      type: 'register_host',
+      name: 'Room',
+      maxPlayers: 8,
+      mapName: 'pool_mini',
+    });
+  });
+
+  it('updateHost шлёт update_host (heartbeat + currentPlayers)', () => {
+    client.updateHost({ currentPlayers: 3, mapName: 'pool_mini' });
+
+    expect(socket.lastSent()).toEqual({
+      type: 'update_host',
+      currentPlayers: 3,
+      mapName: 'pool_mini',
+    });
+  });
+
+  it('sendAnswer шлёт webrtc_answer конкретному клиенту', () => {
+    client.sendAnswer('cl1', { type: 'answer' });
+
+    expect(socket.lastSent()).toEqual({
+      type: 'webrtc_answer',
+      clientId: 'cl1',
+      sdp: { type: 'answer' },
+    });
+  });
+
+  it('pongHost шлёт pong_host на сигнальный ping клиента', () => {
+    client.pongHost('cl1', 7);
+
+    expect(socket.lastSent()).toEqual({
+      type: 'pong_host',
+      clientId: 'cl1',
+      pingId: 7,
+    });
+  });
+});

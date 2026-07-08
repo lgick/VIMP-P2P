@@ -6,11 +6,10 @@
 авторитетный сервер (`src/server/`), который живёт параллельно как эталон
 до вехи демонтажа (после Этапа 4).
 
-> **Статус (Фаза 1, loopback).** Реализован одиночно-вкладочный хост:
-> создатель комнаты играет в своей же вкладке через **postMessage-loopback**
-> (без WebRTC). Подключение удалённых клиентов по WebRTC (answerer,
-> `register_host`, классификация каналов meta/state, бэкпрешер) — Фаза 2,
-> см. `P2P-PLAN.md`.
+> **Статус.** Фаза 1 (loopback хоста-игрока в своей вкладке) и Фаза 2
+> (удалённые клиенты по WebRTC: answerer, `register_host`, классификация
+> каналов meta/state, бэкпрешер) реализованы. Остаётся Фаза 3 — прогон вехи
+> end-to-end (8 игроков + боты), см. `P2P-PLAN.md`.
 
 Код хоста — `src/host/` (Worker + ядро + мета) и `src/client/network/`
 (роутер главного потока + транспорты).
@@ -22,8 +21,10 @@
 ├─ Главный поток (клиент + роутер)
 │   ├─ client (src/client/main.js): рендер, предикт, звук — как обычный клиент
 │   ├─ HostController: спавнит Worker, роутит пакеты Worker ↔ клиенты
-│   └─ LoopbackTransport: транспорт хоста-игрока (интерфейс WebRtcManager
-│      поверх postMessage) — Фаза 1
+│   ├─ LoopbackTransport: транспорт хоста-игрока (интерфейс WebRtcManager
+│   │  поверх postMessage)
+│   └─ HostConnectionManager: WebRTC-answerer для удалённых клиентов
+│      (register_host, meta/state, бэкпрешер)
 └─ Web Worker (src/host/host.worker.js): авторитетная симуляция
     ├─ GameCore (WASM, core/pkg-web)
     ├─ GameCoreAdapter: поверхность Game.js/Bots/Snapshot поверх ядра
@@ -116,12 +117,43 @@ Host-фасад — аналог `src/server/modules/VIMP.js`, но:
 - **`HostController`** — спавнит Worker (`new Worker(new URL('host.worker.js'),
   { type: 'module' })`; фабрика инъектируется для тестов), шлёт `init(room)`,
   роутит `to_client`/`close_client` зарегистрированным клиентам и пересылает
-  входящие сообщения в Worker. Общий для loopback и (Фаза 2) удалённых клиентов.
+  входящие сообщения в Worker. Общий для loopback и удалённых клиентов;
+  `onReady` (Worker поднят) — момент регистрации комнаты у мастера.
 - **`LoopbackTransport`** — транспорт хоста-игрока: реализует интерфейс
   `WebRtcManager` (`publisher` с `message`/`close`, `send`/`close`), но данные
   ходят через `HostController` → Worker постмесседжами. Для клиентского кода
   транспорт прозрачен; флаг `reliable` игнорируется (loopback надёжен и
   упорядочен по определению).
+- **`HostConnectionManager`** (Фаза 2) — WebRTC-answerer удалённых клиентов
+  (зеркало `WebRtcManager`, который у клиента offerer). Через `SignalingClient`
+  ловит `webrtc_offer`, на каждого клиента создаёт `RTCPeerConnection`,
+  `ondatachannel` принимает каналы `meta`/`state`, шлёт `webrtc_answer` и
+  обменивается ICE. Когда оба канала клиента открыты — поднимает его соединение
+  в Worker'е (`HostController.open` → `connect`). Отвечает на сигнальный
+  `ping_host` клиента (`pong_host` — замер задержки в лобби).
+
+### Классификация каналов и бэкпрешер (Фаза 2)
+
+Исходящий Worker-кадр раскладывается по каналам: **события → `meta`**
+(reliable-ordered), **чистые позиции → `state`** (unreliable). Решение —
+по флагу `reliable`, который `HostGame` вычисляет per-user:
+`core.body_has_events()` (трассеры/бомбы/взрывы/удаления в теле, stateless-
+геттер ядра — не меняет сигнатуру `pack_body`) ∨ `forceReset` камеры ∨
+`shake`. JSON-протокол (порты `[portId, payload]`) — всегда по `meta`. Флаг
+идёт через `SocketManager.sendShot(socketId, buffer, reliable)` (легаси-ws его
+игнорирует) → worker-сокет → `to_client` → answerer. **Бэкпрешер**: перед
+отправкой позиционного кадра проверяется `bufferedAmount` state-канала; выше
+порога кадр дропается (следующий компенсирует), `meta` не дропается никогда.
+
+### Регистрация у мастера (Фаза 2)
+
+По `onReady` хост шлёт `register_host` (имя/лимит/карта — фактическая карта
+приходит из Worker'а в `ready`) и заводит heartbeat (`update_host` каждые
+`lobbyConfig.create.heartbeatInterval` мс, меньше `heartbeatTimeout` мастера).
+`currentPlayers` = 1 (хост-игрок) + число WebRTC-пиров, актуализируется при
+входе/выходе клиента (`onPeersChange`). Выход хоста-игрока = смерть комнаты:
+`handleDisconnect` гасит heartbeat, закрывает пиров (`HostConnectionManager.
+destroy`) и Worker (`HostController.destroy`).
 
 ## Выбор роли (клиентский бутстрап)
 
@@ -131,7 +163,8 @@ Host-фасад — аналог `src/server/modules/VIMP.js`, но:
   `WebRtcManager` (offerer, как в Этапе 3);
 - **создать сервер** — кнопка/имя в лобби (`#lobby-host`/`#lobby-name`,
   `src/config/lobby.js`) → `connectAsHost(room)` → `HostController` + Worker +
-  `LoopbackTransport`.
+  `LoopbackTransport` (хост-игрок) + `HostConnectionManager` (удалённые клиенты)
+  + регистрация у мастера.
 
 Дальше клиентский код одинаков (транспорт абстрагирован). Выход хоста = смерть
 комнаты (host-migration нет) — как и у обычного клиента: `handleDisconnect`
@@ -146,7 +179,14 @@ Host-фасад — аналог `src/server/modules/VIMP.js`, но:
   player-блоком, движение, стрельба (трассер + боезапас), боты, `players_data`;
   бинарные кадры декодируются реальным `unpackFrame`.
 - `tests/host/LoopbackTransport.test.js` — юнит на фейковом Worker:
-  `HostController` (роутинг, очередь connect до `ready`) и `LoopbackTransport`.
+  `HostController` (роутинг, очередь connect до `ready`, флаг `reliable`) и
+  `LoopbackTransport`.
+- `tests/host/HostConnectionManager.test.js` — юнит на фейковых peer/каналах:
+  оффер→answer, каналы meta/state, классификация reliable, бэкпрешер, ICE,
+  сигнальный pong, закрытие.
+- `tests/client/network/SignalingClient.test.js` — исходящие хоста
+  (`register_host`/`update_host`/`webrtc_answer`/`pong_host`).
+- `tests/core/core.test.js` — `body_has_events()` (классификация meta/state).
 
 ## Сборка
 

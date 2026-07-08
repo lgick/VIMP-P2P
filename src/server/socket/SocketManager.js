@@ -132,12 +132,14 @@ export default class SocketManager {
    * @private
    * @param {string} socketId
    * @param {ArrayBuffer} buffer - Кадр (порт — первый байт буфера).
+   * @param {boolean} [reliable] - надёжный ли кадр (WebRTC meta vs state);
+   *   легаси-транспорт (ws) флаг игнорирует.
    */
-  _sendBinary(socketId, buffer) {
+  _sendBinary(socketId, buffer, reliable) {
     const sender = this._binarySenders.get(socketId);
 
     if (sender) {
-      sender(buffer);
+      sender(buffer, reliable);
     } else {
       this._logSendError(socketId, 'binary', `<${buffer.byteLength} bytes>`);
     }
@@ -285,9 +287,11 @@ export default class SocketManager {
    * Отправка игровых данных (бинарный snapshot-кадр).
    * @param {string} socketId
    * @param {ArrayBuffer} frameBuffer - Кадр из SnapshotPacker.packFrame.
+   * @param {boolean} [reliable] - событийный ли кадр (WebRTC meta) или
+   *   позиционный (state); легаси-транспорт (ws) флаг игнорирует.
    */
-  sendShot(socketId, frameBuffer) {
-    this._sendBinary(socketId, frameBuffer);
+  sendShot(socketId, frameBuffer, reliable) {
+    this._sendBinary(socketId, frameBuffer, reliable);
   }
 
   /**

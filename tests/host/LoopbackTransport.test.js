@@ -61,13 +61,18 @@ describe('HostController', () => {
     });
   });
 
-  it('to_client роутит payload зарегистрированному клиенту', () => {
+  it('to_client роутит payload и флаг reliable зарегистрированному клиенту', () => {
     const onMessage = vi.fn();
 
     controller.open('local', { onMessage, onClose: vi.fn() });
-    worker.emit({ type: 'to_client', socketId: 'local', payload: 'hello' });
+    worker.emit({
+      type: 'to_client',
+      socketId: 'local',
+      payload: 'hello',
+      reliable: true,
+    });
 
-    expect(onMessage).toHaveBeenCalledWith('hello');
+    expect(onMessage).toHaveBeenCalledWith('hello', true);
   });
 
   it('close_client уведомляет клиента', () => {

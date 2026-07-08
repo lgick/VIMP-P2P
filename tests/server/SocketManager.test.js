@@ -141,11 +141,11 @@ describe('SocketManager: простые отправители', () => {
     expect(socket.send).toHaveBeenCalledWith(3, { map: 1 });
   });
 
-  it('sendShot передаёт бинарный кадр через sendBinary как есть', () => {
+  it('sendShot передаёт бинарный кадр и флаг reliable через sendBinary', () => {
     const frame = new ArrayBuffer(8);
 
-    sm.sendShot('s1', frame);
-    expect(socket.sendBinary).toHaveBeenCalledWith(frame);
+    sm.sendShot('s1', frame, true);
+    expect(socket.sendBinary).toHaveBeenCalledWith(frame, true);
     expect(socket.send).not.toHaveBeenCalled();
   });
 

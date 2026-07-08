@@ -9,14 +9,17 @@ export default class HostController {
    * @param {Object} room - настройки комнаты (имя/карта/лимит/таймеры).
    * @param {Object} [opts]
    * @param {Function} [opts.workerFactory] - фабрика Worker'а (для тестов).
+   * @param {Function} [opts.onReady] - вызывается, когда Worker готов
+   *   (авторитетная часть поднята) — момент регистрации хоста у мастера.
    */
-  constructor(room, { workerFactory } = {}) {
+  constructor(room, { workerFactory, onReady } = {}) {
     this._worker = workerFactory
       ? workerFactory()
       : new Worker(new URL('../../host/host.worker.js', import.meta.url), {
           type: 'module',
         });
 
+    this._onReady = onReady;
     this._ready = false;
     this._deliveries = new Map(); // socketId → { onMessage, onClose }
     this._pendingConnects = []; // socketId, ожидающие готовности Worker'а
@@ -64,10 +67,11 @@ export default class HostController {
         }
 
         this._pendingConnects.length = 0;
+        this._onReady?.(msg);
         break;
 
       case 'to_client':
-        this._deliveries.get(msg.socketId)?.onMessage(msg.payload);
+        this._deliveries.get(msg.socketId)?.onMessage(msg.payload, msg.reliable);
         break;
 
       case 'close_client':

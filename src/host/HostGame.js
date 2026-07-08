@@ -215,6 +215,10 @@ export default class HostGame {
     // broadcast-часть кадра пакуется в ядре один раз за тик
     this._game.packBody();
 
+    // событийные блоки тела (трассеры/бомбы/взрывы/удаления) требуют надёжной
+    // доставки (WebRTC meta); чисто позиционный кадр идёт по state
+    const bodyHasEvents = this._game.bodyHasEvents();
+
     // вычисляет камеру наблюдения для пользователя
     const getCamera = user => {
       let camera;
@@ -255,9 +259,15 @@ export default class HostGame {
       // player-блок предикшена собирает ядро по playerId (наблюдатель → -1)
       const playerId = user.isWatching === false ? gameId : null;
 
+      // per-user события кадра: forceReset (camera[2]) и shake (camera[3])
+      // тоже требуют надёжной доставки
+      const reliable =
+        bodyHasEvents || camera[2] === true || Boolean(camera[3]);
+
       this._socketManager.sendShot(
         socketId,
         this._game.packFrame(camera, serverTime, seq, playerId),
+        reliable,
       );
 
       if (panelUpdates[gameId]) {

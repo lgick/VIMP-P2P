@@ -58,6 +58,26 @@ export default class SignalingClient {
     this._send({ type: 'webrtc_offer', hostId, sdp });
   }
 
+  // хост → регистрация комнаты у мастера (ответ — событие 'host_registered')
+  registerHost({ name, maxPlayers, mapName }) {
+    this._send({ type: 'register_host', name, maxPlayers, mapName });
+  }
+
+  // хост → актуализация комнаты (заодно heartbeat)
+  updateHost({ currentPlayers, mapName } = {}) {
+    this._send({ type: 'update_host', currentPlayers, mapName });
+  }
+
+  // хост → SDP-ответ конкретному клиенту
+  sendAnswer(clientId, sdp) {
+    this._send({ type: 'webrtc_answer', clientId, sdp });
+  }
+
+  // хост → pong на сигнальный ping клиента (замер задержки в лобби)
+  pongHost(clientId, pingId) {
+    this._send({ type: 'pong_host', clientId, pingId });
+  }
+
   // обмен ICE-кандидатами (targetId — hostId со стороны клиента)
   sendIceCandidate(targetId, candidate) {
     this._send({ type: 'ice_candidate', targetId, candidate });

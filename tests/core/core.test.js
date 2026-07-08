@@ -227,6 +227,29 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
 
       expect(decoded.snapshot.w1).toBeUndefined();
     });
+
+    it('body_has_events классифицирует кадр (события → meta, позиции → state)', () => {
+      core.spawn_tank(1, 'm1', 1, 0, 0, 0);
+      core.step(DT);
+      core.pack_body();
+
+      expect(core.body_has_events()).toBe(false); // только позиции
+
+      core.apply_input(1, 1, 'down', 'fire');
+      core.step(DT);
+      core.pack_body();
+
+      expect(core.body_has_events()).toBe(true); // трассер
+
+      core.pack_body();
+
+      expect(core.body_has_events()).toBe(false); // события дренированы
+
+      core.remove_tank(1);
+      core.pack_body();
+
+      expect(core.body_has_events()).toBe(true); // null-маркер удаления
+    });
   });
 
   describe('события ядра для меты', () => {

@@ -66,20 +66,23 @@ function applyRoomOverrides(room = {}) {
 // wire-сокет пользователя: пишет кадры в главный поток (роутер WebRTC/loopback)
 function makeWorkerSocket(socketId) {
   return {
-    // JSON-сообщение [port, payload] — строкой (как ws.send)
+    // JSON-сообщение [port, payload] — строкой (как ws.send); всегда надёжно
     send: (port, data) => {
       self.postMessage({
         type: 'to_client',
         socketId,
         payload: JSON.stringify([port, data]),
+        reliable: true,
       });
     },
 
-    // бинарный кадр — Transferable ArrayBuffer (без копии)
-    sendBinary: buffer => {
-      self.postMessage({ type: 'to_client', socketId, payload: buffer }, [
-        buffer,
-      ]);
+    // бинарный кадр — Transferable ArrayBuffer (без копии); reliable решает
+    // канал WebRTC (meta/state) в главном потоке
+    sendBinary: (buffer, reliable) => {
+      self.postMessage(
+        { type: 'to_client', socketId, payload: buffer, reliable },
+        [buffer],
+      );
     },
 
     // закрытие соединения
@@ -106,7 +109,8 @@ async function onInit(room) {
   socketManager = new SocketManager(wsports.server);
   host = new HostGame(game, socketManager, core);
 
-  self.postMessage({ type: 'ready' });
+  // мастеру нужна фактическая карта комнаты (разрешена из overrides/дефолта)
+  self.postMessage({ type: 'ready', mapName: game.currentMap });
 }
 
 // новое подключение клиента: порт-машина как в socket/index.js

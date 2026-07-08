@@ -37,6 +37,7 @@ import ShotPredictor from './ShotPredictor.js';
 import SignalingClient from './network/SignalingClient.js';
 import WebRtcManager from './network/WebRtcManager.js';
 import HostController from './network/HostController.js';
+import HostConnectionManager from './network/HostConnectionManager.js';
 import LoopbackTransport from './network/LoopbackTransport.js';
 import LobbyModel from './components/model/Lobby.js';
 import LobbyView from './components/view/Lobby.js';
@@ -824,6 +825,15 @@ function handleDisconnect() {
   soundManager.destroy();
   modules.controls?.disableKeys();
 
+  // если мы были хостом — гасим комнату: heartbeat, WebRTC-пиры, Worker
+  if (hostHeartbeat) {
+    clearInterval(hostHeartbeat);
+    hostHeartbeat = null;
+  }
+
+  hostConnections?.destroy();
+  hostController?.destroy();
+
   socketMethods[PS_TECH_INFORM_DATA](
     'Host left — the room is closed. Returning to lobby…',
   );
@@ -834,6 +844,11 @@ function handleDisconnect() {
 // БУТСТРАП: лобби и установка P2P через мастер-сервер
 
 let lobby = null;
+
+// ресурсы роли хоста (комната в этой же вкладке)
+let hostController = null;
+let hostConnections = null;
+let hostHeartbeat = null;
 
 // устанавливает P2P-соединение с выбранным хостом и уходит из лобби
 function connectToHost(hostId) {
@@ -848,13 +863,39 @@ function connectToHost(hostId) {
   lobby.close();
 }
 
-// поднимает комнату в этой же вкладке (Worker хоста) и играет через loopback:
-// клиентский код одинаков, отличается лишь транспорт (LoopbackTransport вместо
-// WebRtcManager). Выход хоста = смерть комнаты — как и у обычного клиента
+// поднимает комнату в этой же вкладке (Worker хоста): хост-игрок играет через
+// loopback, удалённые клиенты — по WebRTC (answerer). Клиентский код одинаков,
+// отличается лишь транспорт. Выход хоста = смерть комнаты — как у клиента
 function connectAsHost(room) {
-  const controller = new HostController(room);
+  hostController = new HostController(room, {
+    onReady: readyMsg => {
+      const mapName = readyMsg?.mapName;
 
-  transport = new LoopbackTransport(controller);
+      // регистрация комнаты у мастера + периодический heartbeat
+      const update = () =>
+        signaling.updateHost({
+          currentPlayers: 1 + (hostConnections?.peerCount || 0),
+          mapName,
+        });
+
+      signaling.registerHost({
+        name: room.name,
+        maxPlayers: room.maxPlayers,
+        mapName,
+      });
+
+      hostHeartbeat = setInterval(update, lobbyConfig.create.heartbeatInterval);
+    },
+  });
+
+  // удалённые клиенты по WebRTC; актуализация currentPlayers при их вход/выходе
+  hostConnections = new HostConnectionManager(signaling, hostController, {
+    iceServers: signaling.iceServers,
+    onPeersChange: count => signaling.updateHost({ currentPlayers: 1 + count }),
+  });
+
+  // хост-игрок в этой же вкладке
+  transport = new LoopbackTransport(hostController);
 
   transport.publisher.on('message', handleMessage);
   transport.publisher.on('close', handleDisconnect);

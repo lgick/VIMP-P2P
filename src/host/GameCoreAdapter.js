@@ -148,6 +148,12 @@ export default class GameCoreAdapter {
     this._core.pack_body();
   }
 
+  // содержал ли последний packBody событийные блоки (трассеры/бомбы/взрывы/
+  // удаления) — для классификации канала WebRTC (meta reliable / state)
+  bodyHasEvents() {
+    return this._core.body_has_events();
+  }
+
   /**
    * Пакует per-user кадр v3 и возвращает его ArrayBuffer.
    * @param {Array|number} camera - [x, y, forceReset?, shake?] или 0.

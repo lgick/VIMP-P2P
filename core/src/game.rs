@@ -58,6 +58,10 @@ pub struct GameState {
     // события для меты, дренируются в take_events
     pub events: Vec<CoreEvent>,
 
+    // содержал ли последний собранный body событийные блоки (трассеры/бомбы/
+    // взрывы/удаления танков) — для классификации канала WebRTC meta/state
+    last_body_has_events: bool,
+
     // кеш строк снапшота игроков (Game._cachedPlayersData)
     cached_players: IndexMap<u32, (String, TankRow)>,
 
@@ -111,6 +115,7 @@ impl GameState {
             weapon_effects: IndexMap::new(),
             pending_null_tanks: Vec::new(),
             events: Vec::new(),
+            last_body_has_events: false,
             cached_players: IndexMap::new(),
             bodies_to_destroy: Vec::new(),
             cfg,
@@ -846,6 +851,10 @@ impl GameState {
     pub fn build_snapshot_blocks(&mut self) -> Vec<(String, Block)> {
         let mut blocks: Vec<(String, Block)> = Vec::new();
 
+        // событийные блоки (трассеры/бомбы/взрывы/удаления танков) требуют
+        // надёжной доставки (канал meta); null-маркеры — уже событие
+        let mut has_events = !self.pending_null_tanks.is_empty();
+
         // танки по моделям (getWorldState) + null-маркеры удалённых
         let mut tanks_by_model: IndexMap<String, Vec<(u8, Option<TankRow>)>> = IndexMap::new();
 
@@ -873,6 +882,8 @@ impl GameState {
                 continue;
             }
 
+            has_events = true;
+
             let name = self.cfg.weapons.get_index(weapon_index).unwrap().0.clone();
 
             blocks.push((name, Block::Tracers(tracers)));
@@ -883,6 +894,8 @@ impl GameState {
                 continue;
             }
 
+            has_events = true;
+
             let name = self.cfg.weapons.get_index(weapon_index).unwrap().0.clone();
 
             blocks.push((name, Block::Bombs(bombs.into_iter().collect())));
@@ -892,6 +905,8 @@ impl GameState {
             if explosions.is_empty() {
                 continue;
             }
+
+            has_events = true;
 
             blocks.push((outcome_id, Block::Explosions(explosions)));
         }
@@ -904,7 +919,15 @@ impl GameState {
             ));
         }
 
+        self.last_body_has_events = has_events;
+
         blocks
+    }
+
+    /// Содержал ли последний собранный body событийные блоки — для
+    /// классификации канала WebRTC (meta reliable / state unreliable).
+    pub fn body_has_events(&self) -> bool {
+        self.last_body_has_events
     }
 
     /// Полный снапшот игроков в форме Game.getPlayersData:

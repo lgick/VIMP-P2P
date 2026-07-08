@@ -238,6 +238,13 @@ impl GameCore {
             .len()
     }
 
+    /// Содержал ли последний `pack_body()` событийные блоки (трассеры/бомбы/
+    /// взрывы/удаления). JS-Worker вызывает после `pack_body()` для выбора
+    /// канала WebRTC: события → meta (reliable), только позиции → state.
+    pub fn body_has_events(&self) -> bool {
+        self.state.body_has_events()
+    }
+
     /// Указатель на буфер последнего кадра (zero-copy чтение из JS:
     /// new Uint8Array(wasm.memory.buffer, ptr, len)).
     pub fn frame_ptr(&self) -> *const u8 {
