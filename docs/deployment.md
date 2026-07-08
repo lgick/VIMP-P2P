@@ -4,6 +4,8 @@
 
 **Как это работает**: пуш в `main` → [.github/workflows/deploy.yml](../.github/workflows/deploy.yml) собирает Docker-образ и публикует его в GHCR → по SSH заходит на каждый сервер из `SERVERS_MATRIX`, генерирует `.env` и перезапускает контейнер `vimp-<domain>`. На VPS Nginx терминирует HTTPS и проксирует на порт приложения.
 
+> **Rust-тулчейн в сборке (Этап 4).** С браузерным хостом ([host.md](host.md)) `npm run build` включает `core:build:web` — Worker хоста грузит WASM-ядро (`core/pkg-web/`). Docker-образ, где выполняется сборка, обязан содержать `rustup` + target `wasm32-unknown-unknown` + `wasm-pack`; иначе `npm run build` упадёт. Легаси-сервер сам по себе ядро не задействует, но клиентская сборка (лобби → «Создать сервер») его требует.
+
 ## 📋 Предварительные требования
 
 1. **VPS** с ОС Ubuntu 20.04, 22.04 или 24.04.

@@ -2,6 +2,8 @@
 
 Сервер: Node.js + Express + `ws` + ViteExpress. Точка входа — [src/server/main.js](../src/server/main.js) (сборка конфигов, HTTP/HTTPS-сервер, подключение WebSocket-слоя). Обзор взаимодействия модулей — в [architecture.md](architecture.md).
 
+> **Статус (P2P-миграция, Этап 4).** Легаси авторитетный сервер — **рабочий эталон поведения** до демонтажа после вехи Этапа 4. Мета-модули отсюда (`RoundManager`, `ParticipantManager`, `Chat`, `Vote`, `Stat`, `Panel`, `TimerManager`, `CommandProcessor`, `VoteCoordinator`, `SocketManager`, `RTTManager`) переиспользуются браузерным хостом **без правок** через инъекцию — см. [host.md](host.md). Физику (`Game`/Rapier-compat) и ручную сборку снапшота хост заменяет на Rust-ядро ([core.md](core.md)) через `GameCoreAdapter`. Менять эти модули под нужды хоста нельзя, чтобы не разъехаться с эталоном.
+
 ## VIMP — фасад
 
 [src/server/modules/VIMP.js](../src/server/modules/VIMP.js) (синглтон, ~530 строк) — wiring всех модулей + делегирование. Сам содержит только:
