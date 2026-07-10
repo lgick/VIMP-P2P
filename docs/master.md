@@ -24,6 +24,7 @@ npm start         # production: HTTP за Nginx, читает .env
 | `src/master/HostRegistry.js` | реестр комнат `Map<hostId, HostSession>`: регистрация (не более 1 комнаты с IP), heartbeat/`lastSeen`, жалобы, выборка для `GET /servers` |
 | `src/master/SignalingServer.js` | сигнальный WebSocket: жизненный цикл соединений, маршрутизация WebRTC-сообщений, rate limiting пингов |
 | `src/master/MapCatalog.js` | каталог карт (Этап 5.1): JSON-представление `src/data/maps` в памяти + версия-хеш содержимого; раздача хостам без пересборки |
+| `src/master/WorkerCatalog.js` | каталог worker-бандла (Этап 5.2): версия-хеш содержимого `dist/assets/host.worker-*.js` + его URL; по нему хосты обнаруживают новую версию кода и меняют Worker эстафетой |
 | `src/lib/rateLimiter.js` | общий rate limiter с фиксированным окном (лимит событий на ключ за интервал) |
 
 `HostSession`: `hostId` (uuid), `name`, `maxPlayers` (clamp к `host.maxPlayersLimit`, рамка плана — 8), `currentPlayers`, `mapName`, `region`, `ip`, `status` (`online`/`banned`), `reportCount` + `reporters` (`Map` репортёр → timestamp: уникальность жалоб и окно давности), `reportReasons` (причины жалоб, аудит — наружу не отдаются, capped), `lastSeen`.
@@ -73,6 +74,21 @@ IP хоста и служебные поля наружу не отдаются.
 старте) — файловых артефактов и отдельного шага экспорта не требуется. Как хост
 потребляет каталог — см. [host.md](host.md#динамические-карты-этап-51).
 
+### GET /worker/manifest.json (Этап 5.2)
+
+Манифест worker-бандла хоста для эстафеты Worker'ов:
+
+- `GET /worker/manifest.json` → `{ "version": "<хеш содержимого>", "url": "/assets/host.worker-<hash>.js" }`.
+
+`WorkerCatalog` при старте мастера находит бандл в `dist/assets/` и хеширует
+его содержимое (SHA-256, 16 символов — по образцу `MapCatalog`). Vite хеширует
+имена ассетов, поэтому страница старой сборки не может знать имя нового
+бандла — вкладка хоста создаёт Worker по `url` из манифеста и сверяет
+`version` с `codeVersion` из `host_registered`. В dev каталог пуст
+(`{ "version": null, "url": null }`) — Worker раздаёт Vite из исходников,
+обновления кода отключены. Как хост потребляет манифест — см.
+[host.md](host.md#эстафета-workerов-этап-52).
+
 ## Сигнальный протокол (WebSocket)
 
 Сообщения — JSON-объекты с полем `type`. При подключении соединение проходит проверку `Origin` (allowlist через `security.createOriginValidator`; отсутствие `Origin` — немедленный `terminate`, чужой — закрытие с кодом `4001`), затем получает:
@@ -89,7 +105,7 @@ IP хоста и служебные поля наружу не отдаются.
 
 | → мастеру | Ответ / эффект |
 | --- | --- |
-| `register_host { name, maxPlayers, mapName }` | `host_registered { hostId, mapsVersion }`; регион — из заголовка, IP — из соединения; `mapsVersion` — актуальная версия каталога карт (при re-register после разрыва хост сверяет со своей и при расхождении перечитывает каталог). Ошибки: `alreadyRegistered`, `hostLimit` (уже есть комната с этого IP) |
+| `register_host { name, maxPlayers, mapName }` | `host_registered { hostId, mapsVersion, codeVersion }`; регион — из заголовка, IP — из соединения; `mapsVersion`/`codeVersion` — актуальные версии каталога карт и worker-бандла (при re-register после разрыва — деплой рестартует мастер — хост сверяет их со своими: расхождение карт → перечитывание каталога, кода → эстафета Worker'ов, Этап 5.2). Ошибки: `alreadyRegistered`, `hostLimit` (уже есть комната с этого IP) |
 | `update_host { currentPlayers, mapName }` | актуализация данных комнаты (одновременно heartbeat) |
 | `heartbeat {}` | обновление `lastSeen` |
 | `webrtc_answer { clientId, sdp }` | пересылается клиенту как `webrtc_answer { hostId, sdp }` |
@@ -139,4 +155,4 @@ IP хоста и служебные поля наружу не отдаются.
 
 ## Тесты
 
-`tests/master/` (node-проект Vitest): `HostRegistry.test.js` (регистрация, лимит по IP, heartbeat/уборка, жалобы — включая обязательность причины, вся логика выборки `GET /servers`), `SignalingServer.test.js` (жизненный цикл соединений, маршрутизация всех сигнальных сообщений на фейковых ws, rate limiting, membership-проверка жалоб, уборка протухших хостов), `MapCatalog.test.js` (манифест, выдача карт, стабильность версии). Rate limiter — `tests/lib/rateLimiter.test.js`.
+`tests/master/` (node-проект Vitest): `HostRegistry.test.js` (регистрация, лимит по IP, heartbeat/уборка, жалобы — включая обязательность причины, вся логика выборки `GET /servers`), `SignalingServer.test.js` (жизненный цикл соединений, маршрутизация всех сигнальных сообщений на фейковых ws, rate limiting, membership-проверка жалоб, уборка протухших хостов, `mapsVersion`/`codeVersion` в `host_registered`), `MapCatalog.test.js` (манифест, выдача карт, стабильность версии), `WorkerCatalog.test.js` (версия-хеш и URL бандла, пустой каталог в dev, выбор новейшего из нескольких). Rate limiter — `tests/lib/rateLimiter.test.js`.

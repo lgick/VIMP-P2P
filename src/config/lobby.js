@@ -12,6 +12,13 @@ export default {
     baseUrl: '/maps',
   },
 
+  // манифест worker-бандла мастера (Этап 5.2): Worker комнаты создаётся по
+  // url из манифеста, расхождение codeVersion при re-register — эстафета
+  // Worker'ов; недоступность манифеста — бандловый URL без обновлений кода
+  worker: {
+    manifestUrl: '/worker/manifest.json',
+  },
+
   // переподключение сигнального WS хоста (комната без него выпадает из
   // выдачи мастера): экспоненциальный бэкофф от baseDelay до maxDelay (мс)
   reconnect: {

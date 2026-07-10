@@ -64,6 +64,7 @@ beforeEach(() => {
     pingLimiter: new RateLimiter({ limit: 2, windowMs: 1000 }),
     checkOrigin: allowAllOrigins,
     mapsVersion: 'v-test',
+    codeVersion: 'code-test',
   });
 });
 
@@ -156,8 +157,10 @@ describe('register_host', () => {
     const reply = ws.lastSent();
 
     expect(reply.type).toBe('host_registered');
-    // версия каталога карт — для сверки хостом при re-register (Этап 5.1)
+    // версии каталога карт и worker-бандла — для сверки хостом при
+    // re-register (Этапы 5.1/5.2)
     expect(reply.mapsVersion).toBe('v-test');
+    expect(reply.codeVersion).toBe('code-test');
 
     const host = registry.get(reply.hostId);
 

@@ -12,6 +12,7 @@ export default class SignalingServer {
     this._pingLimiter = options.pingLimiter;
     this._checkOrigin = options.checkOrigin;
     this._mapsVersion = options.mapsVersion ?? null;
+    this._codeVersion = options.codeVersion ?? null;
 
     this._sessions = new Map(); // id соединения -> { id, ws, ip, region, hostId }
     this._hostSessions = new Map(); // hostId -> id соединения
@@ -131,12 +132,15 @@ export default class SignalingServer {
     session.hostId = host.hostId;
     this._hostSessions.set(host.hostId, session.id);
 
-    // mapsVersion — актуальная версия каталога карт: при re-register после
-    // разрыва хост сравнивает её со своей и при расхождении фетчит карты
+    // mapsVersion/codeVersion — актуальные версии каталога карт и
+    // worker-бандла: при re-register после разрыва (деплой рестартует мастер)
+    // хост сравнивает их со своими и при расхождении фетчит карты /
+    // заменяет Worker эстафетой (Этапы 5.1/5.2)
     this._send(session, {
       type: 'host_registered',
       hostId: host.hostId,
       mapsVersion: this._mapsVersion,
+      codeVersion: this._codeVersion,
     });
   }
 

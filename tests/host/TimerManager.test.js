@@ -224,6 +224,6 @@ describe('TimerManager: периодические проверки', () => {
     vi.advanceTimersByTime(timers.idleCheckInterval * 2);
     expect(callbacks.onIdleCheck).toHaveBeenCalledTimes(3);
 
-    tm._stopIdleCheckTimer();
+    tm.stopIdleCheckTimer();
   });
 });

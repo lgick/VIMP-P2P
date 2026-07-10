@@ -12,6 +12,11 @@ import { sanitizeMessage } from '../lib/sanitizers.js';
 import GameCoreAdapter from './GameCoreAdapter.js';
 import HostBotManager from './HostBotManager.js';
 
+// Версия формата handoff-меты эстафеты Worker'ов (Этап 5.2). Несовместимая
+// версия валит init нового Worker'а — главный поток возобновляет старый,
+// комната продолжает жить на прежней версии кода
+export const HANDOFF_VERSION = 1;
+
 // Троттлинг отправки кадров (замена SnapshotManager: ядро само копит события
 // и дренирует их в pack_body, здесь нужен только контроль частоты).
 class SnapshotThrottle {
@@ -53,12 +58,14 @@ export default class HostGame {
    *   исключается из kick-политик — его отключение убивает комнату для всех.
    * @param {Function} [opts.onMapChange] - вызывается с именем карты при её
    *   смене (голосование/таймер) — для актуализации комнаты у мастера.
+   * @param {Object} [opts.handoff] - handoff-мета эстафеты Worker'ов
+   *   (Этап 5.2): восстановление комнаты вместо холодного старта.
    */
   constructor(
     data,
     socketManager,
     core,
-    { hostSocketId = null, onMapChange = null } = {},
+    { hostSocketId = null, onMapChange = null, handoff = null } = {},
   ) {
     this._isDevMode = data.isDevMode || false;
 
@@ -163,6 +170,10 @@ export default class HostGame {
     // инкрементный номер snapshot-кадра
     this._seq = 0;
 
+    // эстафета Worker'ов (Этап 5.2)
+    this._handoffRestored = false;
+    this._handoffMapTimeLeft = null;
+
     // внедрение зависимостей (ядро отдаёт панель/фасад события через адаптер)
     this._socketManager.injectServices(this._game, this._panel, this._stat);
     this._game.injectServices({ vimp: this, panel: this._panel });
@@ -170,7 +181,14 @@ export default class HostGame {
 
     this._timerManager.startIdleCheckTimer();
 
-    this._roundManager.createMap();
+    // эстафета Worker'ов (Этап 5.2): восстановление вместо холодного старта;
+    // игровой цикл и первый раунд запустит completeHandoff() после
+    // переподключения клиентов главным потоком
+    if (handoff) {
+      this._restoreFromHandoff(handoff);
+    } else {
+      this._roundManager.createMap();
+    }
 
     // отслеживание смены карты (для актуализации комнаты в лобби мастера)
     this._lastReportedMap = this._roundManager.currentMap;
@@ -186,6 +204,11 @@ export default class HostGame {
   // лимит участников комнаты (для сообщения об отказе)
   get maxPlayers() {
     return this._maxPlayers;
+  }
+
+  // текущая карта комнаты (после эстафеты может отличаться от room.map)
+  get currentMap() {
+    return this._roundManager.currentMap;
   }
 
   // хост-игрок не кикается: закрытие его loopback = смерть комнаты для всех
@@ -417,6 +440,133 @@ export default class HostGame {
 
     this._mapList.length = 0;
     this._mapList.push(...Object.keys(this._maps));
+  }
+
+  // ***** эстафета Worker'ов (Этап 5.2) ***** //
+
+  // запрашивает перенос: на ближайшей границе раунда игра останавливается
+  // и cb получает handoff-мету. Ядро не дампится — мир пересоздаётся стартом
+  // раунда в новом Worker'е (см. RoundManager._startRound)
+  requestHandoff(cb) {
+    this._roundManager.requestHandoff(() => {
+      this._timerManager.stopGameTimers();
+      this._timerManager.stopIdleCheckTimer();
+      cb(this._collectHandoff());
+    });
+  }
+
+  // отказ от эстафеты (новый Worker не поднялся): вернуть таймеры и
+  // продолжить жить на старой версии кода
+  resumeAfterHandoff() {
+    this._roundManager.cancelHandoff();
+    this._timerManager.startIdleCheckTimer();
+    this._timerManager.resumeGameTimers(this._timerManager.getMapTimeLeft());
+    this._roundManager.initiateNewRound();
+  }
+
+  // завершение эстафеты в новом Worker'е: клиенты переподключены главным
+  // потоком — вычистить не переживших паузу, вернуть таймеры (карта — с
+  // остатком времени) и стартовать первый раунд
+  completeHandoff(connectedSocketIds) {
+    if (!this._handoffRestored) {
+      return;
+    }
+
+    this._handoffRestored = false;
+
+    for (const user of this._participants.getHumans()) {
+      if (!connectedSocketIds.has(user.socketId)) {
+        this.removeUser(user.gameId);
+      }
+    }
+
+    this._timerManager.resumeGameTimers(this._handoffMapTimeLeft);
+    this._roundManager.initiateNewRound();
+  }
+
+  // собирает переносимую мету: участники, счёт, карта с остатком времени,
+  // seq кадров. Осознанно не переносятся: чат-история, активные голосования,
+  // RTT-статистика, panel (значения живут в ядре и сбрасываются раундом)
+  _collectHandoff() {
+    const humans = this._participants
+      .getHumans()
+      .filter(user => user.isReady)
+      .map(user => ({
+        gameId: user.gameId,
+        socketId: user.socketId,
+        name: user.name,
+        model: user.model,
+        team: user.team,
+        teamId: user.teamId,
+      }));
+
+    const bots = this._participants.getBots().map(bot => ({
+      gameId: bot.gameId,
+      name: bot.name,
+      model: bot.model,
+      team: bot.team,
+      teamId: bot.teamId,
+    }));
+
+    return {
+      version: HANDOFF_VERSION,
+      seq: this._seq,
+      currentMap: this._roundManager.currentMap,
+      mapTimeLeft: this._timerManager.getMapTimeLeft(),
+      humans,
+      bots,
+      stat: this._stat.serialize(),
+    };
+  }
+
+  // восстанавливает комнату из handoff-меты. Ошибка (несовместимый формат,
+  // карта ушла из каталога) валит init Worker'а — главный поток возобновляет
+  // старый Worker, комната живёт на прежней версии
+  _restoreFromHandoff(meta) {
+    if (!meta || meta.version !== HANDOFF_VERSION) {
+      throw new Error(`unsupported handoff version: ${meta && meta.version}`);
+    }
+
+    if (!this._maps[meta.currentMap]) {
+      throw new Error(`handoff map missing from catalog: ${meta.currentMap}`);
+    }
+
+    this._seq = meta.seq >>> 0;
+    this._handoffMapTimeLeft = meta.mapTimeLeft;
+
+    for (const record of meta.humans) {
+      const user = this._participants.restoreHuman(record);
+
+      if (!user) {
+        continue;
+      }
+
+      // хендшейк уже пройден в старом Worker'е (переносятся только isReady)
+      user.isReady = true;
+      user.currentMap = meta.currentMap;
+
+      this._chat.addUser(user.gameId);
+      this._vote.addUser(user.gameId);
+      this._panel.addUser(user.gameId);
+      this._RTTManager.addUser(user.gameId);
+    }
+
+    for (const record of meta.bots) {
+      const bot = this._participants.restoreBot(record);
+
+      if (bot) {
+        this._panel.addUser(bot.gameId);
+      }
+    }
+
+    // счёт переезжает целиком; строки не переживших эстафету (не завершили
+    // хендшейк в старом Worker'е) вычищаются — клиенты получат обновление
+    const keepIds = new Set(this._participants.getAll().map(p => p.gameId));
+
+    this._stat.restore(meta.stat, keepIds);
+
+    this._roundManager.restoreMap(meta.currentMap);
+    this._handoffRestored = true;
   }
 
   // меняет и возвращает gameId наблюдаемого игрока

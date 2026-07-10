@@ -31,6 +31,10 @@ class TimerManager extends AbstractTimer {
     this._startMapTime = 0;
     this._startRoundTime = 0;
 
+    // фактическая длительность текущего таймера карты (после эстафеты
+    // Worker'ов карта продолжается с остатком времени, а не заново)
+    this._currentMapDuration = this._mapTime;
+
     // переменные для самокорректирующегося игрового цикла
     this._lastShotTime = 0;
     this._expectedTickTime = 0;
@@ -58,11 +62,13 @@ class TimerManager extends AbstractTimer {
     this._stopRttPingTimer();
   }
 
-  // запускает таймер до конца текущей карты
-  startMapTimer() {
+  // запускает таймер до конца текущей карты (duration — остаток времени
+  // при возобновлении после эстафеты Worker'ов, Этап 5.2)
+  startMapTimer(duration = this._mapTime) {
     this.stopMapTimer();
     this._startMapTime = Date.now();
-    this._startTimer('map', this._callbacks.onMapTimeEnd, this._mapTime);
+    this._currentMapDuration = duration;
+    this._startTimer('map', this._callbacks.onMapTimeEnd, duration);
   }
 
   // останавливает таймер карты
@@ -72,9 +78,18 @@ class TimerManager extends AbstractTimer {
 
   // возвращает оставшееся время до конца карты в миллисекундах
   getMapTimeLeft() {
-    const timeLeft = this._mapTime - (Date.now() - this._startMapTime);
+    const timeLeft =
+      this._currentMapDuration - (Date.now() - this._startMapTime);
 
     return Math.max(0, timeLeft);
+  }
+
+  // возобновляет игровые таймеры после эстафеты Worker'ов (Этап 5.2):
+  // карта — с остатком времени, раунд стартует отдельно (initiateNewRound)
+  resumeGameTimers(mapTimeLeft) {
+    this.startMapTimer(mapTimeLeft ?? this._mapTime);
+    this._startGameLoop();
+    this._startRttPingTimer();
   }
 
   // запускает таймер до конца текущего раунда
@@ -221,13 +236,14 @@ class TimerManager extends AbstractTimer {
   startIdleCheckTimer() {
     // если есть интервал и callback
     if (this._idleCheckInterval && this._callbacks.onIdleCheck) {
-      this._stopIdleCheckTimer();
+      this.stopIdleCheckTimer();
       this._idleCheckTick();
     }
   }
 
-  // останавливает проверку на бездействие
-  _stopIdleCheckTimer() {
+  // останавливает проверку на бездействие (публичный: пауза эстафеты
+  // Worker'ов не должна кикать за бездействие)
+  stopIdleCheckTimer() {
     this._stopTimer('idleCheck');
   }
 

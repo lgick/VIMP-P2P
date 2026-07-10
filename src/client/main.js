@@ -958,7 +958,22 @@ async function connectAsHost(room) {
     console.warn('[maps] master catalog unavailable, using bundled maps:', e);
   }
 
+  // Этап 5.2: Worker создаётся по манифесту мастера — бандл страницы после
+  // деплоя исчезает из раздачи; без манифеста (dev) — бандловый URL,
+  // обновления кода отключены
+  let workerUrl = null;
+
+  try {
+    const manifest = await fetchWorkerManifest();
+
+    hostCodeVersion = manifest.version;
+    workerUrl = manifest.url;
+  } catch (e) {
+    console.warn('[worker] master manifest unavailable, using bundled:', e);
+  }
+
   hostController = new HostController(room, {
+    workerUrl,
     onReady: readyMsg => {
       currentMapName = readyMsg?.mapName;
 
@@ -1039,18 +1054,27 @@ async function connectAsHost(room) {
     hostRegistration?.();
   });
 
-  // мастер отвечает актуальной версией каталога карт: расхождение с нашей
-  // (деплой карт, пока комната жила) — подтянуть каталог к следующей смене
+  // мастер отвечает актуальными версиями каталога карт и worker-бандла:
+  // расхождение (деплой, пока комната жила) — подтянуть каталог к следующей
+  // смене карты / заменить Worker эстафетой на границе раунда (Этап 5.2)
   signaling.publisher.on('host_registered', msg => {
     if (msg.mapsVersion && msg.mapsVersion !== hostMapsVersion) {
       refreshHostMaps();
     }
+
+    if (msg.codeVersion && hostCodeVersion && msg.codeVersion !== hostCodeVersion) {
+      refreshHostWorker();
+    }
   });
 
-  // сигнал мастера об обновлении каталога карт (hot-reload в будущем)
+  // сигнал мастера об обновлении каталога карт/кода (hot-reload в будущем)
   signaling.publisher.on('update_available', msg => {
     if (!msg.mapsVersion || msg.mapsVersion !== hostMapsVersion) {
       refreshHostMaps();
+    }
+
+    if (msg.codeVersion && hostCodeVersion && msg.codeVersion !== hostCodeVersion) {
+      refreshHostWorker();
     }
   });
 
@@ -1059,6 +1083,15 @@ async function connectAsHost(room) {
 
 // версия каталога карт мастера, с которой поднята комната (Этап 5.1)
 let hostMapsVersion = null;
+
+// версия worker-бандла комнаты (Этап 5.2); null — обновления кода отключены
+let hostCodeVersion = null;
+
+// версия, своп на которую не удался — не ретраить её на каждом re-register
+let failedCodeVersion = null;
+
+// защита от параллельных эстафет Worker'ов
+let workerSwapInProgress = false;
 
 // повторная регистрация комнаты у мастера (reconnect сигналинга)
 let hostRegistration = null;
@@ -1099,6 +1132,57 @@ async function refreshHostMaps() {
     hostController?.updateMaps(catalog.maps);
   } catch (e) {
     console.warn('[maps] refresh from master failed:', e);
+  }
+}
+
+// Этап 5.2: скачивает манифест worker-бандла мастера ({ version, url })
+async function fetchWorkerManifest() {
+  const res = await fetch(lobbyConfig.worker.manifestUrl);
+
+  if (!res.ok) {
+    throw new Error(`worker manifest: HTTP ${res.status}`);
+  }
+
+  return res.json();
+}
+
+// Этап 5.2: эстафета Worker'ов — новая версия кода у мастера. Worker
+// заменяется на границе раунда без разрыва P2P; сбой свопа не смертелен —
+// комната продолжает жить на прежней версии
+async function refreshHostWorker() {
+  if (workerSwapInProgress || !hostController) {
+    return;
+  }
+
+  workerSwapInProgress = true;
+
+  let manifest = null;
+
+  try {
+    manifest = await fetchWorkerManifest();
+
+    if (
+      !manifest.version ||
+      !manifest.url ||
+      manifest.version === hostCodeVersion ||
+      manifest.version === failedCodeVersion
+    ) {
+      return;
+    }
+
+    await hostController.swapWorker(manifest.url);
+
+    hostCodeVersion = manifest.version;
+    failedCodeVersion = null;
+    console.info(`[worker] room migrated to code version ${manifest.version}`);
+  } catch (e) {
+    if (manifest?.version) {
+      failedCodeVersion = manifest.version;
+    }
+
+    console.warn('[worker] swap to new version failed:', e);
+  } finally {
+    workerSwapInProgress = false;
   }
 }
 

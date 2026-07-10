@@ -1,6 +1,7 @@
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
+import path from 'path';
 import express from 'express';
 import ViteExpress from 'vite-express';
 import { WebSocketServer } from 'ws';
@@ -10,6 +11,7 @@ import security from '../lib/security.js';
 import maps from '../data/maps/index.js';
 import HostRegistry from './HostRegistry.js';
 import MapCatalog from './MapCatalog.js';
+import WorkerCatalog from './WorkerCatalog.js';
 import SignalingServer from './SignalingServer.js';
 
 config.set('master', (await import('../config/master.js')).default);
@@ -57,12 +59,19 @@ const registry = new HostRegistry({
 // каталог карт (Этап 5.1): раздача хостам без пересборки клиента
 const mapCatalog = new MapCatalog(maps);
 
+// каталог worker-бандла (Этап 5.2): версия кода комнаты для эстафеты
+// Worker'ов; в dev Worker раздаёт Vite из исходников — каталог пуст
+const workerCatalog = new WorkerCatalog(
+  isProduction ? path.resolve('dist', 'assets') : null,
+);
+
 const signaling = new SignalingServer(registry, {
   iceServers: config.get('master:iceServers'),
   regionHeader: config.get('master:regionHeader'),
   heartbeatTimeout: config.get('master:host:heartbeatTimeout'),
   pingLimiter: new RateLimiter(config.get('master:pingRateLimit')),
   mapsVersion: mapCatalog.version,
+  codeVersion: workerCatalog.version,
   checkOrigin: security.createOriginValidator({
     protocol: config.get('master:protocol'),
     domain: config.get('master:domain'),
@@ -110,6 +119,13 @@ app.get('/maps/:name', (req, res) => {
   }
 
   res.type('application/json').send(json);
+});
+
+// REST API: манифест worker-бандла (Этап 5.2 — эстафета Worker'ов).
+// По нему вкладка хоста создаёт Worker (хешированное имя бандла страница
+// старой сборки знать не может) и обнаруживает новую версию кода
+app.get('/worker/manifest.json', (req, res) => {
+  res.type('application/json').send(workerCatalog.manifest);
 });
 
 // в продакшене обычный HTTP сервер, Nginx будет обрабатывать HTTPS

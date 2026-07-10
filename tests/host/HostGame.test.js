@@ -245,3 +245,196 @@ describe.skipIf(!coreAvailable)('HostGame (core-driven)', () => {
     expect(onMapChange).toHaveBeenCalledWith(nextMap);
   });
 });
+
+// Эстафета Worker'ов (Этап 5.2): мягкий перенос комнаты в новый Worker на
+// границе раунда — без дампа ядра (мир пересоздаётся стартом раунда),
+// переносится JS-мета: участники, боты, счёт, карта с остатком, seq кадров.
+describe.skipIf(!coreAvailable)('HostGame: эстафета Worker\'ов (5.2)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.resetModules();
+  });
+
+  // комната с двумя игроками, ботом и незавершившим хендшейк гостем;
+  // возвращает собранную handoff-мету и данные старого хоста
+  const collectHandoffFixture = async () => {
+    const { host, socket, core } = await createHost();
+
+    const p1 = await connectPlayer(host, { name: 'P1', socketId: 's1' });
+    const p2 = await connectPlayer(host, { name: 'P2', socketId: 's2' });
+
+    joinTeam(host, p1, 'team1');
+    joinTeam(host, p2, 'team2');
+
+    // гость, не завершивший хендшейк (isReady=false) — не переносится
+    let p3;
+
+    host.createUser({ name: 'P3', model: 'm1' }, 's3', id => {
+      p3 = id;
+    });
+    await new Promise(resolve => queueMicrotask(resolve));
+
+    host._bots.createBots(1, 'team2');
+    tick(host, 4);
+
+    // заметный счёт — должен пережить эстафету
+    host._stat.updateUser(p1, host._participants.get(p1).teamId, { score: 7 });
+
+    let meta = null;
+
+    host.requestHandoff(m => {
+      meta = m;
+    });
+
+    // граница раунда — единая воронка initiateNewRound
+    host._roundManager.initiateNewRound();
+
+    return { host, socket, core, meta, p1, p2, p3 };
+  };
+
+  it('requestHandoff отдаёт мету на границе раунда и останавливает игру', async () => {
+    const { host, meta, p1, p2, p3 } = await collectHandoffFixture();
+
+    expect(meta).not.toBeNull();
+    expect(meta.version).toBe(1);
+    expect(meta.seq).toBe(host._seq);
+    expect(meta.currentMap).toBe(host._roundManager.currentMap);
+    expect(meta.mapTimeLeft).toBeGreaterThan(0);
+
+    // переносятся только завершившие хендшейк люди и боты
+    const socketIds = meta.humans.map(h => h.socketId).sort();
+
+    expect(socketIds).toEqual(['s1', 's2']);
+    expect(meta.humans.map(h => h.gameId).sort()).toEqual([p1, p2].sort());
+    expect(meta.humans.find(h => h.gameId === p3)).toBeUndefined();
+    expect(meta.bots).toHaveLength(1);
+
+    // игра остановлена: цикл, раунд, карта, idle
+    expect(host._timerManager._hasTimer('gameLoop')).toBe(false);
+    expect(host._timerManager._hasTimer('round')).toBe(false);
+    expect(host._timerManager._hasTimer('map')).toBe(false);
+    expect(host._timerManager._hasTimer('idleCheck')).toBe(false);
+  });
+
+  it('resumeAfterHandoff возвращает старый Worker к жизни', async () => {
+    const { host, socket } = await collectHandoffFixture();
+
+    socket.clear();
+    host.resumeAfterHandoff();
+
+    expect(host._timerManager._hasTimer('gameLoop')).toBe(true);
+    expect(host._timerManager._hasTimer('round')).toBe(true);
+    expect(host._timerManager._hasTimer('map')).toBe(true);
+    expect(host._timerManager._hasTimer('idleCheck')).toBe(true);
+
+    // прерванный раунд перезапущен
+    expect(socket.framesOf('sendRoundStart').length).toBeGreaterThan(0);
+  });
+
+  it('новый HostGame восстанавливает участников, счёт и seq из меты', async () => {
+    const old = await collectHandoffFixture();
+    const meta = structuredClone(old.meta); // как postMessage
+
+    vi.resetModules(); // «новый Worker»: свежие синглтоны меты
+
+    const { host, socket, core } = await createHost({
+      opts: { handoff: meta },
+    });
+
+    // участники с исходными id/именами/командами, хендшейк не повторяется
+    const p1 = host._participants.get(old.p1);
+    const p2 = host._participants.get(old.p2);
+
+    expect(p1).toMatchObject({ name: 'P1', socketId: 's1', isReady: true });
+    expect(p2).toMatchObject({ name: 'P2', socketId: 's2', isReady: true });
+    expect(p1.team).toBe('team1');
+    expect(host._participants.getBots()).toHaveLength(1);
+
+    // не завершивший хендшейк гость не восстановлен, его строка stat вычищена
+    expect(host._participants.get(old.p3)).toBeUndefined();
+
+    const statRows = host._stat.getFull()[0].map(row => row[0]);
+
+    expect(statRows).not.toContain(old.p3);
+
+    // счёт пережил эстафету
+    const p1Row = host._stat.getFull()[0].find(row => row[0] === old.p1);
+
+    expect(p1Row[2]).toContain(7);
+
+    // seq продолжен, мир ядра ещё не собран (соберёт completeHandoff)
+    expect(host._seq).toBe(meta.seq);
+    expect(core.map_info()).toBe('null');
+    expect(socket.framesOf('sendMap')).toHaveLength(0);
+
+    // новые подключения получают свободный id (занятые учтены)
+    const freshId = host._participants.createHuman(
+      { name: 'N', model: 'm1' },
+      's9',
+    );
+
+    expect([old.p1, old.p2].includes(freshId)).toBe(false);
+  });
+
+  it('completeHandoff кикает не переподключившихся и стартует раунд', async () => {
+    const old = await collectHandoffFixture();
+    const meta = structuredClone(old.meta);
+    const botId = meta.bots[0].gameId;
+
+    vi.resetModules();
+
+    const { host, socket, core } = await createHost({
+      opts: { handoff: meta },
+    });
+
+    // s2 не переподключился за паузу эстафеты
+    host.completeHandoff(new Set(['s1']));
+
+    expect(host._participants.get(old.p2)).toBeUndefined();
+    expect(host._participants.get(old.p1)).toBeDefined();
+
+    // мир собран, раунд стартовал: танк игрока и бота живы, кадры идут
+    expect(core.map_info()).not.toBe('null');
+    expect(core.is_alive(old.p1)).toBe(true);
+    expect(core.is_alive(botId)).toBe(true);
+    expect(host._timerManager._hasTimer('gameLoop')).toBe(true);
+
+    // карта продолжается с остатком времени, не заново
+    expect(host._timerManager.getMapTimeLeft()).toBeLessThanOrEqual(
+      meta.mapTimeLeft,
+    );
+
+    socket.clear();
+    tick(host, 2);
+
+    const frame = socket.lastShot('s1');
+
+    expect(frame).not.toBeNull();
+    // seq кадров продолжает нумерацию старого Worker'а
+    expect(frame[3]).toBeGreaterThan(meta.seq);
+  });
+
+  it('несовместимая версия меты валит init (главный поток вернёт старый Worker)', async () => {
+    const old = await collectHandoffFixture();
+    const meta = structuredClone(old.meta);
+
+    meta.version = 999;
+    vi.resetModules();
+
+    await expect(createHost({ opts: { handoff: meta } })).rejects.toThrow(
+      /handoff version/,
+    );
+  });
+
+  it('карта, ушедшая из каталога, валит init с внятной ошибкой', async () => {
+    const old = await collectHandoffFixture();
+    const meta = structuredClone(old.meta);
+
+    meta.currentMap = 'ghost-map';
+    vi.resetModules();
+
+    await expect(createHost({ opts: { handoff: meta } })).rejects.toThrow(
+      /missing from catalog/,
+    );
+  });
+});

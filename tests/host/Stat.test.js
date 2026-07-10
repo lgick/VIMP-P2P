@@ -139,3 +139,57 @@ describe('Stat: getLast / getFull', () => {
     expect(row[2][0]).toBe('A'); // имя сохранено (нет bodyValue)
   });
 });
+
+// Эстафета Worker'ов (Этап 5.2): счёт переезжает в новый Worker целиком,
+// строки не переживших переноса участников вычищаются штатно
+describe('Stat: serialize/restore', () => {
+  // Stat — синглтон: «новый Worker» моделируется resetModules + переимпорт
+  const freshStat = async () => {
+    vi.resetModules();
+
+    const FreshStat = (await import('../../src/host/meta/modules/Stat.js'))
+      .default;
+
+    return new FreshStat(statConfig, teams);
+  };
+
+  it('restore переносит счёт и составы в свежий экземпляр', async () => {
+    const stat = new Stat(statConfig, teams);
+
+    stat.addUser('g1', 1, { name: 'Alice' });
+    stat.addUser('g2', 2, { name: 'Bob' });
+    stat.updateUser('g1', 1, { score: 7 });
+
+    const dump = structuredClone(stat.serialize());
+    const restored = await freshStat();
+
+    expect(restored).not.toBe(stat);
+    restored.restore(dump);
+
+    const row = restored.getFull()[0].find(r => r[0] === 'g1');
+
+    expect(row[2][1]).toBe(7); // score пережил перенос
+    expect(restored.getFull()[0]).toHaveLength(2);
+  });
+
+  it('restore с keepIds вычищает строки не переживших эстафету', async () => {
+    const stat = new Stat(statConfig, teams);
+
+    stat.addUser('g1', 1, { name: 'Alice' });
+    stat.addUser('g2', 2, { name: 'Ghost' });
+
+    const dump = structuredClone(stat.serialize());
+    const restored = await freshStat();
+
+    restored.restore(dump, new Set(['g1']));
+
+    const rows = restored.getFull()[0].map(r => r[0]);
+
+    expect(rows).toEqual(['g1']);
+
+    // удаление ушло клиентам как обычное обновление
+    const last = restored.getLast();
+
+    expect(last[0].some(r => r[0] === 'g2' && r[2] === null)).toBe(true);
+  });
+});

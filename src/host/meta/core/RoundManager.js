@@ -1,5 +1,33 @@
 import { isValidName } from '../../../lib/validators.js';
 
+// масштабирование данных карты (физика, респауны) под mapScale
+function scaleMapData(mapData) {
+  const scale = mapData.scale;
+  const step = mapData.step * scale;
+
+  const physicsDynamic = (mapData.physicsDynamic || []).map(item => ({
+    ...item,
+    position: item.position.map(v => v * scale),
+    width: item.width * scale,
+    height: item.height * scale,
+  }));
+
+  const respawns = Object.fromEntries(
+    Object.entries(mapData.respawns || {}).map(([team, arr]) => [
+      team,
+      arr.map(([x, y, angle]) => [x * scale, y * scale, angle]),
+    ]),
+  );
+
+  return {
+    ...mapData,
+    step,
+    physicsDynamic,
+    respawns,
+    scale,
+  };
+}
+
 // Менеджер раундов, команд и карт. Владеет жизненным циклом раунда/карты
 // и состоянием: currentMap/currentMapData/scaledMapData, isRoundEnding,
 // startMapNumber и списком игроков для удаления с полотна.
@@ -33,6 +61,9 @@ class RoundManager {
     this._startMapNumber = 0;
     this._isRoundEnding = false;
     this._removedPlayersList = []; // gameId игроков для удаления с полотна
+
+    // эстафета Worker'ов (Этап 5.2): колбэк переноса на границе раунда
+    this._handoffCallback = null;
   }
 
   get currentMap() {
@@ -53,51 +84,38 @@ class RoundManager {
     this.changeMap();
   }
 
-  // создает карту
-  createMap() {
+  // подготавливает данные текущей карты (масштабирование) без пересоздания
+  // мира — общий шаг createMap и восстановления эстафеты (Этап 5.2)
+  _prepareMapData() {
     this._currentMapData = {
       scale: this._mapScale,
       ...this._maps[this._currentMap],
     };
 
-    // масштабирование
-    function scaleMapData(mapData) {
-      const scale = mapData.scale;
-      const step = mapData.step * scale;
-
-      const physicsDynamic = (mapData.physicsDynamic || []).map(item => ({
-        ...item,
-        position: item.position.map(v => v * scale),
-        width: item.width * scale,
-        height: item.height * scale,
-      }));
-
-      const respawns = Object.fromEntries(
-        Object.entries(mapData.respawns || {}).map(([team, arr]) => [
-          team,
-          arr.map(([x, y, angle]) => [x * scale, y * scale, angle]),
-        ]),
-      );
-
-      return {
-        ...mapData,
-        step,
-        physicsDynamic,
-        respawns,
-        scale,
-      };
-    }
-
-    this._scaledMapData = scaleMapData(this._currentMapData);
-    this._bots.createMap(this._scaledMapData);
-    const botCounts = this._bots.getBotCountsPerTeam();
-    this._bots.removeBots();
-    this._bots.clearSpatialGrid();
-
     // если нет индивидуального конструктора для создания карты
     if (!this._currentMapData.setId) {
       this._currentMapData.setId = this._mapSetId;
     }
+
+    this._scaledMapData = scaleMapData(this._currentMapData);
+  }
+
+  // восстанавливает карту после эстафеты Worker'ов (Этап 5.2): без
+  // пересоздания мира и рассылки клиентам — мир соберёт первый
+  // initiateNewRound после переноса
+  restoreMap(mapName) {
+    this._currentMap = mapName;
+    this._prepareMapData();
+    this._bots.createMap(this._scaledMapData);
+  }
+
+  // создает карту
+  createMap() {
+    this._prepareMapData();
+    this._bots.createMap(this._scaledMapData);
+    const botCounts = this._bots.getBotCountsPerTeam();
+    this._bots.removeBots();
+    this._bots.clearSpatialGrid();
 
     // остановка всех игровых таймеров и отложенных вызовов
     this._timerManager.stopGameTimers();
@@ -164,9 +182,31 @@ class RoundManager {
     this.createMap();
   }
 
+  // эстафета Worker'ов (Этап 5.2): запросить перенос на ближайшей границе
+  // раунда — вместо старта нового раунда сработает колбэк (сбор состояния)
+  requestHandoff(cb) {
+    this._handoffCallback = cb;
+  }
+
+  // отмена запрошенного переноса (своп не состоялся)
+  cancelHandoff() {
+    this._handoffCallback = null;
+  }
+
   // запуск нового раунда
   initiateNewRound() {
     this._timerManager.stopRoundTimer();
+
+    // граница раунда достигнута — отдать состояние эстафете; новый раунд
+    // стартует уже новый Worker после переноса
+    if (this._handoffCallback) {
+      const cb = this._handoffCallback;
+
+      this._handoffCallback = null;
+      cb();
+      return;
+    }
+
     this._startRound();
     this._timerManager.startRoundTimer();
   }

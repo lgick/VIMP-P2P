@@ -70,6 +70,49 @@ class ParticipantManager {
     return gameId;
   }
 
+  // восстанавливает человека с исходным gameId (эстафета Worker'ов, Этап 5.2);
+  // занятый id или неизвестная команда — null (запись пропускается)
+  restoreHuman({ gameId, socketId, name, model, team, teamId }) {
+    if (this._participants.has(gameId) || !this._teamSizes[team]) {
+      return null;
+    }
+
+    const participant = new HumanParticipant({
+      gameId,
+      name,
+      model,
+      team,
+      teamId,
+      socketId,
+      watchedGameId: this._activePlayersList[0] || null,
+    });
+
+    this._participants.set(gameId, participant);
+    this._teamSizes[team].add(gameId);
+
+    return participant;
+  }
+
+  // восстанавливает бота с исходным gameId (эстафета Worker'ов, Этап 5.2)
+  restoreBot({ gameId, name, model, team, teamId }) {
+    if (this._participants.has(gameId) || !this._teamSizes[team]) {
+      return null;
+    }
+
+    const participant = new BotParticipant({
+      gameId,
+      name,
+      model,
+      team,
+      teamId,
+    });
+
+    this._participants.set(gameId, participant);
+    this._teamSizes[team].add(gameId);
+
+    return participant;
+  }
+
   // полностью удаляет участника из реестра (команда + список активных)
   remove(gameId) {
     const participant = this._participants.get(gameId);

@@ -200,6 +200,34 @@ class Stat {
     }
   }
 
+  // снимок статистики для эстафеты Worker'ов (Этап 5.2)
+  serialize() {
+    return { head: this._head, body: this._body };
+  }
+
+  // восстанавливает статистику из снимка эстафеты; строки участников вне
+  // keepIds (не пережившие перенос) удаляются штатно — клиенты получат
+  // обновление на первом же кадре
+  restore({ head, body }, keepIds = null) {
+    this._head = head;
+    this._body = body;
+
+    if (keepIds) {
+      for (const teamId in this._body) {
+        if (Object.hasOwn(this._body, teamId)) {
+          for (const gameId in this._body[teamId]) {
+            if (
+              Object.hasOwn(this._body[teamId], gameId) &&
+              !keepIds.has(gameId)
+            ) {
+              this.removeUser(gameId, teamId);
+            }
+          }
+        }
+      }
+    }
+  }
+
   // возвращает последние изменения
   getLast() {
     let stat = [this._lastBody, this._lastHead];

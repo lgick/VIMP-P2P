@@ -39,6 +39,10 @@ let clientCfg = null;
 // состояние подключений: socketId → { gameId, methods, enabled }
 const clients = new Map();
 
+// эстафета Worker'ов (Этап 5.2): socketId → gameId участников, восстановленных
+// из handoff-меты — их порт-машины поднимаются минуя хендшейк
+let handoffClients = null;
+
 // применяет пользовательские настройки комнаты к конфигу игры
 function applyRoomOverrides(room = {}) {
   const game = structuredClone(gameConfig);
@@ -117,8 +121,10 @@ function makeWorkerSocket(socketId) {
   };
 }
 
-// инициализация хоста: ядро, мета, игровой цикл
-async function onInit(room) {
+// инициализация хоста: ядро, мета, игровой цикл. handoff — состояние
+// эстафеты Worker'ов (Этап 5.2): комната восстанавливается вместо
+// холодного старта, порт-машины клиентов поднимутся минуя хендшейк
+async function onInit(room, handoff = null) {
   await init();
 
   const game = applyRoomOverrides(room);
@@ -135,40 +141,20 @@ async function onInit(room) {
   host = new HostGame(game, socketManager, core, {
     hostSocketId: room?.hostSocketId ?? null,
     onMapChange: mapName => self.postMessage({ type: 'map_changed', mapName }),
+    handoff,
   });
 
-  // мастеру нужна фактическая карта комнаты (разрешена из overrides/дефолта)
-  self.postMessage({ type: 'ready', mapName: game.currentMap });
+  if (handoff) {
+    handoffClients = new Map(handoff.humans.map(h => [h.socketId, h.gameId]));
+  }
+
+  // мастеру нужна фактическая карта комнаты (после эстафеты — восстановленная)
+  self.postMessage({ type: 'ready', mapName: host.currentMap });
 }
 
-// новое подключение клиента: порт-машина как в socket/index.js
-function onConnect(socketId) {
-  if (!host || clients.has(socketId)) {
-    return;
-  }
-
-  const socket = makeWorkerSocket(socketId);
-
-  socketManager.addUser(socketId, socket);
-
-  // комната заполнена (люди + боты) — отказ без порт-машины
-  // (очереди ожидания легаси-сервера в P2P-комнате нет)
-  if (host.isFull) {
-    // причину доставит close (TECH_INFORM перед close_client)
-    socketManager.close(socketId, 4006, 'roomFull', [host.maxPlayers]);
-    socketManager.removeUser(socketId);
-    return;
-  }
-
-  const state = {
-    gameId: undefined,
-    enabled: new Array(9).fill(false),
-  };
-
-  clients.set(socketId, state);
-
-  // порт-обработчики (замыкание над gameId через state)
-  state.methods = [
+// порт-обработчики клиента (замыкание над gameId через state)
+function buildPortMethods(socketId, state) {
+  return [
     // 0: config ready
     () => {
       state.enabled[PC_AUTH_RESPONSE] = true;
@@ -235,6 +221,58 @@ function onConnect(socketId) {
     // 8: pong
     pingId => host.updateRTT(state.gameId, pingId),
   ];
+}
+
+// новое подключение клиента: порт-машина как в socket/index.js
+function onConnect(socketId) {
+  if (!host || clients.has(socketId)) {
+    return;
+  }
+
+  const socket = makeWorkerSocket(socketId);
+
+  socketManager.addUser(socketId, socket);
+
+  // эстафета (Этап 5.2): участник уже восстановлен в HostGame — порт-машина
+  // поднимается сразу в игровом состоянии, хендшейк не повторяется
+  const restoredGameId = handoffClients?.get(socketId);
+
+  if (restoredGameId !== undefined) {
+    handoffClients.delete(socketId);
+
+    const state = {
+      gameId: restoredGameId,
+      enabled: new Array(9).fill(false),
+    };
+
+    state.methods = buildPortMethods(socketId, state);
+    state.enabled[PC_MAP_READY] = true;
+    state.enabled[PC_FIRST_SHOT_READY] = true;
+    state.enabled[PC_KEYS_DATA] = true;
+    state.enabled[PC_CHAT_DATA] = true;
+    state.enabled[PC_VOTE_DATA] = true;
+    state.enabled[PC_PONG] = true;
+
+    clients.set(socketId, state);
+    return;
+  }
+
+  // комната заполнена (люди + боты) — отказ без порт-машины
+  // (очереди ожидания легаси-сервера в P2P-комнате нет)
+  if (host.isFull) {
+    // причину доставит close (TECH_INFORM перед close_client)
+    socketManager.close(socketId, 4006, 'roomFull', [host.maxPlayers]);
+    socketManager.removeUser(socketId);
+    return;
+  }
+
+  const state = {
+    gameId: undefined,
+    enabled: new Array(9).fill(false),
+  };
+
+  clients.set(socketId, state);
+  state.methods = buildPortMethods(socketId, state);
 
   state.enabled[PC_CONFIG_READY] = true;
   socketManager.sendConfig(socketId, clientCfg);
@@ -284,9 +322,10 @@ self.onmessage = async event => {
   switch (msg.type) {
     case 'init':
       try {
-        await onInit(msg.room);
+        await onInit(msg.room, msg.handoff);
       } catch (e) {
-        // сбой загрузки WASM/конфига — сообщить главному потоку, не виснуть
+        // сбой загрузки WASM/конфига/handoff-меты — сообщить главному
+        // потоку, не виснуть (при эстафете тот возобновит старый Worker)
         self.postMessage({
           type: 'error',
           message: e && e.message ? e.message : String(e),
@@ -308,6 +347,27 @@ self.onmessage = async event => {
 
     case 'update_maps':
       host?.updateMaps(msg.maps);
+      break;
+
+    // эстафета Worker'ов (Этап 5.2)
+
+    // запрос переноса: на ближайшей границе раунда игра остановится и
+    // handoff-состояние уедет главному потоку
+    case 'prepare_handoff':
+      host?.requestHandoff(state =>
+        self.postMessage({ type: 'handoff_state', state }),
+      );
+      break;
+
+    // новый Worker не поднялся — продолжаем жить на этой версии
+    case 'resume':
+      host?.resumeAfterHandoff();
+      break;
+
+    // клиенты переподключены главным потоком — завершить перенос
+    case 'handoff_complete':
+      handoffClients = null;
+      host?.completeHandoff(new Set(clients.keys()));
       break;
   }
 };

@@ -219,3 +219,91 @@ describe('ParticipantManager.remove', () => {
     expect(() => pm.remove('ghost')).not.toThrow();
   });
 });
+
+// Эстафета Worker'ов (Этап 5.2): восстановление участников с исходными id
+describe('ParticipantManager: restoreHuman/restoreBot', () => {
+  it('восстанавливает человека с исходным gameId и командой', () => {
+    const pm = make();
+    const p = pm.restoreHuman({
+      gameId: '5',
+      socketId: 's1',
+      name: 'Alice',
+      model: 'm1',
+      team: 'team1',
+      teamId: 1,
+    });
+
+    expect(p).toMatchObject({
+      gameId: '5',
+      socketId: 's1',
+      team: 'team1',
+      teamId: 1,
+    });
+    expect(pm.get('5')).toBe(p);
+    expect(pm.getTeamSize('team1')).toBe(1);
+  });
+
+  it('восстанавливает бота с исходным gameId', () => {
+    const pm = make();
+    const bot = pm.restoreBot({
+      gameId: '3',
+      name: 'Bot3',
+      model: 'm1',
+      team: 'team2',
+      teamId: 2,
+    });
+
+    expect(bot.isBot).toBe(true);
+    expect(pm.get('3')).toBe(bot);
+    expect(pm.getTeamSize('team2')).toBe(1);
+  });
+
+  it('занятый id или неизвестная команда — null, запись пропускается', () => {
+    const pm = make();
+    const id = pm.createHuman({ name: 'A', model: 'm1' }, 's1');
+
+    expect(
+      pm.restoreHuman({
+        gameId: id,
+        socketId: 's2',
+        name: 'B',
+        model: 'm1',
+        team: 'team1',
+        teamId: 1,
+      }),
+    ).toBeNull();
+
+    expect(
+      pm.restoreBot({
+        gameId: '9',
+        name: 'B',
+        model: 'm1',
+        team: 'ghosts',
+        teamId: 9,
+      }),
+    ).toBeNull();
+    expect(pm.get('9')).toBeUndefined();
+  });
+
+  it('генерация id учитывает восстановленные (единое пространство)', () => {
+    const pm = make();
+
+    pm.restoreHuman({
+      gameId: '0',
+      socketId: 's1',
+      name: 'A',
+      model: 'm1',
+      team: 'team1',
+      teamId: 1,
+    });
+    pm.restoreBot({
+      gameId: '1',
+      name: 'B',
+      model: 'm1',
+      team: 'team2',
+      teamId: 2,
+    });
+
+    expect(pm.createHuman({ name: 'C', model: 'm1' }, 's2')).toBe('2');
+  });
+});
