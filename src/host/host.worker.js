@@ -1,9 +1,9 @@
-// Web Worker браузерного хоста (Этап 4). Крутит авторитетную часть матча:
+// Web Worker браузерного хоста. Крутит авторитетную часть матча:
 // WASM-ядро симуляции (core/pkg-web) + JS-мету (HostGame поверх мета-модулей
-// src/server) + игровой цикл ~120 Гц (таймеры Worker'а не троттлятся в
+// ./meta/) + игровой цикл ~120 Гц (таймеры Worker'а не троттлятся в
 // фоновой вкладке). RTCPeerConnection живут в главном потоке — сюда приходят
 // уже разобранные пакеты клиентов, обратно уходят wire-кадры (JSON-строки и
-// бинарные ArrayBuffer'ы через Transferable). Порт-машина — как socket/index.js.
+// бинарные ArrayBuffer'ы через Transferable).
 
 import init, { GameCore } from '../../core/pkg-web/vimp_core.js';
 import gameConfig from '../config/game.js';
@@ -13,7 +13,7 @@ import wsports from '../config/wsports.js';
 import { buildClientConfig } from '../lib/buildClientConfig.js';
 import { buildCoreConfig } from '../lib/coreConfig.js';
 import { validateAuth } from '../lib/validators.js';
-import SocketManager from '../server/socket/SocketManager.js';
+import SocketManager from './meta/SocketManager.js';
 import HostGame from './HostGame.js';
 
 // PC (client ports): порты получения данных от клиента

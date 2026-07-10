@@ -3,7 +3,8 @@
 ## Требования
 
 - **Node.js 22** (CI использует Node 22), npm;
-- **mkcert** — локальные HTTPS-сертификаты обязательны для разработки (WebSocket работает по `wss://`).
+- **mkcert** — локальные HTTPS-сертификаты обязательны для разработки (сигнальный WebSocket работает по `wss://`, WebRTC требует secure context);
+- **Rust-тулчейн** (`rustup` + `wasm-pack`) — для сборки WASM-ядра, которое грузит браузерный хост (см. [ниже](#rust-тулчейн-ядро-core)).
 
 ## Установка
 
@@ -22,31 +23,25 @@ mkdir .certs && cd .certs
 mkcert -key-file key.pem -cert-file cert.pem localhost 127.0.0.1 ::1
 ```
 
-Пути к сертификатам заданы в `src/config/server.js` (`httpsOptions`). В production сертификаты не нужны — сервер работает по HTTP за Nginx (см. [deployment.md](deployment.md)).
+Пути к сертификатам заданы в `src/config/master.js` (`httpsOptions`). В production сертификаты не нужны — мастер работает по HTTP за Nginx (см. [deployment.md](deployment.md)).
 
 ## Запуск
 
 ```bash
+npm run core:build     # WASM-ядро (один раз; повторять при правках core/)
 npm run dev
 ```
 
-Откроется сервер на `https://localhost:3000` (ViteExpress отдаёт клиент рядом с Express-сервером; nodemon следит за `src/server`, `src/lib`, `src/config`, `src/data`). Это **легаси авторитетный сервер**, живущий до вехи демонтажа (после Этапа 4).
+Поднимается **мастер-сервер** на `https://localhost:3002` (лобби + сигналинг, [master.md](master.md)); ViteExpress отдаёт клиент рядом с Express-сервером, nodemon следит за `src/master`, `src/lib`, `src/config`, `src/data`.
 
-После Этапа 3 клиент переведён на WebRTC и подключается к **мастер-серверу** (лобби + сигналинг), а не к легаси-серверу напрямую. Для работы с P2P-клиентом запускайте мастер — он отдаёт клиентскую статику:
-
-```bash
-npm run master:dev     # https://localhost:3002 (лобби + сигналинг, см. docs/master.md)
-```
-
-Полный матч по P2P идёт через **браузерный хост** (Этап 4, [host.md](host.md)): в лобби «Создать сервер» поднимает Web Worker с Rust-ядром в текущей вкладке. Его web-таргет ядра нужно собрать один раз — `npm run core:build` (см. [Rust-тулчейн](#rust-тулчейн-ядро-core) ниже). Реализованы Фазы 1–2 (игра в одной вкладке против ботов + подключение удалённых клиентов по WebRTC); прогон вехи на 8 игроков — Фаза 3.
+Матч идёт через **браузерный хост** ([host.md](host.md)): в лобби «Создать сервер» поднимает Web Worker с Rust-ядром в текущей вкладке; остальные вкладки/машины заходят в комнату из списка серверов.
 
 Остальные команды:
 
 ```bash
-npm start              # production-запуск (читает .env: VIMP_DOMAIN и др.)
-npm run master:dev     # мастер-сервер P2P на https://localhost:3002 (см. docs/master.md)
-npm run master:start   # production-запуск мастер-сервера
-npm run build          # сборка (обработка аудио + Vite bundle)
+npm start              # production-запуск мастера (читает .env: VIMP_DOMAIN и др.)
+npm run build          # прод-сборка (WASM-ядро + обработка аудио + Vite bundle)
+npm run build:app      # сборка без ядра (аудио + Vite; ядро уже собрано)
 npm run core:build     # сборка Rust-ядра в WASM (web + nodejs; нужен Rust-тулчейн)
 npm run core:test      # Rust-тесты ядра (cargo test)
 npm run maps:export    # экспорт карт в JSON (src/data/maps/json/) для ядра
@@ -60,15 +55,10 @@ npm run test:coverage  # покрытие
 
 ## Rust-тулчейн (ядро core/)
 
-Для работы с Rust-ядром симуляции ([core.md](core.md)) нужны `rustup` и
-`wasm-pack`; для чистой JS-разработки они **не обязательны** — тесты ядра
+Браузерный хост грузит web-таргет ядра (`core/pkg-web/`), поэтому для игры и
+прод-сборки (`npm run build` включает `core:build:web`) Rust-тулчейн обязателен.
+Для чистой JS-разработки без запуска матча он не нужен — тесты ядра
 пропускаются, если `core/pkg-node/` не собран.
-
-Исключение — **браузерный хост** ([host.md](host.md)): его Worker грузит
-web-таргет ядра (`core/pkg-web/`). Прод-сборка `npm run build` собирает его
-сама (`core:build:web` встроен) — деплой требует Rust-тулчейн. Для dev
-host-фичи собери ядро один раз: `npm run core:build`. Легаси-сервер
-(`npm run dev`) хост не задействует и Rust не требует.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # rustc + cargo
@@ -81,8 +71,7 @@ npm run core:test             # Rust-тесты
 
 ## Локальный мультиплеер
 
-- Откройте несколько вкладок браузера — каждая станет отдельным игроком.
-- В dev-режиме `oneConnection` отключается автоматически (`src/server/main.js`), так что несколько соединений с одного IP допустимы. Если запускаете иначе — отключите `oneConnection: true` в `src/config/server.js`.
+- Откройте несколько вкладок браузера — каждая станет отдельным игроком: одна создаёт сервер, остальные заходят из лобби.
 - Ботов удобно добавлять чат-командой `/bot 5` (см. [gameplay.md](gameplay.md#чат-клавиша-c-и-команды)).
 - Debug-режима нет; при необходимости реализуется отдельно.
 
@@ -90,9 +79,9 @@ npm run core:test             # Rust-тесты
 
 Стек: **Vitest** + happy-dom (клиентские тесты) + coverage-v8. Конфиг `vitest.config.js` делит прогон на два проекта:
 
-- `node` — `tests/server`, `tests/master`, `tests/lib`, `tests/config`, `tests/core` (окружение node; Rapier WASM работает в тестах);
+- `node` — `tests/master`, `tests/host`, `tests/lib`, `tests/config`, `tests/core` (окружение node);
 - `client` — `tests/client` (окружение happy-dom).
 
-Тесты лежат в `tests/` и зеркалят структуру `src/`. Интеграционные — в `tests/server/integration/` (полный жизненный цикл VIMP с реальными модулями). JS↔WASM харнесс Rust-ядра — в `tests/core/` (пропускается без собранного `core/pkg-node/`, см. [core.md](core.md)); Rust-тесты ядра гоняются отдельно (`npm run core:test`). Правило проекта: **любое изменение кода завершается зелёными `npx eslint .` и `npm test`**; при правке `Tank.updateData`/`models.js` обязательны паритет-тесты `tests/server/TankPredictorParity.test.js` и `tests/core/` (serverParity/predictorParity).
+Тесты лежат в `tests/` и зеркалят структуру `src/`. Интеграция host-фасада поверх реального ядра — `tests/host/HostGame.test.js`; JS↔WASM харнесс Rust-ядра — в `tests/core/` (пропускается без собранного `core/pkg-node/`, см. [core.md](core.md)); Rust-тесты ядра гоняются отдельно (`npm run core:test`). Правило проекта: **любое изменение кода завершается зелёными `npx eslint .` и `npm test`**; при правке движения в ядре или `models.js` обязателен паритет-тест `tests/core/predictorParity.test.js`.
 
 CI (`.github/workflows/test.yml`) гоняет eslint, Rust-тесты ядра, сборку nodejs-таргета ядра и Vitest на каждый push/PR.

@@ -1,124 +1,157 @@
 # Архитектура
 
-VIMP Tank Battle — многопользовательская 2D-игра реального времени. **Сервер авторитетен**: вся физика (Rapier 2D), урон и правила считаются на сервере; клиент рендерит мир (PixiJS) и маскирует сетевую задержку интерполяцией и предсказанием.
+VIMP Tank Battle — многопользовательская 2D-игра реального времени на
+**P2P-архитектуре**. **Хост авторитетен**: вся физика (Rapier 2D в Rust-ядре,
+WASM), урон и правила считаются в Web Worker'е вкладки создателя комнаты;
+клиенты рендерят мир (PixiJS) и маскируют сетевую задержку интерполяцией и
+предсказанием. Мастер-сервер (Node.js) игровой логики не несёт: лобби,
+сигналинг WebRTC, каталог карт, соц-модерация.
 
 ```
-┌─────────────────────────┐        WebSocket         ┌─────────────────────────┐
-│         Сервер          │  JSON [port, payload] +  │         Клиент          │
-│  Node.js + Express + ws │  бинарный snapshot (5)   │     PixiJS + Howler     │
-│  физика Rapier 2D ~120Гц│ ───────────────────────► │  интерполяция (−100 мс) │
-│  снапшоты 30/сек        │ ◄─────────────────────── │  prediction своего танка│
-└─────────────────────────┘   ввод "seq:action:name" └─────────────────────────┘
+┌──────────────────┐  сигнальный WS (SDP/ICE, ping, /ban)  ┌──────────────────┐
+│  Мастер-сервер   │ ◄───────────────────────────────────► │      Клиент      │
+│ Node.js: лобби,  │                                       │ PixiJS + Howler  │
+│ GET /servers,    │ ◄───────────┐                         │ интерполяция     │
+│ каталог карт     │             │ register_host,          │ (−100 мс),       │
+└──────────────────┘             │ heartbeat               │ prediction       │
+                                 │                         └────────┬─────────┘
+                        ┌────────┴─────────┐   WebRTC DataChannels  │
+                        │  Вкладка хоста   │  meta (reliable): JSON │
+                        │ Worker: ядро+мета│  [port, payload] + со- │
+                        │ симуляция ~120 Гц│  бытийные кадры        │
+                        │ снапшоты 30/сек  │ ◄──────────────────────┘
+                        └──────────────────┘  state (unreliable):
+                                              позиционные кадры (5);
+                                              ввод "seq:action:name"
 ```
 
 ## Структура репозитория
 
 ```
 src/
-  server/        — игровой сервер
-    main.js      — bootstrap: конфиги, HTTP(S), ViteExpress, WebSocket
-    modules/     — VIMP (фасад), Game (физика), Panel, Stat, Vote, chat/,
-                   TimerManager, SnapshotManager, RTTManager, bots/
-    core/        — RoundManager, CommandProcessor, VoteCoordinator
-    player/      — Participant/Human/Bot + ParticipantManager (реестр участников)
-    parts/       — физические сущности: Tank, Bomb, Map, HitscanService, BaseModel
-    physics/     — rapier.js (инициализация WASM, единственная точка импорта Rapier)
-    socket/      — WebSocket-слой + SocketManager (все отправки)
+  master/        — мастер-сервер (точка входа): реестр комнат, REST,
+                   сигналинг, каталог карт (docs/master.md)
+  host/          — браузерный хост (docs/host.md)
+    host.worker.js — Web Worker: WASM-ядро + мета + порт-машина + цикл ~120 Гц
+    HostGame.js  — host-фасад: wiring мета-модулей, core-driven тик
+    GameCoreAdapter.js — поверхность физики/ботов/упаковки поверх GameCore
+    HostBotManager.js  — тонкий реестр ботов (ИИ — в ядре)
+    meta/        — JS-мета Worker'а: core/ (RoundManager, CommandProcessor,
+                   VoteCoordinator), modules/ (Panel, Stat, Vote, chat/,
+                   TimerManager, RTTManager), player/ (Participant/Human/Bot +
+                   ParticipantManager), SocketManager
   client/        — браузерный клиент
-    main.js      — WS-диспетчер, инициализация модулей, рендер-цикл
-    components/  — MVC-тройки (Auth, CanvasManager, Controls, Game, Chat, Panel, Stat, Vote)
+    main.js      — диспетчер портов, лобби/роли, инициализация модулей, рендер-цикл
+    network/     — SignalingClient, WebRtcManager (offerer), HostController,
+                   LoopbackTransport, HostConnectionManager (answerer)
+    components/  — MVC-тройки (Auth, Lobby, CanvasManager, Controls, Game,
+                   Chat, Panel, Stat, Vote)
     parts/       — PixiJS-сущности и эффекты
     providers/   — BakingProvider (текстуры), DependencyProvider
     SnapshotInterpolator.js / TankPredictor.js / ShotPredictor.js / SoundManager.js
-  config/        — общие конфиги сервера и клиента (game, client, server, auth,
-                   sounds, wsports, opcodes)
+  config/        — общие конфиги (game, client, auth, sounds, wsports, opcodes,
+                   lobby, master)
   data/          — статические данные: maps/, models.js, weapons.js
-  master/        — мастер-сервер P2P: реестр комнат, REST, сигналинг (docs/master.md)
   lib/           — общие утилиты: Publisher, factory, math, vec2, raycast,
                    snapshotCodec, validators, sanitizers, security, config, …
-core/            — Rust-ядро симуляции → WASM (Этап 2 P2P-миграции): физика,
-                   танки, оружие, боты, упаковка снапшотов (docs/core.md)
-tests/           — Vitest (зеркалит структуру src/; tests/core — JS↔WASM харнесс ядра)
+core/            — Rust-ядро симуляции → WASM: физика, танки, оружие, боты,
+                   упаковка снапшотов (docs/core.md)
+tests/           — Vitest (tests/host — хост и мета; tests/core — JS↔WASM
+                   харнесс ядра; tests/master, tests/client, tests/lib)
 public/          — статика (звуки)
 scripts/         — вспомогательные скрипты (обработка аудио, экспорт карт в JSON)
 .github/         — CI/CD (test.yml, deploy.yml) и скрипты развертывания
 ```
 
-`src/config/`, `src/data/` и `src/lib/` — **shared-слой**: импортируются и сервером (Node.js), и клиентом (Vite-бандл). Благодаря этому кодек снапшота, математика, валидаторы и параметры моделей гарантированно совпадают на обеих сторонах.
+`src/config/`, `src/data/` и `src/lib/` — **shared-слой**: импортируются
+мастером (Node.js), Worker'ом хоста и клиентом (Vite-бандл). Благодаря этому
+кодек снапшота, математика, валидаторы и параметры моделей гарантированно
+совпадают на всех сторонах.
 
-Проект мигрирует на P2P-архитектуру ([P2P-PLAN.md](../P2P-PLAN.md)): мастер-сервер (`src/master/`, Этап 1) и Rust-ядро симуляции (`core/`, Этап 2) уже в репозитории и живут **параллельно** текущему авторитетному серверу — он остаётся рабочим путём и эталоном поведения до вехи Этапа 4 (полный матч на браузерном хосте), после которой демонтируется. Этап 3 перевёл клиент с игрового WebSocket на WebRTC ([src/client/network/](../src/client/network/)): сигналинг через мастер, игровой трафик — P2P по каналам `meta`/`state`; список серверов — лобби ([client.md](client.md#сетевой-слой-srcclientnetwork-этап-3)). Диаграмма выше описывает легаси-путь.
+История миграции с авторитетного WS-сервера на эту архитектуру — в
+[P2P-PLAN.md](../P2P-PLAN.md).
 
-Этап 4 (браузерный хост, [host.md](host.md)) переносит авторитетную часть матча в вкладку создателя комнаты — **Web Worker поверх Rust-ядра** (`core/`), а не Node.js-сервер. Топология вкладки хоста:
+## Вкладка хоста
+
+Авторитетная часть матча живёт в Web Worker'е (его таймеры не троттлятся в
+фоновой вкладке), `RTCPeerConnection` — в главном потоке (в Worker их создать
+нельзя), который работает роутером пакетов. Хост-игрок играет в той же вкладке
+через postMessage-loopback. Детали — [host.md](host.md).
 
 ```
 Вкладка хоста
 ├─ Главный поток (client + router)
-│   ├─ client (main.js)          — рендер, prediction, звук (как в Этапе 3)
+│   ├─ client (main.js)          — рендер, prediction, звук (обычный клиент)
 │   ├─ HostController            — спавнит Worker, мост Worker↔транспорт
 │   ├─ LoopbackTransport         — транспорт хоста-игрока поверх postMessage
 │   └─ HostConnectionManager     — WebRTC-answerer удалённых клиентов + бэкпрешер
 └─ Web Worker (host.worker.js)   — авторитетная симуляция ~120 Гц
     ├─ GameCore (WASM, core/)    — физика, оружие, боты
-    ├─ GameCoreAdapter           — поверхность Game/Bots/Snapshot поверх ядра
+    ├─ GameCoreAdapter           — поверхность физики/ботов/упаковки поверх ядра
     └─ HostGame-фасад + мета      — RoundManager, ParticipantManager, Chat, Vote,
-                                    Stat, Panel, TimerManager (импорт из src/server/)
+                                    Stat, Panel, TimerManager… (src/host/meta/)
 ```
 
-Ключевое решение — **адаптер, а не форк меты**: мета-модули переиспользуются из `src/server/` без правок через существующие точки инъекции. Реализованы Фазы 1–2 (loopback хоста-игрока + WebRTC-answerer удалённых клиентов); остаётся прогон вехи (Фаза 3). Легаси авторитетный сервер (`src/server/`) — рабочий эталон до демонтажа после вехи. Детали — [host.md](host.md).
-
-## Серверная сторона
-
-**`VIMP`** (синглтон, [src/server/modules/VIMP.js](../src/server/modules/VIMP.js)) — фасад: связывает модули, ведёт жизненный цикл соединений и делегирует тик. Дерево владения:
+**`HostGame`** — фасад: связывает модули, ведёт жизненный цикл соединений и
+делегирует тик. Дерево владения:
 
 ```
-VIMP (фасад/wiring + делегирование тика)
+HostGame (фасад/wiring + core-driven тик)
  ├─ ParticipantManager   — единый реестр игроков и ботов (источник истины)
  ├─ RoundManager         — раунды, team wipe, смена карты, spectator↔active
  ├─ CommandProcessor     — чат-команды (/name, /bot, /nr, /timeleft, /mapname)
  ├─ VoteCoordinator      — создание/кулдаун/сброс голосований
- ├─ Game (Rapier 2D)     — физика, Tank/Bomb/Map/HitscanService
- ├─ Network: SnapshotManager + SnapshotPacker (бинарь) + SocketManager
+ ├─ GameCoreAdapter      — ядро: физика, Tank/Bomb/Hitscan, боты, packBody/packFrame
  ├─ Cold path: Panel, Stat, Chat, Vote (JSON, по изменению)
  ├─ TimerManager         — все таймеры  /  RTTManager — пинги и кики
- └─ Bots                 — BotController, NavigationSystem, SpatialManager
+ └─ HostBotManager       — реестр участников-ботов (ИИ — в ядре)
 ```
 
-Подробно о каждом модуле — [server.md](server.md).
+**Граница ядра — симуляция, а не мета**: в ядре физика, танки, оба типа оружия,
+боты и упаковка бинарных кадров; здоровье/боезапас тоже живут в ядре, панель —
+проекция его событий (`take_events()`: kill/health/ammo/activeWeapon/shake).
+Мета (чат, голосования, статистика, раунды, реестр участников, auth) — JS в
+Worker'е.
 
 ### Игровой цикл
 
 `TimerManager` вызывает `onShotTick` с частотой ~120 Гц (`timers.timeStep`). За тик:
 
-1. `Game.updateData(dt)` — фиксированные шаги физики Rapier (с защитой от «спирали смерти»);
-2. обновление ботов (если есть);
-3. `SnapshotManager.processTick()` — каждый `networkSendRate`-й тик (4 → **30 снапшотов/сек**) возвращает снимок мира, иначе тик завершён;
-4. `SnapshotPacker.packBody` — broadcast-часть кадра пакуется **один раз**;
-5. для каждого готового пользователя: `packFrame` (камера + player-блок играющего) → бинарная отправка (порт 5) + мета (panel/stat/chat/vote) своими JSON-каналами **только при изменении**.
+1. `GameCoreAdapter.updateData(dt)` — шаг ядра (физика + боты) + дренаж событий
+   в мету (panel/reportKill/shake);
+2. `SnapshotThrottle` — каждый `networkSendRate`-й тик (4 → **30 снапшотов/сек**)
+   кадр отправляется, иначе тик завершён;
+3. `packBody` (в ядре) — broadcast-часть кадра пакуется **один раз**;
+4. для каждого готового пользователя: `packFrame` (камера + player-блок
+   играющего) → бинарная отправка (порт 5; события → канал `meta`, чистые
+   позиции → `state`) + мета (panel/stat/chat/vote) своими JSON-каналами
+   **только при изменении**.
 
 ### Жизненный цикл соединения
 
 ```
-connect → origin-проверка → CONFIG → auth → createUser (спектатор)
-  → sendMap → mapReady → firstShotReady → участие в игровом цикле
-  → removeUser при отключении (или кик: idle / RTT)
+лобби → выбор комнаты → сигналинг (offer/answer/ICE) → каналы meta+state
+  → CONFIG → auth → createUser (спектатор) → sendMap → mapReady
+  → firstShotReady → участие в игровом цикле
+  → removeUser при отключении (или кик: idle / RTT; хост-игрок не кикается)
 ```
 
-Детали протокола и портов — [network.md](network.md).
+Выход хоста = смерть комнаты (host-migration нет): клиенты возвращаются в
+лобби. Детали протокола и портов — [network.md](network.md).
 
 ## Клиентская сторона
 
 Клиент строится вокруг трёх механизмов сглаживания сети (подробно — [client.md](client.md)):
 
 - **Интерполяция** (`SnapshotInterpolator`): кадры буферизуются, мир рендерится в прошлом (`serverNow − 100 мс`); события выдаются ровно один раз, позиции интерполируются.
-- **Предсказание** (`TankPredictor`): свой танк симулируется локальной репликой серверной модели движения; сервер подтверждает ввод (`lastInputSeq`), reconciliation переигрывает неподтверждённые вводы, расхождение плавно затухает.
-- **Клиентский спавн снарядов** (`ShotPredictor`): выстрел виден и слышен мгновенно, серверные дубли подавляются по id автора.
+- **Предсказание** (`TankPredictor`): свой танк симулируется локальной репликой авторитетной модели движения; хост подтверждает ввод (`lastInputSeq`), reconciliation переигрывает неподтверждённые вводы, расхождение плавно затухает.
+- **Клиентский спавн снарядов** (`ShotPredictor`): выстрел виден и слышен мгновенно, дубли от хоста подавляются по id автора.
 
 Рендеринг — MVC-компоненты + PixiJS-сущности `parts/` на двух полотнах (`vimp`, `radar`), процедурные текстуры запекаются при старте.
 
 ## Ключевые инварианты
 
 - **Источник истины по портам** — `src/config/wsports.js`; по snapshot-ключам и версии бинарного формата — `src/config/opcodes.js`.
-- **Паритет реплики движения**: `Tank.updateData` (сервер) и `TankPredictor` (клиент) обязаны совпадать численно; закреплено тестом `tests/server/TankPredictorParity.test.js` — любая правка `Tank.updateData`/`models.js` требует его прогона. С Этапа 2 паритет расширен на Rust-ядро: `tests/core/serverParity.test.js` (ядро ↔ сервер) и `tests/core/predictorParity.test.js` (реплика ↔ ядро) — движение обязано совпадать во всех трёх реализациях.
-- **Rapier импортируется только через** `src/server/physics/rapier.js` (top-level await инициализации WASM).
-- **Единое числовое пространство id** для людей и ботов; различение — `isBot`/`isNetworked`.
+- **Паритет реплики движения**: движение танка в Rust-ядре и клиентская реплика `TankPredictor` обязаны совпадать численно; закреплено тестом `tests/core/predictorParity.test.js` — любая правка движения в ядре или коэффициентов `models.js` требует его прогона.
+- **Единое числовое пространство id** для людей и ботов; различение — `isBot`/`isNetworked`. Ядро оперирует числовыми id, мета ключует строками — приведение на границе `GameCoreAdapter`.
 - Все отправки клиенту — только через `SocketManager`.

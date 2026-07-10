@@ -148,7 +148,7 @@ socketMethods[PS_CONFIG_DATA] = async data => {
 
   interpolator = new SnapshotInterpolator(data.interpolation);
 
-  // конфиг предикшена добавляет серверный bootstrap (src/server/main.js)
+  // конфиг предикшена добавляет хост (buildClientConfig в Worker'е)
   if (data.prediction) {
     predictor = new TankPredictor(data.prediction);
     shotPredictor = new ShotPredictor(data.prediction);

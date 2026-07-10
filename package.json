@@ -14,17 +14,15 @@
     "url": "git+ssh://git@github.com/lgick/VIMP-Tank-Battle.git"
   },
   "type": "module",
-  "main": "src/server/main.js",
+  "main": "src/master/main.js",
   "scripts": {
-    "dev": "NODE_ENV=development nodemon src/server/main.js -w src/server -w src/lib -w src/config -w src/data",
-    "start": "NODE_ENV=production node --env-file .env src/server/main.js",
-    "master:dev": "NODE_ENV=development nodemon src/master/main.js -w src/master -w src/lib -w src/config",
-    "master:start": "NODE_ENV=production node --env-file .env src/master/main.js",
-    "deploy": "npm run build && pm2 reload vimp-lgick-space",
+    "dev": "NODE_ENV=development nodemon src/master/main.js -w src/master -w src/lib -w src/config -w src/data",
+    "start": "NODE_ENV=production node --env-file .env src/master/main.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "build": "npm run core:build:web && npm run audio:process && vite build",
+    "build": "npm run core:build:web && npm run build:app",
+    "build:app": "npm run audio:process && vite build",
     "audio:process": "node scripts/process-audio.js",
     "core:build": "npm run core:build:web && npm run core:build:node",
     "core:build:web": "wasm-pack build core --release --target web --out-dir pkg-web",
@@ -33,7 +31,6 @@
     "maps:export": "node scripts/export-maps.js"
   },
   "dependencies": {
-    "@dimforge/rapier2d-compat": "^0.19.3",
     "express": "^5.1.0",
     "howler": "^2.2.4",
     "pixi.js": "^8.14.0",

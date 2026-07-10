@@ -367,7 +367,7 @@ EOF
 
   sudo tee "$dest" >/dev/null <<'EOF'
 # =================================================================
-# ШАБЛОН ИГРОВОГО СЕРВЕРА VIMP
+# ШАБЛОН СЕРВЕРА VIMP (мастер: лобби, сигналинг WebRTC, статика)
 # =================================================================
 
 # 1. Редирект HTTP -> HTTPS
@@ -388,25 +388,17 @@ server {
   include /etc/letsencrypt/options-ssl-nginx.conf;
   ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
-  # --- ЗАГОЛОВКИ БЕЗОПАСНОСТИ ---
+  # --- ЗАГОЛОВКИ БЕЗОПАСНОСТИ (Этап 5.4, см. docs/deployment.md) ---
   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
   add_header X-Content-Type-Options nosniff always;
-  add_header X-Frame-Options SAMEORIGIN always;
-  add_header Referrer-Policy "no-referrer-when-downgrade" always;
+  add_header X-Frame-Options DENY always;
+  add_header Referrer-Policy "no-referrer" always;
 
   # --- Content Security Policy ---
-  # default-src 'self'; # Только свой домен
-  # base-uri 'self'; # Запрет на изменение <base> с внешних ресурсов
-  # form-action 'self'; # Отправка форм только на свой домен
-  # frame-ancestors 'none'; # Запрет встраивания в чужие страницы
-  # object-src 'none'; # Запрет на <object>, <embed>, <applet>
-  # script-src 'self' 'unsafe-eval' 'unsafe-inline'; # JS со своего домена
-  # style-src 'self' 'unsafe-inline'; # CSS со своего домена и инлайн
-  # connect-src 'self' wss://__DOMAIN__; # Разрешение WebSocket к своему домену
-  # img-src 'self' data: blob:; # Разрешение картинкок с data: и blob:
-  # font-src 'self'; # Шрифты только со своего домена
-  # worker-src 'self' blob:; # Разрешение на web workers и blob URL
-  add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://__DOMAIN__ data:; img-src 'self' data: blob:; font-src 'self'; worker-src 'self' blob:;" always;
+  # Source of truth политики — src/config/master.js (security.csp):
+  # 'wasm-unsafe-eval' — компиляция WASM-ядра; worker-src blob: — Worker хоста;
+  # connect-src wss: — сигнальный WebSocket мастера (WebRTC CSP не гейтит).
+  add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' wss:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
 
   # --- СЖАТИЕ (Brotli & Gzip) ---
   # Brotli, если браузер клиента его поддерживает.

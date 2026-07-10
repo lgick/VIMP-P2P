@@ -4,7 +4,8 @@
 
 ![game video](./.github/assets/video/game.gif?raw=true)
 
-- **Сервер**: Node.js + Express + `ws`, авторитетная физика на Rapier 2D (~120 Гц), бинарные снапшоты 30 пакетов/сек.
+- **P2P**: авторитетный хост — Web Worker во вкладке создателя комнаты (Rust-ядро в WASM: Rapier 2D ~120 Гц, боты, бинарные снапшоты 30 пакетов/сек); клиенты подключаются по WebRTC.
+- **Мастер-сервер**: Node.js + Express + `ws` — лобби, сигналинг WebRTC, каталог карт.
 - **Клиент**: PixiJS, snapshot-интерполяция, client-side prediction, процедурные текстуры, пространственный звук (Howler).
 - **Игра**: две команды, hitscan-пули и бомбы, боты, голосования, чат, статистика.
 
@@ -14,10 +15,11 @@
 git clone https://github.com/lgick/VIMP-Tank-Battle.git
 cd VIMP-Tank-Battle
 npm install
+npm run core:build   # WASM-ядро (нужен Rust-тулчейн: rustup + wasm-pack)
 npm run dev
 ```
 
-Для разработки нужны локальные HTTPS-сертификаты (mkcert) — см. [docs/getting-started.md](docs/getting-started.md).
+Для разработки нужны локальные HTTPS-сертификаты (mkcert) и Rust-тулчейн — см. [docs/getting-started.md](docs/getting-started.md).
 
 ## Документация
 
@@ -26,11 +28,12 @@ npm run dev
 - [Локальная настройка](docs/getting-started.md)
 - [Архитектура](docs/architecture.md)
 - [Игровой процесс](docs/gameplay.md)
-- [Серверные модули](docs/server.md) · [Клиентские модули](docs/client.md)
-- [Сетевой протокол (WebSocket)](docs/network.md)
+- [Мастер-сервер](docs/master.md) · [Браузерный хост](docs/host.md) · [Rust-ядро](docs/core.md)
+- [Клиентские модули](docs/client.md)
+- [Сетевой протокол](docs/network.md)
 - [Конфигурация](docs/configuration.md)
 - [Расширение игры (карты, оружие, звуки)](docs/extending.md)
-- [Развертывание серверов](docs/deployment.md)
+- [Развертывание](docs/deployment.md)
 
 ## Интерфейс
 

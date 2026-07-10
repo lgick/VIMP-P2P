@@ -2,14 +2,14 @@ import { defineConfig } from 'vite';
 import pugPlugin from 'vite-plugin-pug';
 import fs from 'fs';
 import path from 'path';
-import serverConfig from './src/config/server.js';
+import masterConfig from './src/config/master.js';
 
 const isDev = process.env.NODE_ENV === 'development';
 let httpsConfig = false;
 
 if (isDev) {
-  const keyPath = serverConfig.httpsOptions.key;
-  const certPath = serverConfig.httpsOptions.cert;
+  const keyPath = masterConfig.httpsOptions.key;
+  const certPath = masterConfig.httpsOptions.cert;
 
   if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
     console.error(`

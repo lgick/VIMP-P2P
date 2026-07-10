@@ -1,14 +1,129 @@
 import { vi } from 'vitest';
-import { FakeSocketManager, loadConfig } from '../server/integration/harness.js';
+import { unpackFrame } from '../../src/lib/snapshotCodec.js';
 import { coreAvailable, makeCore } from '../core/helpers.js';
 
-// Каркас интеграционных тестов host-фасада (Этап 4). Как серверный
-// harness.js, но строит HostGame поверх реального Rust-ядра (pkg-node) —
-// сквозное покрытие core-driven пути (GameCoreAdapter → panel/reportKill,
-// pack_body/pack_frame через реальный unpackFrame в FakeSocketManager).
-// Пропускается, если core/pkg-node не собран (см. npm run core:build).
+// Каркас интеграционных тестов host-фасада: строит HostGame поверх
+// реального Rust-ядра (pkg-node) — сквозное покрытие core-driven пути
+// (GameCoreAdapter → panel/reportKill, pack_body/pack_frame через реальный
+// unpackFrame в FakeSocketManager). Пропускается, если core/pkg-node
+// не собран (см. npm run core:build).
+//
+// Все игровые модули — синглтоны, поэтому тест-файлы обязаны изолироваться
+// через vi.resetModules() в beforeEach и импортировать всё ДИНАМИЧЕСКИ
+// внутри теста (не статическим top-level import).
 
-export { FakeSocketManager, coreAvailable };
+export { coreAvailable };
+
+// Загружает реальные конфиги в свежий синглтон config (зеркало init
+// host.worker.js). Должна вызываться после vi.resetModules().
+export const loadConfig = async () => {
+  const config = (await import('../../src/lib/config.js')).default;
+
+  config.set('auth', (await import('../../src/config/auth.js')).default);
+  config.set('wsports', (await import('../../src/config/wsports.js')).default);
+  config.set('game', (await import('../../src/config/game.js')).default);
+  config.set('client', (await import('../../src/config/client.js')).default);
+
+  config.set('game:isDevMode', true);
+
+  // кадр на каждом тике: тесты двигают цикл tick(host, 1) и ждут снапшот
+  config.set('game:timers:networkSendRate', 1);
+
+  return config;
+};
+
+// Перечень всех отправителей SocketManager, которые дёргает host-фасад.
+const SENDER_METHODS = [
+  'sendConfig',
+  'sendAuthData',
+  'sendAuthResult',
+  'sendPing',
+  'sendClear',
+  'sendTechInform',
+  'sendMap',
+  'sendFirstShot',
+  'sendFirstVote',
+  'sendShot',
+  'sendPanel',
+  'sendStat',
+  'sendChat',
+  'sendVote',
+  'sendKeySet',
+  'sendPlayerDefaultShot',
+  'sendSpectatorDefaultShot',
+  'sendRoundStart',
+  'sendRoundEnd',
+  'sendVictory',
+  'sendDefeat',
+  'sendName',
+  'sendFragSound',
+  'sendGameOverSound',
+];
+
+// Фейковый SocketManager: вместо отправки в сеть пишет все исходящие кадры.
+export class FakeSocketManager {
+  constructor() {
+    this.frames = []; // [{ method, socketId, args }]
+    this._game = null;
+    this._panel = null;
+    this._stat = null;
+
+    for (const method of SENDER_METHODS) {
+      this[method] = (socketId, ...args) => {
+        this.frames.push({ method, socketId, args });
+      };
+    }
+  }
+
+  injectServices(game, panel, stat) {
+    this._game = game;
+    this._panel = panel;
+    this._stat = stat;
+  }
+
+  addUser() {}
+  removeUser() {}
+
+  close(socketId, code, key, arr) {
+    this.frames.push({ method: 'close', socketId, args: [code, key, arr] });
+  }
+
+  // все кадры указанного метода
+  framesOf(method) {
+    return this.frames.filter(f => f.method === method);
+  }
+
+  // последний sendShot для конкретного сокета; бинарный кадр декодируется
+  // реальным кодеком в прежнюю форму [snapshot, camera, serverTime, seq]
+  lastShot(socketId) {
+    const shots = this.frames.filter(
+      f => f.method === 'sendShot' && f.socketId === socketId,
+    );
+
+    if (!shots.length) {
+      return null;
+    }
+
+    const frame = unpackFrame(shots[shots.length - 1].args[0]);
+
+    return [frame.snapshot, frame.camera, frame.serverTime, frame.seq];
+  }
+
+  // последний sendShot целиком (включая player-блок предикшена)
+  lastFrame(socketId) {
+    const shots = this.frames.filter(
+      f => f.method === 'sendShot' && f.socketId === socketId,
+    );
+
+    return shots.length
+      ? unpackFrame(shots[shots.length - 1].args[0])
+      : null;
+  }
+
+  clear() {
+    this.frames.length = 0;
+  }
+}
 
 // Создаёт свежий HostGame с реальными мета-модулями, реальным ядром и
 // фейковым SocketManager. Fake timers включаются ДО конструктора (тот

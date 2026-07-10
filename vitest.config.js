@@ -2,8 +2,8 @@ import { defineConfig } from 'vitest/config';
 
 // Конфигурация Vitest.
 // Тесты разделены на два окружения через `projects`:
-//   - node:   серверный код и общие модули
-//             (src/server, src/master, src/lib, src/config) +
+//   - node:   мастер-сервер, хост (мета + Worker-фасад) и общие модули
+//             (src/master, src/host, src/lib, src/config) +
 //             JS↔WASM харнесс Rust-ядра (tests/core; пропускается,
 //             если core/pkg-node не собран — см. npm run core:build)
 //   - client: клиентский код (src/client) в окружении happy-dom (браузерный DOM)
@@ -19,7 +19,6 @@ export default defineConfig({
           name: 'node',
           environment: 'node',
           include: [
-            'tests/server/**/*.test.js',
             'tests/master/**/*.test.js',
             'tests/lib/**/*.test.js',
             'tests/config/**/*.test.js',

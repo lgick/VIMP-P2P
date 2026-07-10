@@ -7,7 +7,7 @@
 
 Клиент различает форматы по типу входящих данных: строка → JSON-диспетчер `socketMethods[portId]` ([src/client/main.js](../src/client/main.js) `handleMessage`), `ArrayBuffer` → `unpackFrame` → буфер интерполятора.
 
-## Транспорт (Этап 3: WebRTC вместо WebSocket)
+## Транспорт (WebRTC)
 
 Игровой `WebSocket` заменён на прямое P2P-соединение клиента с браузерным хостом (два `RTCDataChannel`). Сам протокол портов и форматы не изменились — сменился только транспорт. Клиентский сетевой слой — [src/client/network/](../src/client/network/):
 
@@ -19,7 +19,7 @@
 
 Клиент — инициатор (offerer): создаёт каналы и SDP-оффер, обменивается с хостом SDP/ICE через `SignalingClient`. Исходящие сообщения клиента (порты 0–8 client→server) — управляющие, идут по надёжному `meta`.
 
-**Хост — answerer** (Этап 4, [host.md](host.md)): `HostConnectionManager` в главном потоке вкладки хоста через `SignalingClient` ловит `webrtc_offer`, на каждого клиента создаёт `RTCPeerConnection`, `ondatachannel` принимает каналы клиента, шлёт `webrtc_answer` + ICE. Классификация meta/state реализована так: `HostGame` вычисляет per-user флаг `reliable` = `core.body_has_events()` (событийные блоки в теле — stateless-геттер ядра, не меняет `pack_body`) ∨ `forceReset` ∨ `shake`; флаг идёт через `SocketManager.sendShot(socketId, buffer, reliable)` (легаси-ws его игнорирует) в главный поток, который выбирает канал. Бэкпрешер: позиционный кадр дропается при переполнении `bufferedAmount` state-канала, `meta` — никогда. Хост регистрирует комнату у мастера (`register_host` + heartbeat `update_host`).
+**Хост — answerer** ([host.md](host.md)): `HostConnectionManager` в главном потоке вкладки хоста через `SignalingClient` ловит `webrtc_offer`, на каждого клиента создаёт `RTCPeerConnection`, `ondatachannel` принимает каналы клиента, шлёт `webrtc_answer` + ICE. Классификация meta/state реализована так: `HostGame` вычисляет per-user флаг `reliable` = `core.body_has_events()` (событийные блоки в теле — stateless-геттер ядра, не меняет `pack_body`) ∨ `forceReset` ∨ `shake`; флаг идёт через `SocketManager.sendShot(socketId, buffer, reliable)` в главный поток, который выбирает канал. Бэкпрешер: позиционный кадр дропается при переполнении `bufferedAmount` state-канала, `meta` — никогда. Хост регистрирует комнату у мастера (`register_host` + heartbeat `update_host`).
 
 **Буфер интерполятора** переведён с «push в конец» (корректно только при TCP-порядке) на **вставку по `seq`** с дедупликацией: кадры из ненадёжного `state`-канала могут приходить не по порядку и дублироваться. События опоздавшего reliable-кадра, чей `serverTime` уже позади `renderTime`, выдаются немедленно следующим `sample()` — «ровно один раз» сохраняется (см. [client.md](client.md#snapshotinterpolator)).
 
@@ -64,16 +64,16 @@
 | 7 | `VOTE_DATA` | Ответ голосования `[voteName, value]` или запрос списка (`'maps'`, `'teams'`) |
 | 8 | `PONG` | Ответ на PING (id пинга) |
 
-Сервер включает обработку клиентских портов поэтапно ([src/server/socket/index.js](../src/server/socket/index.js)): до авторизации активен только `CONFIG_READY`, после — `AUTH_RESPONSE`, после создания пользователя — остальные. Сообщение на неактивный порт игнорируется.
+Хост включает обработку клиентских портов поэтапно (порт-машина в [src/host/host.worker.js](../src/host/host.worker.js)): до авторизации активен только `CONFIG_READY`, после — `AUTH_RESPONSE`, после создания пользователя — остальные. Сообщение на неактивный порт игнорируется.
 
 ## Жизненный цикл соединения
 
-> Ниже описан жизненный цикл на стороне **легаси авторитетного сервера** (`src/server/`), живущего параллельно до вехи демонтажа (после Этапа 4). Клиент уже переведён на WebRTC (Этап 3): тот же портовый хендшейк (config → auth → map → first shot) будет исполняться браузерным хостом поверх канала `meta`. Origin-проверка и `oneConnection` — забота мастера/легаси-сервера, в P2P-транспорте их нет.
+Портовый хендшейк исполняет браузерный хост поверх канала `meta` (origin-проверка — забота сигнального WS мастера, в P2P-транспорте её нет):
 
 ```
-connect → origin-проверка (security.origin)
+каналы meta+state открыты → connect в Worker
   → CONFIG_DATA → CONFIG_READY
-  → (очередь, если сервер полон) → AUTH_DATA → AUTH_RESPONSE → AUTH_RESULT
+  → AUTH_DATA → AUTH_RESPONSE → AUTH_RESULT
   → createUser (спектатор) → MODULES_READY → MAP_DATA → MAP_READY
   → FIRST_SHOT_DATA (+ полные STAT/PANEL/KEYSET) → FIRST_SHOT_READY
   → пользователь в игровом цикле (SHOT_DATA 30 кадров/сек) → removeUser при close
@@ -81,15 +81,13 @@ connect → origin-проверка (security.origin)
 
 Детали:
 
-- **Origin**: соединение без заголовка `Origin` немедленно разрывается; невалидный origin — закрытие с кодом `4001`.
-- **oneConnection**: при включённой настройке новое подключение с того же IP закрывает предыдущее (код `4002`, экран «другое устройство»).
-- **Очередь**: если сервер полон, клиент ставится в очередь (`waiting`) и получает `TECH_INFORM_DATA` с позицией; при освобождении места ему приходит `AUTH_DATA`. **P2P-комната** (Worker хоста) очередь не держит — полная комната отвечает `TECH_INFORM_DATA` с кодом `roomFull` и закрывает соединение (код `4006`); хост-игрок из kick-политик исключён (см. [host.md](host.md)).
-- **Коды закрытия**: `4001` origin, `4002` другое устройство, `4003` кик за задержку, `4004` кик за пропуск пингов, `4005` кик за бездействие, `4006` полная P2P-комната.
+- **Полная комната**: очереди ожидания нет — полная комната (люди против `maxPlayers`; боты уступают место) отвечает `TECH_INFORM_DATA` с кодом `roomFull` и закрывает соединение (код `4006`); хост-игрок из kick-политик исключён (см. [host.md](host.md)).
+- **Коды закрытия**: `4003` кик за задержку, `4004` кик за пропуск пингов, `4005` кик за бездействие, `4006` полная комната. Закрытие data channel не несёт код/причину — причина доставляется отдельным `TECH_INFORM_DATA` по `meta` до закрытия.
 - После `FIRST_SHOT_READY` пользователь получает голосование выбора команды (`teamChange`) и попадает в рассылку кадров.
 
 ## Разделение каналов: горячий снапшот и мета
 
-Каждый тик снапшота (`networkSendRate: 4` → 30 пакетов/сек) сервер шлёт **всем готовым** пользователям бинарный кадр порта `5`. Мета-данные идут **своими JSON-каналами и только при изменении** (см. `VIMP._onShotTick` в [src/server/modules/VIMP.js](../src/server/modules/VIMP.js)):
+Каждый тик снапшота (`networkSendRate: 4` → 30 пакетов/сек) хост шлёт **всем готовым** пользователям бинарный кадр порта `5`. Мета-данные идут **своими JSON-каналами и только при изменении** (см. `HostGame._onShotTick` в [src/host/HostGame.js](../src/host/HostGame.js)):
 
 - **panel (13)** — per-user; массив строк `'ключ:значение'` (`t` — время раунда, `h` — здоровье, `w1`/`w2` — боезапас, `wa` — активное оружие). Полная панель шлётся при входе в игру, пустая (только ключи) — наблюдателю.
 - **stat (14)** — broadcast, дельта изменений (см. формат ниже).
@@ -147,7 +145,7 @@ connect → origin-проверка (security.origin)
 
 ## RTT (ping/pong) и кики
 
-`TimerManager` каждые `rttPingInterval` (3 c) рассылает `PING` (порт 10) с id; клиент отвечает `PONG` (порт 8). Обе стороны шлют их по **ненадёжному `state`-каналу** (единственный JSON-трафик вне `meta`): замер отражает реальный сетевой путь, а не reliable-поток `meta` с его ретрансмиссиями; потерянный ping покрывается допуском `maxMissedPings`. [RTTManager](../src/server/modules/RTTManager.js) считает задержку, публикует её в статистику (столбец `latency`) и кикает:
+`TimerManager` каждые `rttPingInterval` (3 c) рассылает `PING` (порт 10) с id; клиент отвечает `PONG` (порт 8). Обе стороны шлют их по **ненадёжному `state`-каналу** (единственный JSON-трафик вне `meta`): замер отражает реальный сетевой путь, а не reliable-поток `meta` с его ретрансмиссиями; потерянный ping покрывается допуском `maxMissedPings`. [RTTManager](../src/host/meta/modules/RTTManager.js) считает задержку, публикует её в статистику (столбец `latency`) и кикает:
 
 - при сглаженной (EMA) `latency > maxLatency` (1000 мс; порог рассчитан на P2P-хостинг с домашних каналов и спайки при смене карты) — код `4003`;
 - при `maxMissedPings` (5) подряд пропущенных ответах — код `4004`.
@@ -162,7 +160,7 @@ connect → origin-проверка (security.origin)
 
 ### Статистика (порт 14)
 
-`statArray = [tBodies, tHead, fullUpdate?]` (формирует [src/server/modules/Stat.js](../src/server/modules/Stat.js)):
+`statArray = [tBodies, tHead, fullUpdate?]` (формирует [src/host/meta/modules/Stat.js](../src/host/meta/modules/Stat.js)):
 
 - **`statArray[0]`** — строки таблиц: `[id строки, номер таблицы, массив ячеек | null, номер tbody]`. `null` вместо ячеек — удалить строку; пустая строка в ячейке — очистить значение; `undefined`/пропуск — не менять.
 - **`statArray[1]`** — шапки: `[номер таблицы, массив ячеек, номер строки tHead]`.

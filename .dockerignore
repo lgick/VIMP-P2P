@@ -10,6 +10,13 @@ yarn-debug.log*
 yarn-error.log*
 
 # =========================
+# Rust core (артефакты; пересобирается в core-builder)
+# =========================
+core/target
+core/pkg-web
+core/pkg-node
+
+# =========================
 # Git
 # =========================
 .git

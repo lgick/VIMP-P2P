@@ -2,7 +2,6 @@
 // ИИ, навигация и пространственная сетка живут в Rust-ядре (add_bot создаёт
 // танк + контроллер), поэтому здесь нет BotController/NavigationSystem/
 // SpatialManager — только регистрация участников-ботов и связка со Stat/Panel.
-// Порт участник-управляющей половины src/server/modules/bots/BotManager.js.
 export default class HostBotManager {
   /**
    * @param {ParticipantManager} participants - единый реестр участников.

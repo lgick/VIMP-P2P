@@ -1,7 +1,6 @@
 // Сборка клиентского CONFIG_DATA (порт 0): базовый client-конфиг +
 // время голосования и данные client-side prediction из game-конфига.
-// Общий для легаси-сервера (src/server/main.js) и Worker хоста
-// (src/host/host.worker.js) — оба шлют клиенту один и тот же конфиг.
+// Используется Worker'ом хоста (src/host/host.worker.js).
 //
 // Возвращает новый объект (клон), не мутируя переданный client-конфиг.
 export const buildClientConfig = (game, client) => {

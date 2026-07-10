@@ -15,14 +15,14 @@
 - **Отсутствие WebRTC** (`ensureWebRtcAvailable`): если `RTCPeerConnection` недоступен (Firefox с `media.peerconnection.enabled = false`, resistFingerprinting и т.п.), `connectToHost`/`connectAsHost` показывают честное сообщение и не покидают лобби вместо падения с чёрным экраном.
 - **Роль хоста**: `connectAsHost` перед стартом Worker'а фетчит каталог карт мастера (Этап 5.1, fallback на бандл), после `ready` регистрирует комнату и держит heartbeat; сигнальный WS хоста при разрыве переподключается с бэкоффом (`lobbyConfig.reconnect`) и заново регистрирует комнату (повторный `welcome` лобби не пересоздаёт — guard в `initLobby`). Сбой инициализации Worker'а (`error`) гасит комнату с сообщением и возвращает в лобби.
 
-## Сетевой слой (src/client/network/, Этап 3)
+## Сетевой слой (src/client/network/)
 
-Игровой транспорт — WebRTC, а не WebSocket (детали каналов — [network.md](network.md#транспорт-этап-3-webrtc-вместо-websocket)):
+Игровой транспорт — WebRTC, а не WebSocket (детали каналов — [network.md](network.md#транспорт-webrtc)):
 
 - **`SignalingClient`** — тонкая обёртка сигнального WebSocket мастера: `connect()`, кэш `id`/`iceServers` из `welcome`, ретрансляция входящих сообщений подписчикам по полю `type` (через `Publisher`), методы `sendOffer`/`sendIceCandidate`/`pingHost`/`reportHost`. Транспорт инъектируется фабрикой ради тестов.
 - **`WebRtcManager`** — P2P-соединение с хостом: `RTCPeerConnection` + каналы `meta` (reliable-ordered) и `state` (unreliable-unordered). Клиент — offerer: создаёт каналы/оффер, обменивается SDP/ICE через `SignalingClient`. События `Publisher`: `open` (оба канала открыты), `message` (данные из любого канала одним потоком), `close` (разрыв). `RTCPeerConnection` инъектируется фабрикой ради тестов.
 
-Роль клиента выбирается в лобби (`src/client/main.js`): **присоединиться** (`connectToHost` → `WebRtcManager`, offerer) или **создать сервер** (`connectAsHost` → браузерный хост в этой же вкладке). Для хоста игровой транспорт — **`LoopbackTransport`** (Этап 4): тот же интерфейс, что у `WebRtcManager` (`publisher` с `message`/`close`, `send`/`close`), но данные ходят через `HostController` → Web Worker постмесседжами, минуя WebRTC. Клиентский код при этом одинаков — транспорт прозрачен.
+Роль клиента выбирается в лобби (`src/client/main.js`): **присоединиться** (`connectToHost` → `WebRtcManager`, offerer) или **создать сервер** (`connectAsHost` → браузерный хост в этой же вкладке). Для хоста игровой транспорт — **`LoopbackTransport`**: тот же интерфейс, что у `WebRtcManager` (`publisher` с `message`/`close`, `send`/`close`), но данные ходят через `HostController` → Web Worker постмесседжами, минуя WebRTC. Клиентский код при этом одинаков — транспорт прозрачен.
 
 Хост-вкладка дополнительно поднимает главнопоточную инфраструктуру роутинга (главный поток — не Worker): **`HostController`** спавнит Worker с ядром и мостит его с транспортами; **`HostConnectionManager`** — **WebRTC-answerer** удалённых клиентов (зеркало `WebRtcManager`): слушает `webrtc_offer` через `SignalingClient`, на каждого создаёт `RTCPeerConnection`, ловит каналы `meta`/`state` в `ondatachannel`, шлёт `webrtc_answer`+ICE, регистрирует комнату у мастера (`register_host`/heartbeat) и отвечает на лобби-пинг (`ping_host`). Данные удалённых клиентов идут в тот же Worker, что и loopback хоста-игрока. Детали — [host.md](host.md).
 
@@ -30,7 +30,7 @@
 
 Девять троек `model/` + `view/` + `controller/`: **Auth**, **Lobby**, **CanvasManager**, **Controls**, **Game**, **Chat**, **Panel**, **Stat**, **Vote**.
 
-**Lobby** (Этап 3) — экран выбора сервера ДО подключения к хосту:
+**Lobby** — экран выбора сервера ДО подключения к хосту:
 
 - **model** — реестр серверов (ответы `GET /servers` мастера), пагинация, поиск, умный пинг. I/O не делает: публикует `fetch` (запросить REST), `ping-request` (сигнальный ping), `join` (выбран сервер), `list`/`ping-update` (для view). `latency` живёт отдельно от списка и переживает refresh/пагинацию.
 - **view** — рендер карточек, поиск, «Загрузить ещё»; **умный пинг** через `IntersectionObserver`: карточка в видимой зоне → `visible` → контроллер шлёт `ping_host`; `pong` обновляет задержку и пересортировывает карточки по возрастанию. `IntersectionObserver` инъектируется ради тестов.
@@ -64,7 +64,7 @@ Publisher-паттерн связей внутри тройки:
 - серверное время оценивается EMA-оффсетом (`serverTime − localNow`), `renderTime = serverNow − delay` (конфиг `interpolation.delay: 100` мс);
 - `sample()` выдаёт пересечённые `renderTime` кадры **целиком ровно один раз** (события `w1`/`w2e`, создания/удаления, reset/shake камеры), а непрерывные величины интерполирует между соседними кадрами: танки `m1` (x/y/vx/vy/engineLoad — `lerp`, углы — `lerpAngle` из [src/lib/math.js](../src/lib/math.js)), динамика карты `c1`/`c2`, камера;
 - классификация ключей — по `kind` из `SNAPSHOT_KEYS` (`opcodes.js`); экстраполяции нет — hold на последнем кадре; буфер сбрасывается при смене карты и `CLEAR`;
-- **вставка по `seq`** (Этап 3): транспорт `state`-канала не гарантирует порядок и доставку — `push(..., seq)` вставляет кадр по `seq` с дедупликацией; события опоздавшего reliable-кадра (его `serverTime` уже позади `renderTime`) выдаются немедленно следующим `sample()`, «ровно один раз» сохраняется.
+- **вставка по `seq`**: транспорт `state`-канала не гарантирует порядок и доставку — `push(..., seq)` вставляет кадр по `seq` с дедупликацией; события опоздавшего reliable-кадра (его `serverTime` уже позади `renderTime`) выдаются немедленно следующим `sample()`, «ровно один раз» сохраняется.
 
 ### TankPredictor
 
@@ -76,7 +76,7 @@ Publisher-паттерн связей внутри тройки:
 - рендер: предсказанное состояние перекрывает интерполяцию тем же `parse`-конвейером, камера следует предсказанной позиции;
 - сбросы: `camera[2]` (respawn/телепорт), смена keySet, смена карты; при `condition 0` (смерть) предикт заморожен.
 
-⚠️ Точность реплики фиксирует паритет-тест `tests/server/TankPredictorParity.test.js` (реальный Rapier против реплики). Порядок интеграции (эмпирический, закреплён тестом): импульсы → интеграция позиций скоростью до демпфирования → damping `v *= 1/(1+dt·d)`.
+⚠️ Точность реплики фиксирует паритет-тест `tests/core/predictorParity.test.js` (реплика против Rust-ядра). Порядок интеграции (эмпирический, закреплён тестом): импульсы → интеграция позиций скоростью до демпфирования → damping `v *= 1/(1+dt·d)`.
 
 ### ShotPredictor
 

@@ -1,6 +1,6 @@
 /*
 npx eslint . eslint.config.js
-npx eslint --print-config src/server/modules/Panel.js > log
+npx eslint --print-config src/host/meta/modules/Panel.js > log
 */
 
 import js from '@eslint/js';
@@ -39,7 +39,6 @@ export default [
   // конфигурация серверного кода Node.js
   {
     files: [
-      'src/server/**/*.js', // все js файлы в src/server и его подпапках
       'src/master/**/*.js', // мастер-сервер (Node.js)
     ],
     languageOptions: {

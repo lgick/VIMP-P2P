@@ -1,13 +1,13 @@
-import Panel from '../server/modules/Panel.js';
-import Stat from '../server/modules/Stat.js';
-import Chat from '../server/modules/chat/index.js';
-import Vote from '../server/modules/Vote.js';
-import RTTManager from '../server/modules/RTTManager.js';
-import TimerManager from '../server/modules/TimerManager.js';
-import ParticipantManager from '../server/player/ParticipantManager.js';
-import VoteCoordinator from '../server/core/VoteCoordinator.js';
-import RoundManager from '../server/core/RoundManager.js';
-import CommandProcessor from '../server/core/CommandProcessor.js';
+import Panel from './meta/modules/Panel.js';
+import Stat from './meta/modules/Stat.js';
+import Chat from './meta/modules/chat/index.js';
+import Vote from './meta/modules/Vote.js';
+import RTTManager from './meta/modules/RTTManager.js';
+import TimerManager from './meta/modules/TimerManager.js';
+import ParticipantManager from './meta/player/ParticipantManager.js';
+import VoteCoordinator from './meta/core/VoteCoordinator.js';
+import RoundManager from './meta/core/RoundManager.js';
+import CommandProcessor from './meta/core/CommandProcessor.js';
 import { sanitizeMessage } from '../lib/sanitizers.js';
 import GameCoreAdapter from './GameCoreAdapter.js';
 import HostBotManager from './HostBotManager.js';
@@ -39,10 +39,9 @@ class SnapshotThrottle {
   }
 }
 
-// Host-фасад: авторитетная часть матча в Worker'е хоста. Аналог
-// src/server/modules/VIMP.js, но симуляция/боты/упаковка снапшотов — в
-// Rust-ядре через GameCoreAdapter, мета (RoundManager, участники, чат,
-// голосования, статистика, панель) переиспользуется из src/server как есть.
+// Host-фасад: авторитетная часть матча в Worker'е хоста. Симуляция, боты и
+// упаковка снапшотов — в Rust-ядре через GameCoreAdapter, мета (RoundManager,
+// участники, чат, голосования, статистика, панель) — JS-модули ./meta/.
 // Питается событиями ядра (adapter._drainEvents → panel/reportKill/shake).
 export default class HostGame {
   /**

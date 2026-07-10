@@ -88,11 +88,6 @@ jobs:
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           VIMP_DOMAIN: ${{ matrix.domain }}
           VIMP_PORT: ${{ matrix.port }}
-          VIMP_PLAYERS: ${{ matrix.players }}
-          VIMP_MAP: ${{ matrix.map }}
-          VIMP_ROUND_TIME: ${{ matrix.round_time }}
-          VIMP_MAP_TIME: ${{ matrix.map_time }}
-          VIMP_FRIENDLY_FIRE: ${{ matrix.friendly_fire }}
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -100,7 +95,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           # Передача переменных окружения внутрь скрипта SSH
-          envs: IMAGE_NAME,VIMP_DOMAIN,VIMP_PORT,VIMP_PLAYERS,VIMP_MAP,VIMP_ROUND_TIME,VIMP_MAP_TIME,VIMP_FRIENDLY_FIRE,GITHUB_ACTOR,GITHUB_TOKEN
+          envs: IMAGE_NAME,VIMP_DOMAIN,VIMP_PORT,GITHUB_ACTOR,GITHUB_TOKEN
           script: |
             # Остановка выполнения при любой критической ошибке
             set -e
@@ -132,13 +127,6 @@ jobs:
             {
               echo "NODE_ENV=production"
               echo "VIMP_DOMAIN=$VIMP_DOMAIN"
-
-              # Опциональные настройки
-              [ -n "$VIMP_PLAYERS" ]       && echo "VIMP_PLAYERS=$VIMP_PLAYERS"
-              [ -n "$VIMP_MAP" ]           && echo "VIMP_MAP=$VIMP_MAP"
-              [ -n "$VIMP_ROUND_TIME" ]    && echo "VIMP_ROUND_TIME=$VIMP_ROUND_TIME"
-              [ -n "$VIMP_MAP_TIME" ]      && echo "VIMP_MAP_TIME=$VIMP_MAP_TIME"
-              [ -n "$VIMP_FRIENDLY_FIRE" ] && echo "VIMP_FRIENDLY_FIRE=$VIMP_FRIENDLY_FIRE"
             } > .env.prod
 
 
@@ -148,15 +136,15 @@ jobs:
             # ports: 127.0.0.1 - чтобы порт был закрыт снаружи (безопасность).
             {
               echo "services:"
-              echo "  game:"
+              echo "  master:"
               echo "    image: $IMAGE_NAME:latest"
               echo "    container_name: \"vimp-${VIMP_DOMAIN}\""
               echo "    restart: always"
               echo "    env_file: .env.prod"
               echo "    ports:"
               # СЛЕВА: Порт на сервере (уникальный из JSON, например 3005)
-              # СПРАВА: Порт внутри контейнера (всегда 3000)
-              echo "      - \"127.0.0.1:${VIMP_PORT}:3000\""
+              # СПРАВА: Порт мастера внутри контейнера (всегда 3002)
+              echo "      - \"127.0.0.1:${VIMP_PORT}:3002\""
             } > docker-compose.yml
 
             echo "🚀 Pulling and Restarting..."
