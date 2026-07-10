@@ -40,6 +40,16 @@ const clients = new Map();
 function applyRoomOverrides(room = {}) {
   const game = structuredClone(gameConfig);
 
+  // Этап 5.1: актуальные карты мастера (фетчит главный поток) вместо бандла
+  if (room.maps && Object.keys(room.maps).length) {
+    game.maps = room.maps;
+
+    // дефолтная карта бандла могла уйти из каталога мастера
+    if (!game.maps[game.currentMap]) {
+      game.currentMap = Object.keys(game.maps)[0];
+    }
+  }
+
   if (Number.isFinite(room.maxPlayers)) {
     game.maxPlayers = Math.max(1, Math.min(MAX_ROOM_PLAYERS, room.maxPlayers));
   }
@@ -107,7 +117,10 @@ async function onInit(room) {
 
   clientCfg = buildClientConfig(game, clientConfig);
   socketManager = new SocketManager(wsports.server);
-  host = new HostGame(game, socketManager, core);
+  host = new HostGame(game, socketManager, core, {
+    hostSocketId: room?.hostSocketId ?? null,
+    onMapChange: mapName => self.postMessage({ type: 'map_changed', mapName }),
+  });
 
   // мастеру нужна фактическая карта комнаты (разрешена из overrides/дефолта)
   self.postMessage({ type: 'ready', mapName: game.currentMap });
@@ -122,6 +135,15 @@ function onConnect(socketId) {
   const socket = makeWorkerSocket(socketId);
 
   socketManager.addUser(socketId, socket);
+
+  // комната заполнена (люди + боты) — отказ без порт-машины
+  // (очереди ожидания легаси-сервера в P2P-комнате нет)
+  if (host.isFull) {
+    socketManager.sendTechInform(socketId, 'roomFull', [host.maxPlayers]);
+    socketManager.close(socketId, 4006, 'roomFull');
+    socketManager.removeUser(socketId);
+    return;
+  }
 
   const state = {
     gameId: undefined,
@@ -241,12 +263,20 @@ function onDisconnect(socketId) {
   clients.delete(socketId);
 }
 
-self.onmessage = async e => {
-  const msg = e.data;
+self.onmessage = async event => {
+  const msg = event.data;
 
   switch (msg.type) {
     case 'init':
-      await onInit(msg.room);
+      try {
+        await onInit(msg.room);
+      } catch (e) {
+        // сбой загрузки WASM/конфига — сообщить главному потоку, не виснуть
+        self.postMessage({
+          type: 'error',
+          message: e && e.message ? e.message : String(e),
+        });
+      }
       break;
 
     case 'connect':
@@ -259,6 +289,10 @@ self.onmessage = async e => {
 
     case 'disconnect':
       onDisconnect(msg.socketId);
+      break;
+
+    case 'update_maps':
+      host?.updateMaps(msg.maps);
       break;
   }
 };

@@ -68,7 +68,9 @@ export default class WebRtcManager {
     pc.onconnectionstatechange = () => {
       const st = pc.connectionState;
 
-      if (st === 'failed' || st === 'disconnected' || st === 'closed') {
+      // 'disconnected' транзиентен (может восстановиться) — не рвём;
+      // реальный обрыв доведёт до 'failed' или закроет каналы (onclose)
+      if (st === 'failed' || st === 'closed') {
         this._emitClose();
       }
     };

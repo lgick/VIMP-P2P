@@ -172,4 +172,59 @@ describe('HostConnectionManager', () => {
     pc.onconnectionstatechange();
     expect(onPeersChange).toHaveBeenLastCalledWith(0);
   });
+
+  it("транзиентный 'disconnected' не рвёт соединение", async () => {
+    await connectPeer('c1');
+
+    pc.connectionState = 'disconnected';
+    pc.onconnectionstatechange();
+
+    expect(controller.disconnect).not.toHaveBeenCalled();
+    expect(mgr.peerCount).toBe(1);
+  });
+
+  it('гонка: закрытие канала до открытия второго не поднимает фантома', async () => {
+    await mgr.onOffer({ clientId: 'c1', sdp: { type: 'offer' } });
+
+    const meta = makeChannel('meta');
+    const state = makeChannel('state');
+
+    pc.ondatachannel({ channel: meta });
+    pc.ondatachannel({ channel: state });
+
+    // браузер мог уже поставить событие open в очередь — захватываем хендлер
+    const lateOpen = state.onopen;
+
+    meta.onopen();
+    meta.onclose(); // peer закрыт до открытия state
+
+    // _closePeer снял обработчики каналов, а guard гасит поздний вызов
+    expect(state.onopen).toBeNull();
+    lateOpen();
+
+    expect(controller.open).not.toHaveBeenCalled();
+    expect(mgr.peerCount).toBe(0);
+  });
+
+  it('сбой SDP-обмена не оставляет осиротевшего peer', async () => {
+    pc.setRemoteDescription.mockRejectedValue(new Error('bad sdp'));
+
+    await mgr.onOffer({ clientId: 'c1', sdp: { type: 'offer' } });
+
+    expect(signaling.sendAnswer).not.toHaveBeenCalled();
+    expect(pc.close).toHaveBeenCalled();
+    expect(mgr.peerCount).toBe(0);
+  });
+
+  it('_closePeer снимает обработчики каналов', async () => {
+    const { meta, state } = await connectPeer('c1');
+
+    pc.connectionState = 'failed';
+    pc.onconnectionstatechange();
+
+    expect(meta.onmessage).toBeNull();
+    expect(meta.onclose).toBeNull();
+    expect(state.onmessage).toBeNull();
+    expect(state.onclose).toBeNull();
+  });
 });

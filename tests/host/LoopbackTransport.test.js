@@ -119,6 +119,46 @@ describe('HostController', () => {
     controller.destroy();
     expect(worker.terminate).toHaveBeenCalled();
   });
+
+  it('error из Worker уходит в onError (сбой инициализации)', () => {
+    const onError = vi.fn();
+
+    controller = new HostController(
+      { name: 'Room' },
+      { workerFactory: () => worker, onError },
+    );
+
+    worker.emit({ type: 'error', message: 'wasm failed' });
+
+    expect(onError).toHaveBeenCalledWith({
+      type: 'error',
+      message: 'wasm failed',
+    });
+  });
+
+  it('map_changed из Worker уходит в onMapChange', () => {
+    const onMapChange = vi.fn();
+
+    controller = new HostController(
+      { name: 'Room' },
+      { workerFactory: () => worker, onMapChange },
+    );
+
+    worker.emit({ type: 'map_changed', mapName: 'garden' });
+
+    expect(onMapChange).toHaveBeenCalledWith('garden');
+  });
+
+  it('updateMaps пересылает каталог карт в Worker', () => {
+    const maps = { garden: { step: 32 } };
+
+    controller.updateMaps(maps);
+
+    expect(worker.postMessage).toHaveBeenCalledWith({
+      type: 'update_maps',
+      maps,
+    });
+  });
 });
 
 describe('LoopbackTransport', () => {

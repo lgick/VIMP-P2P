@@ -58,16 +58,24 @@ export default class HostConnectionManager {
     pc.onconnectionstatechange = () => {
       const st = pc.connectionState;
 
-      if (st === 'failed' || st === 'disconnected' || st === 'closed') {
+      // 'disconnected' транзиентен (может восстановиться) — не рвём;
+      // реальный обрыв доведёт до 'failed' или закроет каналы (onclose)
+      if (st === 'failed' || st === 'closed') {
         this._closePeer(clientId);
       }
     };
 
-    await pc.setRemoteDescription(sdp);
+    try {
+      await pc.setRemoteDescription(sdp);
 
-    const answer = await pc.createAnswer();
+      const answer = await pc.createAnswer();
 
-    await pc.setLocalDescription(answer);
+      await pc.setLocalDescription(answer);
+    } catch (e) {
+      // битый SDP или peer уже закрыт — не оставляем осиротевшую запись
+      this._closePeer(clientId);
+      return;
+    }
 
     this._signaling.sendAnswer(clientId, pc.localDescription);
   }
@@ -106,6 +114,12 @@ export default class HostConnectionManager {
     channel.onclose = () => this._closePeer(clientId);
 
     channel.onopen = () => {
+      // peer мог закрыться до открытия второго канала (гонка open/close) —
+      // фантомное соединение в Worker'е поднимать нельзя
+      if (this._peers.get(clientId) !== peer) {
+        return;
+      }
+
       peer.openCount += 1;
 
       // оба канала открыты — поднимаем соединение клиента в Worker'е
@@ -148,6 +162,15 @@ export default class HostConnectionManager {
 
     this._peers.delete(clientId);
     this._controller.disconnect(clientId); // Worker: removeUser
+
+    // снять обработчики каналов — замыкания не должны удерживать peer
+    for (const channel of [peer.meta, peer.state]) {
+      if (channel) {
+        channel.onopen = null;
+        channel.onmessage = null;
+        channel.onclose = null;
+      }
+    }
 
     try {
       peer.pc.close();

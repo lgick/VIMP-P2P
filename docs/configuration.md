@@ -195,10 +195,12 @@
 Конфиг клиентского лобби (Этап 3, см. [client.md](client.md#mvc-компоненты-srcclientcomponents)). В отличие от `client.js` **бандлится в сборку**, а не приходит от хоста: лобби проходит до подключения к хосту.
 
 - `serversUrl: '/servers'` — REST-эндпоинт мастера со списком серверов;
+- `maps` — каталог карт мастера (Этап 5.1): `manifestUrl: '/maps/manifest.json'`, `baseUrl: '/maps'` — комната хоста стартует на актуальных картах (fallback на бандл при недоступности);
+- `reconnect` — переподключение сигнального WS хоста: экспоненциальный бэкофф от `baseDelay: 1000` до `maxDelay: 30000` (мс);
 - `pageSize: 10` — размер страницы для «Загрузить ещё» (`offset`/`limit`);
 - `pingInterval: 5000` — минимальный интервал повторного `ping_host` одного сервера (защита от спама при скролле/перерисовке);
 - `elems` — id DOM-элементов лобби (из `lobby.pug`), включая `nameId`/`hostBtnId` — поле имени и кнопка «создать сервер» (браузерный хост, [host.md](host.md));
-- `create` — настройки создания комнаты: `defaultName`, `maxPlayers` (≤ 8, рамка P2P-плана).
+- `create` — настройки создания комнаты: `defaultName`, `maxPlayers` (≤ 8, рамка P2P-плана), `heartbeatInterval` (период `update_host` у мастера), `hostSocketId: 'local'` — socketId loopback-соединения хоста-игрока (по нему Worker исключает хоста из kick-политик).
 
 ## src/config/auth.js
 

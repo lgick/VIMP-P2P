@@ -63,6 +63,7 @@ beforeEach(() => {
     heartbeatTimeout: 1000,
     pingLimiter: new RateLimiter({ limit: 2, windowMs: 1000 }),
     checkOrigin: allowAllOrigins,
+    mapsVersion: 'v-test',
   });
 });
 
@@ -155,6 +156,8 @@ describe('register_host', () => {
     const reply = ws.lastSent();
 
     expect(reply.type).toBe('host_registered');
+    // версия каталога карт — для сверки хостом при re-register (Этап 5.1)
+    expect(reply.mapsVersion).toBe('v-test');
 
     const host = registry.get(reply.hostId);
 
@@ -303,21 +306,59 @@ describe('ping_host / pong_host', () => {
 });
 
 describe('report_host', () => {
+  // сессия получает право на жалобу, только отправив оффер этой комнате
+  const joinRoom = (client, hostId) => {
+    client.ws.message({ type: 'webrtc_offer', hostId, sdp: 'offer' });
+  };
+
   it('учитывает жалобу один раз на IP репортёра и хранит причину', async () => {
     const host = await connectHost();
     const client = await connect({ ip: '5.5.5.5' });
+
+    joinRoom(client, host.hostId);
 
     client.ws.message({
       type: 'report_host',
       hostId: host.hostId,
       reason: 'aimbot',
     });
-    client.ws.message({ type: 'report_host', hostId: host.hostId });
+    client.ws.message({
+      type: 'report_host',
+      hostId: host.hostId,
+      reason: 'aimbot again',
+    });
 
     const room = registry.get(host.hostId);
 
     expect(room.reportCount).toBe(1);
     expect(room.reportReasons).toEqual(['aimbot']);
+  });
+
+  it('отклоняет жалобу от сессии, не подключавшейся к комнате', async () => {
+    const host = await connectHost();
+    const stranger = await connect({ ip: '7.7.7.7' });
+
+    stranger.ws.message({
+      type: 'report_host',
+      hostId: host.hostId,
+      reason: 'aimbot',
+    });
+
+    expect(stranger.ws.lastSent()).toEqual({
+      type: 'error',
+      code: 'reportRejected',
+    });
+    expect(registry.get(host.hostId).reportCount).toBe(0);
+  });
+
+  it('не учитывает жалобу без причины', async () => {
+    const host = await connectHost();
+    const client = await connect({ ip: '5.5.5.5' });
+
+    joinRoom(client, host.hostId);
+    client.ws.message({ type: 'report_host', hostId: host.hostId });
+
+    expect(registry.get(host.hostId).reportCount).toBe(0);
   });
 
   it('при достижении порога банит хоста и закрывает его сигнальный WS', async () => {
@@ -326,7 +367,12 @@ describe('report_host', () => {
     // banThreshold = 3: жалобы от трёх разных IP
     for (let i = 0; i < 3; i += 1) {
       const client = await connect({ ip: `5.5.5.${i}` });
-      client.ws.message({ type: 'report_host', hostId: host.hostId });
+      joinRoom(client, host.hostId);
+      client.ws.message({
+        type: 'report_host',
+        hostId: host.hostId,
+        reason: 'cheat',
+      });
     }
 
     // WS хоста закрыт кодом 4002; его close-хендлер убрал комнату из реестра
@@ -339,7 +385,12 @@ describe('report_host', () => {
 
     for (let i = 0; i < 3; i += 1) {
       const client = await connect({ ip: `6.6.6.${i}` });
-      client.ws.message({ type: 'report_host', hostId: host.hostId });
+      joinRoom(client, host.hostId);
+      client.ws.message({
+        type: 'report_host',
+        hostId: host.hostId,
+        reason: 'cheat',
+      });
     }
 
     // тот же IP 1.1.1.1 пробует поднять новую комнату

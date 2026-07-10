@@ -109,6 +109,12 @@ let gameInformList = []; // массив игровых сообщений
 const techInformer = document.getElementById('tech-informer');
 let techInformList = []; // массив системных сообщений
 
+// код 'loading' — единственный не-терминальный tech-код (см. TECH_CODES)
+const TECH_LOADING_CODE = 2;
+// показан ли терминальный tech-код (кик, полная комната): причина закрытия
+// соединения важнее общего сообщения handleDisconnect
+let terminalInformShown = false;
+
 const CTRL = {}; // контроллеры
 let gameSets = {}; // наборы конструкторов (id: [наборы])
 let entitiesOnCanvas = {}; // сущности, отображаемые на полотнах
@@ -400,6 +406,9 @@ socketMethods[PS_TECH_INFORM_DATA] = data => {
       const [key, arr] = data;
 
       message = formatMessage(techInformList[key], arr) || 'Unknown error';
+      // терминальные коды (кик, полная комната) — причина закрытия соединения,
+      // последующий handleDisconnect не должен затирать её общим сообщением
+      terminalInformShown = key !== TECH_LOADING_CODE;
     } else {
       message = data;
     }
@@ -409,6 +418,7 @@ socketMethods[PS_TECH_INFORM_DATA] = data => {
     techInformer.style.display = 'block';
   } else {
     modules.controls?.enableKeys();
+    terminalInformShown = false;
     techInformer.textContent = '';
     techInformer.style.display = 'none';
   }
@@ -769,6 +779,8 @@ function handleChatSend(message) {
       modules.chat.add(['/ban is available to room guests only']);
     } else if (!reason) {
       modules.chat.add(['/ban requires a reason: /ban <reason>']);
+    } else if (!signaling.connected) {
+      modules.chat.add(['No connection to the master server — report not sent']);
     } else {
       signaling.reportHost(currentHostId, reason);
       modules.chat.add(['Report sent to the master server']);
@@ -859,10 +871,16 @@ function handleDisconnect() {
 
   hostConnections?.destroy();
   hostController?.destroy();
+  hostConnections = null;
+  hostController = null; // останавливает и reconnect-петлю сигналинга
+  hostRegistration = null;
 
-  socketMethods[PS_TECH_INFORM_DATA](
-    'Host left — the room is closed. Returning to lobby…',
-  );
+  // терминальную причину закрытия (кик, полная комната) не затираем
+  if (!terminalInformShown) {
+    socketMethods[PS_TECH_INFORM_DATA](
+      'Host left — the room is closed. Returning to lobby…',
+    );
+  }
 
   setTimeout(() => location.reload(), 3000);
 }
@@ -894,25 +912,62 @@ function connectToHost(hostId) {
 // поднимает комнату в этой же вкладке (Worker хоста): хост-игрок играет через
 // loopback, удалённые клиенты — по WebRTC (answerer). Клиентский код одинаков,
 // отличается лишь транспорт. Выход хоста = смерть комнаты — как у клиента
-function connectAsHost(room) {
+async function connectAsHost(room) {
+  // фактическая карта комнаты (из 'ready'; далее актуализируется map_changed)
+  let currentMapName = null;
+
+  // Этап 5.1: комната стартует на актуальных картах мастера;
+  // недоступность каталога некритична — Worker возьмёт карты из бандла
+  try {
+    const catalog = await fetchMasterMaps();
+
+    room.maps = catalog.maps;
+    hostMapsVersion = catalog.version;
+  } catch (e) {
+    console.warn('[maps] master catalog unavailable, using bundled maps:', e);
+  }
+
   hostController = new HostController(room, {
     onReady: readyMsg => {
-      const mapName = readyMsg?.mapName;
+      currentMapName = readyMsg?.mapName;
 
-      // регистрация комнаты у мастера + периодический heartbeat
+      // периодический heartbeat/актуализация комнаты у мастера
       const update = () =>
         signaling.updateHost({
           currentPlayers: 1 + (hostConnections?.peerCount || 0),
-          mapName,
+          mapName: currentMapName,
         });
 
-      signaling.registerHost({
-        name: room.name,
-        maxPlayers: room.maxPlayers,
-        mapName,
-      });
+      // регистрация комнаты; повторно вызывается при reconnect сигналинга
+      hostRegistration = () => {
+        signaling.registerHost({
+          name: room.name,
+          maxPlayers: room.maxPlayers,
+          mapName: currentMapName,
+        });
 
-      hostHeartbeat = setInterval(update, lobbyConfig.create.heartbeatInterval);
+        clearInterval(hostHeartbeat);
+        hostHeartbeat = setInterval(
+          update,
+          lobbyConfig.create.heartbeatInterval,
+        );
+      };
+
+      hostRegistration();
+    },
+
+    // смена карты голосованием/таймером — сразу отразить в лобби мастера
+    onMapChange: mapName => {
+      currentMapName = mapName;
+      signaling.updateHost({ mapName });
+    },
+
+    // Worker не поднялся (WASM/конфиг): гасим комнату и возвращаемся в лобби
+    onError: msg => {
+      handleDisconnect();
+      socketMethods[PS_TECH_INFORM_DATA](
+        `Failed to start the room: ${msg.message || 'unknown error'}. Returning to lobby…`,
+      );
     },
   });
 
@@ -922,14 +977,98 @@ function connectAsHost(room) {
     onPeersChange: count => signaling.updateHost({ currentPlayers: 1 + count }),
   });
 
-  // хост-игрок в этой же вкладке
-  transport = new LoopbackTransport(hostController);
+  // хост-игрок в этой же вкладке (socketId согласован с kick-исключением)
+  transport = new LoopbackTransport(
+    hostController,
+    lobbyConfig.create.hostSocketId,
+  );
 
   transport.publisher.on('message', handleMessage);
   transport.publisher.on('close', handleDisconnect);
   transport.connect();
 
+  // сигнальный WS хоста должен жить постоянно (офферы, heartbeat, выдача) —
+  // при разрыве переподключаемся с бэкоффом; welcome вызовет re-register
+  let reconnectAttempt = 0;
+
+  signaling.publisher.on('close', () => {
+    if (!hostController) {
+      return; // комната уже погашена
+    }
+
+    const { baseDelay, maxDelay } = lobbyConfig.reconnect;
+    const delay = Math.min(maxDelay, baseDelay * 2 ** reconnectAttempt);
+
+    reconnectAttempt += 1;
+    setTimeout(() => signaling.connect(), delay);
+  });
+
+  signaling.publisher.on('welcome', () => {
+    reconnectAttempt = 0;
+    hostRegistration?.();
+  });
+
+  // мастер отвечает актуальной версией каталога карт: расхождение с нашей
+  // (деплой карт, пока комната жила) — подтянуть каталог к следующей смене
+  signaling.publisher.on('host_registered', msg => {
+    if (msg.mapsVersion && msg.mapsVersion !== hostMapsVersion) {
+      refreshHostMaps();
+    }
+  });
+
+  // сигнал мастера об обновлении каталога карт (hot-reload в будущем)
+  signaling.publisher.on('update_available', msg => {
+    if (!msg.mapsVersion || msg.mapsVersion !== hostMapsVersion) {
+      refreshHostMaps();
+    }
+  });
+
   lobby.close();
+}
+
+// версия каталога карт мастера, с которой поднята комната (Этап 5.1)
+let hostMapsVersion = null;
+
+// повторная регистрация комнаты у мастера (reconnect сигналинга)
+let hostRegistration = null;
+
+// Этап 5.1: скачивает каталог карт мастера (манифест + все карты)
+async function fetchMasterMaps() {
+  const manifestRes = await fetch(lobbyConfig.maps.manifestUrl);
+
+  if (!manifestRes.ok) {
+    throw new Error(`maps manifest: HTTP ${manifestRes.status}`);
+  }
+
+  const manifest = await manifestRes.json();
+
+  const entries = await Promise.all(
+    manifest.maps.map(async name => {
+      const url = `${lobbyConfig.maps.baseUrl}/${encodeURIComponent(name)}`;
+      const res = await fetch(url);
+
+      if (!res.ok) {
+        throw new Error(`map ${name}: HTTP ${res.status}`);
+      }
+
+      return [name, await res.json()];
+    }),
+  );
+
+  return { version: manifest.version, maps: Object.fromEntries(entries) };
+}
+
+// перечитывает каталог карт мастера и передаёт в Worker:
+// применится со следующей смены карты (текущий раунд не трогается)
+async function refreshHostMaps() {
+  try {
+    const catalog = await fetchMasterMaps();
+
+    hostMapsVersion = catalog.version;
+    hostController?.updateMaps(catalog.maps);
+  } catch (e) {
+    console.warn('[maps] refresh from master failed:', e);
+  }
 }
 
 // REST-запрос списка серверов у мастера (поиск игнорирует пагинацию)
@@ -952,8 +1091,13 @@ async function fetchServers({ offset, limit, search }) {
   }
 }
 
-// поднимает лобби после welcome от мастера (iceServers уже получены)
+// поднимает лобби после welcome от мастера (iceServers уже получены);
+// повторный welcome (reconnect сигналинга хоста) лобби не пересоздаёт
 function initLobby() {
+  if (lobby) {
+    return;
+  }
+
   const lobbyModel = new LobbyModel(lobbyConfig);
   const lobbyView = new LobbyView(lobbyModel, lobbyConfig.elems);
 
@@ -987,7 +1131,11 @@ function initLobby() {
   hostBtn?.addEventListener('click', () => {
     const name = (nameInput?.value || '').trim() || lobbyConfig.create.defaultName;
 
-    connectAsHost({ name, maxPlayers: lobbyConfig.create.maxPlayers });
+    connectAsHost({
+      name,
+      maxPlayers: lobbyConfig.create.maxPlayers,
+      hostSocketId: lobbyConfig.create.hostSocketId,
+    });
   });
 
   lobby.open();

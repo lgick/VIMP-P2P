@@ -125,4 +125,114 @@ describe.skipIf(!coreAvailable)('HostGame (core-driven)', () => {
     expect(models.length).toBeGreaterThan(0);
     expect(Object.keys(data.m1)).toContain(String(gameId));
   });
+
+  it('removeUser удаляет танк из ядра и клиенты получают null-маркер', async () => {
+    const gameId = await connectPlayer(host, { name: 'P1', socketId: 's1' });
+    const gameId2 = await connectPlayer(host, { name: 'P2', socketId: 's2' });
+
+    joinTeam(host, gameId, 'team1');
+    joinTeam(host, gameId2, 'team2');
+    tick(host, 4);
+
+    host.removeUser(gameId);
+
+    expect(core.is_alive(gameId)).toBe(false);
+    expect(host._participants.get(gameId)).toBeUndefined();
+
+    socket.clear();
+    tick(host, 8);
+
+    // null-маркер ушедшего танка в одном из кадров второго игрока
+    const nullMarker = socket
+      .framesOf('sendShot')
+      .filter(f => f.socketId === 's2')
+      .map(f => unpackFrame(f.args[0]))
+      .some(frame => frame.snapshot.m1?.[gameId] === null);
+
+    expect(nullMarker).toBe(true);
+  });
+
+  it('removeUser наблюдателя не трогает ядро и чистит мету', async () => {
+    const gameId = await connectPlayer(host, { socketId: 's1' });
+
+    host.removeUser(gameId);
+
+    expect(host._participants.get(gameId)).toBeUndefined();
+    // повторное удаление безвредно
+    expect(() => host.removeUser(gameId)).not.toThrow();
+  });
+
+  it('isFull отражает лимит комнаты (люди + боты)', async () => {
+    ({ host, socket, core } = await createHost({ game: { maxPlayers: 2 } }));
+
+    expect(host.isFull).toBe(false);
+
+    await connectPlayer(host, { name: 'P1', socketId: 's1' });
+    await connectPlayer(host, { name: 'P2', socketId: 's2' });
+
+    expect(host.isFull).toBe(true);
+    expect(host.maxPlayers).toBe(2);
+  });
+
+  it('хост-игрок исключён из idle- и RTT-киков', async () => {
+    ({ host, socket, core } = await createHost({
+      opts: { hostSocketId: 'local' },
+    }));
+
+    const hostId = await connectPlayer(host, { name: 'H', socketId: 'local' });
+    const guestId = await connectPlayer(host, { name: 'G', socketId: 's2' });
+
+    // RTT-кик хоста-игрока игнорируется, гостя — исполняется
+    host._kickForMissedPings(hostId);
+    expect(host._participants.get(hostId)).toBeDefined();
+
+    host._kickForMaxLatency(hostId);
+    expect(host._participants.get(hostId)).toBeDefined();
+
+    // idle-кик: оба просрочили порог игрока, кикнут только гость
+    joinTeam(host, hostId, 'team1');
+    joinTeam(host, guestId, 'team2');
+
+    const past = Date.now() - 10 ** 9;
+    host._participants.get(hostId).lastActionTime = past;
+    host._participants.get(guestId).lastActionTime = past;
+
+    host._kickIdleUsers();
+
+    expect(host._participants.get(hostId)).toBeDefined();
+    expect(host._participants.get(guestId)).toBeUndefined();
+  });
+
+  it('updateMaps добавляет карту, доступную следующей сменой', async () => {
+    const gameId = await connectPlayer(host, { socketId: 's1' });
+    const donor = host._maps[host._roundManager.currentMap];
+
+    host.updateMaps({ custom: structuredClone(donor) });
+
+    expect(host._mapList).toContain('custom');
+
+    // единственный человек → немедленный forceChangeMap на новую карту
+    host.parseVote(gameId, ['mapChange', 'custom']);
+    tick(host, 2);
+
+    expect(host._roundManager.currentMap).toBe('custom');
+    expect(core.map_info()).not.toBe('null');
+  });
+
+  it('onMapChange вызывается при смене карты', async () => {
+    const onMapChange = vi.fn();
+
+    ({ host, socket, core } = await createHost({ opts: { onMapChange } }));
+
+    const gameId = await connectPlayer(host, { socketId: 's1' });
+    const nextMap = host._mapList.find(
+      map => map !== host._roundManager.currentMap,
+    );
+
+    // единственный человек → немедленный forceChangeMap
+    host.parseVote(gameId, ['mapChange', nextMap]);
+    tick(host, 8);
+
+    expect(onMapChange).toHaveBeenCalledWith(nextMap);
+  });
 });

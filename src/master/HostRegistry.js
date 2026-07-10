@@ -131,6 +131,13 @@ export default class HostRegistry {
       return { counted: false, banned: false };
     }
 
+    // причина обязательна (правило /ban) — жалоба без неё не учитывается
+    const clean = sanitizeMessage(reason).trim();
+
+    if (!clean) {
+      return { counted: false, banned: false };
+    }
+
     // отбросить жалобы старше окна давности
     for (const [key, ts] of host.reporters) {
       if (now - ts >= this._reportWindowMs) {
@@ -145,14 +152,10 @@ export default class HostRegistry {
     host.reporters.set(reporterKey, now);
     host.reportCount = host.reporters.size;
 
-    const clean = sanitizeMessage(reason);
+    host.reportReasons.push(clean);
 
-    if (clean) {
-      host.reportReasons.push(clean);
-
-      if (host.reportReasons.length > this._maxReasons) {
-        host.reportReasons.shift();
-      }
+    if (host.reportReasons.length > this._maxReasons) {
+      host.reportReasons.shift();
     }
 
     if (host.reporters.size >= this._banThreshold) {

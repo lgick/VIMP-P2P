@@ -59,6 +59,18 @@ describe('SignalingClient: подключение и welcome', () => {
     expect(socket).toBe(first);
   });
 
+  it('connect() после разрыва открывает новый сокет (reconnect хоста)', () => {
+    client.connect();
+    const first = socket;
+
+    // разрыв со стороны мастера: onclose обнуляет _ws
+    first.close();
+    client.connect();
+
+    expect(socket).not.toBe(first);
+    expect(client.connected).toBe(true);
+  });
+
   it('welcome кэширует id и iceServers, эмитит событие', () => {
     const events = [];
 

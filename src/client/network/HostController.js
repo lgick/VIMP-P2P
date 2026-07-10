@@ -11,8 +11,12 @@ export default class HostController {
    * @param {Function} [opts.workerFactory] - фабрика Worker'а (для тестов).
    * @param {Function} [opts.onReady] - вызывается, когда Worker готов
    *   (авторитетная часть поднята) — момент регистрации хоста у мастера.
+   * @param {Function} [opts.onError] - сбой инициализации Worker'а
+   *   (WASM/конфиг): комната не поднялась, нужно вернуть пользователя в лобби.
+   * @param {Function} [opts.onMapChange] - смена карты в комнате (голосование/
+   *   таймер) — для актуализации mapName у мастера.
    */
-  constructor(room, { workerFactory, onReady } = {}) {
+  constructor(room, { workerFactory, onReady, onError, onMapChange } = {}) {
     this._worker = workerFactory
       ? workerFactory()
       : new Worker(new URL('../../host/host.worker.js', import.meta.url), {
@@ -20,6 +24,8 @@ export default class HostController {
         });
 
     this._onReady = onReady;
+    this._onError = onError;
+    this._onMapChange = onMapChange;
     this._ready = false;
     this._deliveries = new Map(); // socketId → { onMessage, onClose }
     this._pendingConnects = []; // socketId, ожидающие готовности Worker'а
@@ -52,6 +58,12 @@ export default class HostController {
     this._worker.postMessage({ type: 'disconnect', socketId });
   }
 
+  // передаёт обновлённый каталог карт мастера в Worker (Этап 5.1);
+  // применится со следующей смены карты
+  updateMaps(maps) {
+    this._worker.postMessage({ type: 'update_maps', maps });
+  }
+
   // останавливает Worker (закрытие комнаты)
   destroy() {
     this._worker.terminate();
@@ -68,6 +80,14 @@ export default class HostController {
 
         this._pendingConnects.length = 0;
         this._onReady?.(msg);
+        break;
+
+      case 'error':
+        this._onError?.(msg);
+        break;
+
+      case 'map_changed':
+        this._onMapChange?.(msg.mapName);
         break;
 
       case 'to_client':

@@ -49,10 +49,24 @@ export default class HostGame {
    * @param {Object} data - конфиг игры (config/game.js).
    * @param {Object} socketManager - транспорт (per-user send/close).
    * @param {GameCore} core - экземпляр WASM-ядра.
+   * @param {Object} [opts]
+   * @param {string} [opts.hostSocketId] - socketId хоста-игрока (loopback):
+   *   исключается из kick-политик — его отключение убивает комнату для всех.
+   * @param {Function} [opts.onMapChange] - вызывается с именем карты при её
+   *   смене (голосование/таймер) — для актуализации комнаты у мастера.
    */
-  constructor(data, socketManager, core) {
+  constructor(
+    data,
+    socketManager,
+    core,
+    { hostSocketId = null, onMapChange = null } = {},
+  ) {
     this._isDevMode = data.isDevMode || false;
 
+    this._hostSocketId = hostSocketId;
+    this._onMapChange = onMapChange;
+
+    this._maps = data.maps;
     this._mapList = Object.keys(data.maps);
     this._spectatorKeys = data.spectatorKeys;
     this._maxPlayers = data.maxPlayers;
@@ -158,13 +172,31 @@ export default class HostGame {
     this._timerManager.startIdleCheckTimer();
 
     this._roundManager.createMap();
+
+    // отслеживание смены карты (для актуализации комнаты в лобби мастера)
+    this._lastReportedMap = this._roundManager.currentMap;
+  }
+
+  // комната заполнена (люди + боты) — новые подключения отклоняются
+  get isFull() {
+    return this._participants.isFull;
+  }
+
+  // лимит участников комнаты (для сообщения об отказе)
+  get maxPlayers() {
+    return this._maxPlayers;
+  }
+
+  // хост-игрок не кикается: закрытие его loopback = смерть комнаты для всех
+  _isHostPlayer(user) {
+    return this._hostSocketId !== null && user.socketId === this._hostSocketId;
   }
 
   // кикает за задержку в ответе на ping
   _kickForMaxLatency(gameId) {
     const user = this._participants.get(gameId);
 
-    if (user) {
+    if (user && !this._isHostPlayer(user)) {
       console.warn(`[RTT] Kick ${user.name} — pong latency exceeded`);
       this._socketManager.close(user.socketId, 4003, 'kickForMaxLatency');
       this.removeUser(gameId);
@@ -175,7 +207,7 @@ export default class HostGame {
   _kickForMissedPings(gameId) {
     const user = this._participants.get(gameId);
 
-    if (user) {
+    if (user && !this._isHostPlayer(user)) {
       console.warn(`[RTT] Kick ${user.name} — no response to pings`);
       this._socketManager.close(user.socketId, 4004, 'kickForMissedPings');
       this.removeUser(gameId);
@@ -190,6 +222,14 @@ export default class HostGame {
     // контроль частоты отправки
     if (!this._snapshotManager.shouldSend()) {
       return;
+    }
+
+    // смена карты (голосование/таймер) — уведомить главный поток
+    const currentMap = this._roundManager.currentMap;
+
+    if (currentMap !== this._lastReportedMap) {
+      this._lastReportedMap = currentMap;
+      this._onMapChange?.(currentMap);
     }
 
     // список удаляемых с полотна игроков ведёт RoundManager, но null-маркеры
@@ -296,7 +336,7 @@ export default class HostGame {
     const usersToKick = [];
 
     for (const user of this._participants.getHumans()) {
-      if (user.isReady !== true) {
+      if (user.isReady !== true || this._isHostPlayer(user)) {
         continue;
       }
 
@@ -364,6 +404,18 @@ export default class HostGame {
   // обрабатывает уничтожение игрока (прокси к RoundManager; из событий ядра)
   reportKill(victimId, killerId = null) {
     this._roundManager.reportKill(victimId, killerId);
+  }
+
+  // обновляет каталог карт (Этап 5.1). Новые данные применяются со следующей
+  // смены карты: _maps и _mapList правятся на месте — эти же ссылки держат
+  // RoundManager (createMap) и голосования (parseVote 'maps')
+  updateMaps(maps) {
+    for (const [name, data] of Object.entries(maps)) {
+      this._maps[name] = data;
+    }
+
+    this._mapList.length = 0;
+    this._mapList.push(...Object.keys(this._maps));
   }
 
   // меняет и возвращает gameId наблюдаемого игрока

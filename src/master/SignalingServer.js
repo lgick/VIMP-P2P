@@ -11,6 +11,7 @@ export default class SignalingServer {
     this._heartbeatTimeout = options.heartbeatTimeout;
     this._pingLimiter = options.pingLimiter;
     this._checkOrigin = options.checkOrigin;
+    this._mapsVersion = options.mapsVersion ?? null;
 
     this._sessions = new Map(); // id соединения -> { id, ws, ip, region, hostId }
     this._hostSessions = new Map(); // hostId -> id соединения
@@ -130,7 +131,13 @@ export default class SignalingServer {
     session.hostId = host.hostId;
     this._hostSessions.set(host.hostId, session.id);
 
-    this._send(session, { type: 'host_registered', hostId: host.hostId });
+    // mapsVersion — актуальная версия каталога карт: при re-register после
+    // разрыва хост сравнивает её со своей и при расхождении фетчит карты
+    this._send(session, {
+      type: 'host_registered',
+      hostId: host.hostId,
+      mapsVersion: this._mapsVersion,
+    });
   }
 
   // актуализация currentPlayers/mapName (заодно heartbeat)
@@ -154,6 +161,9 @@ export default class SignalingServer {
       this._sendError(session, 'unknownHost');
       return;
     }
+
+    // память о том, к каким комнатам сессия подключалась — право на report_host
+    (session.offeredHosts ??= new Set()).add(hostId);
 
     this._send(host, { type: 'webrtc_offer', clientId: session.id, sdp });
   }
@@ -217,6 +227,13 @@ export default class SignalingServer {
   // переводится в бан и его сигнальный WS закрывается — новые офферы к нему
   // больше не маршрутизируются (уже подключённые P2P-пиры это не рвёт)
   _onReportHost(session, { hostId, reason }) {
+    // жалобу принимаем только от сессии, реально подключавшейся к комнате
+    // (слала ей оффер) — иначе несколько чужих IP банят хост, не заходя в игру
+    if (!session.offeredHosts?.has(hostId)) {
+      this._sendError(session, 'reportRejected');
+      return;
+    }
+
     const { banned } = this._registry.report(hostId, session.ip, reason);
 
     if (banned) {

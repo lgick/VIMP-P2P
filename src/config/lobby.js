@@ -5,6 +5,20 @@ export default {
   // REST-эндпоинт мастера со списком серверов (GET /servers)
   serversUrl: '/servers',
 
+  // каталог карт мастера (Этап 5.1): комната хоста стартует на актуальных
+  // картах, недоступность каталога — fallback на карты из бандла
+  maps: {
+    manifestUrl: '/maps/manifest.json',
+    baseUrl: '/maps',
+  },
+
+  // переподключение сигнального WS хоста (комната без него выпадает из
+  // выдачи мастера): экспоненциальный бэкофф от baseDelay до maxDelay (мс)
+  reconnect: {
+    baseDelay: 1000,
+    maxDelay: 30000,
+  },
+
   // размер страницы для «Загрузить ещё» (offset/limit к мастеру)
   pageSize: 10,
 
@@ -31,5 +45,9 @@ export default {
     // период heartbeat/актуализации комнаты у мастера (мс); должен быть
     // меньше master.host.heartbeatTimeout (30 c), иначе комнату выметет
     heartbeatInterval: 10000,
+
+    // socketId loopback-соединения хоста-игрока: по нему Worker исключает
+    // хоста из kick-политик (его отключение = смерть комнаты для всех)
+    hostSocketId: 'local',
   },
 };

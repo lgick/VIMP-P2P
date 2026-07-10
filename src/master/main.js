@@ -7,7 +7,9 @@ import { WebSocketServer } from 'ws';
 import config from '../lib/config.js';
 import RateLimiter from '../lib/rateLimiter.js';
 import security from '../lib/security.js';
+import maps from '../data/maps/index.js';
 import HostRegistry from './HostRegistry.js';
+import MapCatalog from './MapCatalog.js';
 import SignalingServer from './SignalingServer.js';
 
 config.set('master', (await import('../config/master.js')).default);
@@ -52,11 +54,15 @@ const registry = new HostRegistry({
   reportWindowMs: config.get('master:host:reportWindowMs'),
 });
 
+// каталог карт (Этап 5.1): раздача хостам без пересборки клиента
+const mapCatalog = new MapCatalog(maps);
+
 const signaling = new SignalingServer(registry, {
   iceServers: config.get('master:iceServers'),
   regionHeader: config.get('master:regionHeader'),
   heartbeatTimeout: config.get('master:host:heartbeatTimeout'),
   pingLimiter: new RateLimiter(config.get('master:pingRateLimit')),
+  mapsVersion: mapCatalog.version,
   checkOrigin: security.createOriginValidator({
     protocol: config.get('master:protocol'),
     domain: config.get('master:domain'),
@@ -88,6 +94,22 @@ app.use((req, res, next) => {
 // REST API: список серверов (пагинация, регионы, поиск)
 app.get('/servers', (req, res) => {
   res.json(registry.getList(req.query));
+});
+
+// REST API: каталог карт (Этап 5.1 — обновление карт без пересборки)
+app.get('/maps/manifest.json', (req, res) => {
+  res.type('application/json').send(mapCatalog.manifest);
+});
+
+app.get('/maps/:name', (req, res) => {
+  const json = mapCatalog.get(req.params.name);
+
+  if (!json) {
+    res.status(404).json({ error: 'unknownMap' });
+    return;
+  }
+
+  res.type('application/json').send(json);
 });
 
 // в продакшене обычный HTTP сервер, Nginx будет обрабатывать HTTPS

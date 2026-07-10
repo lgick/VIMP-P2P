@@ -5,6 +5,7 @@ const TECH_CODES = {
   kickIdle: [3],
   kickForMaxLatency: [4],
   kickForMissedPings: [5],
+  roomFull: [6], // P2P-комната заполнена (отказ без очереди ожидания)
 };
 
 const GAME_CODES = {

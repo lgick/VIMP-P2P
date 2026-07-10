@@ -13,14 +13,17 @@ export { FakeSocketManager, coreAvailable };
 // Создаёт свежий HostGame с реальными мета-модулями, реальным ядром и
 // фейковым SocketManager. Fake timers включаются ДО конструктора (тот
 // стартует игровой цикл/таймеры). Ядро использует детерминированный seed.
-export const createHost = async ({ seed = 42 } = {}) => {
+// game — поверхностные оверрайды конфига игры (например { maxPlayers: 2 }),
+// opts — опции HostGame ({ hostSocketId, onMapChange }).
+export const createHost = async ({ seed = 42, game = {}, opts = {} } = {}) => {
   vi.useFakeTimers();
 
   const config = await loadConfig();
   const HostGame = (await import('../../src/host/HostGame.js')).default;
   const core = makeCore({ seed });
   const socket = new FakeSocketManager();
-  const host = new HostGame(config.get('game'), socket, core);
+  const gameConfig = { ...config.get('game'), ...game };
+  const host = new HostGame(gameConfig, socket, core, opts);
 
   return { host, socket, core, config };
 };

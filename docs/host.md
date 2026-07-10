@@ -47,16 +47,26 @@
 ожидания). Сообщения главного потока:
 
 - `init(room)` — применяет настройки комнаты к конфигу игры
-  (`applyRoomOverrides`: имя/карта/лимит ≤ 8/таймеры/friendly fire),
-  инициализирует ядро, создаёт `HostGame`, отвечает `ready`;
+  (`applyRoomOverrides`: имя/карта/лимит ≤ 8/таймеры/friendly fire; карты —
+  из `room.maps`, если главный поток скачал каталог мастера, см. Этап 5.1),
+  инициализирует ядро, создаёт `HostGame`, отвечает `ready`; сбой (WASM/конфиг)
+  — сообщение `error { message }`, главный поток гасит комнату и возвращает в
+  лобби;
 - `connect(socketId)` — новый клиент: регистрирует wire-сокет в `SocketManager`,
-  шлёт `CONFIG_DATA` (порт 0), запускает handshake config→auth→map→firstShot;
+  шлёт `CONFIG_DATA` (порт 0), запускает handshake config→auth→map→firstShot.
+  **Полная комната** (`HostGame.isFull`, люди + боты против `maxPlayers`) —
+  отказ: `sendTechInform('roomFull')` + закрытие соединения кодом `4006`
+  (очереди ожидания легаси-сервера в P2P-комнате нет);
 - `message(socketId, data)` — входящее сообщение клиента (`JSON [port, payload]`),
   диспетчеризуется по разрешённым портам;
-- `disconnect(socketId)` — удаляет участника из игры и реестра.
+- `disconnect(socketId)` — удаляет участника из игры и реестра;
+- `update_maps(maps)` — обновлённый каталог карт мастера (Этап 5.1) →
+  `HostGame.updateMaps`.
 
 Обратно в главный поток Worker шлёт `to_client` (wire-кадр: JSON-строка или
-бинарный `ArrayBuffer` через Transferable), `close_client` и `ready`.
+бинарный `ArrayBuffer` через Transferable), `close_client`, `ready`,
+`error` (сбой инициализации) и `map_changed { mapName }` (смена карты
+голосованием/таймером — главный поток актуализирует комнату у мастера).
 Per-user **wire-сокет** (`makeWorkerSocket`) реализует контракт `SocketManager`
 (`send`/`sendBinary`/`close`) поверх `postMessage`, поэтому `SocketManager`
 переиспользуется **без единой правки**.
@@ -77,7 +87,17 @@ Host-фасад — аналог `src/server/modules/VIMP.js`, но:
 - горячий тик `_onShotTick` core-driven: `adapter.updateData(dt)` (шаг ядра +
   дренаж событий), троттлинг отправки, `adapter.packBody()` один раз/тик,
   затем per-user `adapter.packFrame(...)` (ядро само собирает player-блок
-  предикшена по `playerId`).
+  предикшена по `playerId`);
+- **хост-игрок исключён из kick-политик** (idle- и RTT-кики): его loopback —
+  сама комната, кик убил бы её для всех. `hostSocketId` приходит в опциях
+  (из `lobbyConfig.create.hostSocketId`, значение `'local'` согласовано с
+  `LoopbackTransport`); гости кикаются как на легаси-сервере;
+- `isFull`/`maxPlayers` — гейт заполненности комнаты для порт-машины Worker'а;
+- `updateMaps(maps)` — обновление каталога карт (Этап 5.1): `_maps`/`_mapList`
+  правятся на месте (эти же ссылки держит `RoundManager` и голосования) —
+  новые данные применяются со следующей смены карты, без правок `RoundManager`;
+- смена карты отслеживается в тике (`onMapChange` → `map_changed` в главный
+  поток) — лобби мастера видит актуальную карту комнаты.
 
 На вехе демонтажа (после Этапа 4) `VIMP.js` удаляется, `HostGame` становится
 каноничным — это и есть «переработка VIMP.js» из карты судьбы модулей плана.
@@ -152,9 +172,31 @@ Host-фасад — аналог `src/server/modules/VIMP.js`, но:
 приходит из Worker'а в `ready`) и заводит heartbeat (`update_host` каждые
 `lobbyConfig.create.heartbeatInterval` мс, меньше `heartbeatTimeout` мастера).
 `currentPlayers` = 1 (хост-игрок) + число WebRTC-пиров, актуализируется при
-входе/выходе клиента (`onPeersChange`). Выход хоста-игрока = смерть комнаты:
+входе/выходе клиента (`onPeersChange`); `mapName` — при смене карты
+(`map_changed` из Worker'а). Выход хоста-игрока = смерть комнаты:
 `handleDisconnect` гасит heartbeat, закрывает пиров (`HostConnectionManager.
 destroy`) и Worker (`HostController.destroy`).
+
+**Reconnect сигналинга**: сигнальный WS хоста должен жить постоянно (офферы,
+heartbeat, выдача в списке) — при разрыве `main.js` переподключается с
+экспоненциальным бэкоффом (`lobbyConfig.reconnect`), повторный `welcome`
+вызывает re-register комнаты (новый `hostId` — приемлемо). Уже установленные
+P2P-соединения разрыв сигналинга не рвёт. В ответе `host_registered` мастер
+передаёт `mapsVersion` — расхождение с версией, на которой поднята комната,
+инициирует перечитывание каталога карт (см. ниже).
+
+### Динамические карты (Этап 5.1)
+
+Комната стартует на актуальных картах мастера, а не на вшитых в бандл:
+`connectAsHost` фетчит `GET /maps/manifest.json` + все карты и передаёт их в
+`init` Worker'а (`room.maps`; недоступность каталога некритична — fallback на
+карты из бандла). Обновление на лету: `host_registered.mapsVersion` (после
+reconnect) или сигнал `update_available` мастера → `refreshHostMaps` → fetch
+каталога → `HostController.updateMaps` → Worker `update_maps` →
+`HostGame.updateMaps`. Новые данные применяются **со следующей смены карты**
+(штатный путь `RoundManager.createMap`: масштабирование в JS → `load_map` ядра
+со `scale: 1`); список карт в голосованиях актуализируется сразу. Гости
+изменений не требуют — карту им шлёт хост по порту 3.
 
 ## Выбор роли (клиентский бутстрап)
 
@@ -177,14 +219,17 @@ destroy`) и Worker (`HostController.destroy`).
   на ABI, различение бот/человек, проекция событий в панель/фасад, флаги камеры.
 - `tests/host/HostGame.test.js` — интеграция поверх **реального** ядра
   (`pkg-node`, `describe.skipIf` без сборки): онбординг, активный игрок с
-  player-блоком, движение, стрельба (трассер + боезапас), боты, `players_data`;
-  бинарные кадры декодируются реальным `unpackFrame`.
+  player-блоком, движение, стрельба (трассер + боезапас), боты, `players_data`,
+  `removeUser` (null-маркер в кадре), лимит комнаты (`isFull`), kick-исключение
+  хоста-игрока, `updateMaps`/`onMapChange`; бинарные кадры декодируются
+  реальным `unpackFrame`.
 - `tests/host/LoopbackTransport.test.js` — юнит на фейковом Worker:
-  `HostController` (роутинг, очередь connect до `ready`, флаг `reliable`) и
-  `LoopbackTransport`.
+  `HostController` (роутинг, очередь connect до `ready`, флаг `reliable`,
+  `error`/`map_changed`/`updateMaps`) и `LoopbackTransport`.
 - `tests/host/HostConnectionManager.test.js` — юнит на фейковых peer/каналах:
   оффер→answer, каналы meta/state, классификация reliable, бэкпрешер, ICE,
-  сигнальный pong, закрытие.
+  сигнальный pong, закрытие, гонка open/close, cleanup при сбое SDP,
+  нефатальность транзиентного `'disconnected'`.
 - `tests/client/network/SignalingClient.test.js` — исходящие хоста
   (`register_host`/`update_host`/`webrtc_answer`/`pong_host`).
 - `tests/core/core.test.js` — `body_has_events()` (классификация meta/state).

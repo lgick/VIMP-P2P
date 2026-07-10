@@ -360,5 +360,7 @@ export default {
     'Connection terminated due to high network latency.',
 
     'Connection terminated due to missed network pings.',
+
+    'Room is full! Max players: {0}. Try again later.',
   ],
 };

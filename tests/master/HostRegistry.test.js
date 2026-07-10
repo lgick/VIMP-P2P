@@ -133,29 +133,43 @@ describe('HostRegistry.report', () => {
   it('считает жалобы только от уникальных репортёров', () => {
     const host = registry.add({ name: 'a', ip: '1.1.1.1' });
 
-    expect(registry.report(host.hostId, 'reporter1')).toEqual({
+    expect(registry.report(host.hostId, 'reporter1', 'cheat')).toEqual({
       counted: true,
       banned: false,
     });
-    expect(registry.report(host.hostId, 'reporter1')).toEqual({
+    expect(registry.report(host.hostId, 'reporter1', 'cheat')).toEqual({
       counted: false,
       banned: false,
     });
-    expect(registry.report(host.hostId, 'reporter2')).toEqual({
+    expect(registry.report(host.hostId, 'reporter2', 'cheat')).toEqual({
       counted: true,
       banned: false,
     });
     expect(host.reportCount).toBe(2);
   });
 
+  it('не учитывает жалобу без причины (причина обязательна)', () => {
+    const host = registry.add({ name: 'a', ip: '1.1.1.1' });
+
+    expect(registry.report(host.hostId, 'r1')).toEqual({
+      counted: false,
+      banned: false,
+    });
+    expect(registry.report(host.hostId, 'r1', '   ')).toEqual({
+      counted: false,
+      banned: false,
+    });
+    expect(host.reportCount).toBe(0);
+  });
+
   it('банит комнату при достижении порога уникальных жалоб', () => {
     const host = registry.add({ name: 'a', ip: '1.1.1.1' });
 
-    registry.report(host.hostId, 'r1');
-    registry.report(host.hostId, 'r2');
+    registry.report(host.hostId, 'r1', 'cheat');
+    registry.report(host.hostId, 'r2', 'cheat');
 
     // banThreshold = 3
-    expect(registry.report(host.hostId, 'r3')).toEqual({
+    expect(registry.report(host.hostId, 'r3', 'cheat')).toEqual({
       counted: true,
       banned: true,
     });
@@ -167,9 +181,9 @@ describe('HostRegistry.report', () => {
     addHosts(4, 'EU'); // > regionThreshold, чтобы был общий список
     const host = registry.add({ name: 'target', ip: '9.9.9.9' });
 
-    registry.report(host.hostId, 'r1');
-    registry.report(host.hostId, 'r2');
-    registry.report(host.hostId, 'r3');
+    registry.report(host.hostId, 'r1', 'cheat');
+    registry.report(host.hostId, 'r2', 'cheat');
+    registry.report(host.hostId, 'r3', 'cheat');
 
     const found = registry.getList({}).servers.find(
       s => s.hostId === host.hostId,
@@ -217,9 +231,9 @@ describe('HostRegistry.isBanned', () => {
   it('снимает бан по истечении окна', () => {
     const host = registry.add({ name: 'a', ip: '1.1.1.1' });
 
-    registry.report(host.hostId, 'r1', '', 0);
-    registry.report(host.hostId, 'r2', '', 0);
-    registry.report(host.hostId, 'r3', '', 0);
+    registry.report(host.hostId, 'r1', 'cheat', 0);
+    registry.report(host.hostId, 'r2', 'cheat', 0);
+    registry.report(host.hostId, 'r3', 'cheat', 0);
 
     // reportWindowMs = 1000 → бан до 1000
     expect(registry.isBanned('1.1.1.1', 500)).toBe(true);
@@ -229,9 +243,9 @@ describe('HostRegistry.isBanned', () => {
   it('забаненный IP не может зарегистрировать новую комнату', () => {
     const host = registry.add({ name: 'a', ip: '1.1.1.1' });
 
-    registry.report(host.hostId, 'r1');
-    registry.report(host.hostId, 'r2');
-    registry.report(host.hostId, 'r3');
+    registry.report(host.hostId, 'r1', 'cheat');
+    registry.report(host.hostId, 'r2', 'cheat');
+    registry.report(host.hostId, 'r3', 'cheat');
     registry.remove(host.hostId); // комната ушла (WS хоста закрыт)
 
     expect(registry.isBanned('1.1.1.1')).toBe(true);
