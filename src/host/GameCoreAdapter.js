@@ -108,7 +108,9 @@ export default class GameCoreAdapter {
     this._drainEvents();
   }
 
-  // проецирует события ядра в панель и фасад (как писал JS-Game напрямую)
+  // проецирует события ядра в панель и фасад (как писал JS-Game напрямую).
+  // Ядро оперирует числовыми id (u32), мета (ParticipantManager, Panel, Stat)
+  // ключует строками — id событий приводятся к строкам на этой границе
   _drainEvents() {
     const events = JSON.parse(this._core.take_events());
     const { panel, vimp } = this._services;
@@ -116,26 +118,26 @@ export default class GameCoreAdapter {
     for (const event of events) {
       switch (event.type) {
         case 'health':
-          panel.updateUser(event.id, 'health', event.value, 'set');
+          panel.updateUser(String(event.id), 'health', event.value, 'set');
           break;
 
         case 'ammo':
-          panel.updateUser(event.id, event.weapon, event.value, 'set');
+          panel.updateUser(String(event.id), event.weapon, event.value, 'set');
           break;
 
         case 'activeWeapon':
-          panel.setActiveWeapon(event.id, event.weapon);
+          panel.setActiveWeapon(String(event.id), event.weapon);
           break;
 
         case 'shake':
-          vimp.triggerCameraShake(event.id, {
+          vimp.triggerCameraShake(String(event.id), {
             intensity: event.intensity,
             duration: event.duration,
           });
           break;
 
         case 'kill':
-          vimp.reportKill(event.victim, event.killer);
+          vimp.reportKill(String(event.victim), String(event.killer));
           break;
       }
     }

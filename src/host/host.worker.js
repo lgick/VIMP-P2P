@@ -27,6 +27,9 @@ const PC_CHAT_DATA = wsports.client.CHAT_DATA;
 const PC_VOTE_DATA = wsports.client.VOTE_DATA;
 const PC_PONG = wsports.client.PONG;
 
+// PS (server ports): порты отправки данных клиенту
+const PS_TECH_INFORM_DATA = wsports.server.TECH_INFORM_DATA;
+
 const MAX_ROOM_PLAYERS = 8; // целевой размер комнаты (рамка P2P-плана)
 
 let host = null;
@@ -76,13 +79,14 @@ function applyRoomOverrides(room = {}) {
 // wire-сокет пользователя: пишет кадры в главный поток (роутер WebRTC/loopback)
 function makeWorkerSocket(socketId) {
   return {
-    // JSON-сообщение [port, payload] — строкой (как ws.send); всегда надёжно
-    send: (port, data) => {
+    // JSON-сообщение [port, payload] — строкой (как ws.send); reliable
+    // решает канал WebRTC (meta/state) — ненадёжен только ping
+    send: (port, data, reliable = true) => {
       self.postMessage({
         type: 'to_client',
         socketId,
         payload: JSON.stringify([port, data]),
-        reliable: true,
+        reliable,
       });
     },
 
@@ -95,8 +99,19 @@ function makeWorkerSocket(socketId) {
       );
     },
 
-    // закрытие соединения
+    // закрытие соединения. В отличие от ws, закрытие data channel не несёт
+    // код/причину — причина (кик и т.п.) доставляется отдельным TECH_INFORM
+    // по meta до закрытия (reliable-ordered гарантирует порядок)
     close: (code, data) => {
+      if (data !== undefined) {
+        self.postMessage({
+          type: 'to_client',
+          socketId,
+          payload: JSON.stringify([PS_TECH_INFORM_DATA, data]),
+          reliable: true,
+        });
+      }
+
       self.postMessage({ type: 'close_client', socketId, code, data });
     },
   };
@@ -139,8 +154,8 @@ function onConnect(socketId) {
   // комната заполнена (люди + боты) — отказ без порт-машины
   // (очереди ожидания легаси-сервера в P2P-комнате нет)
   if (host.isFull) {
-    socketManager.sendTechInform(socketId, 'roomFull', [host.maxPlayers]);
-    socketManager.close(socketId, 4006, 'roomFull');
+    // причину доставит close (TECH_INFORM перед close_client)
+    socketManager.close(socketId, 4006, 'roomFull', [host.maxPlayers]);
     socketManager.removeUser(socketId);
     return;
   }

@@ -40,12 +40,12 @@ beforeEach(() => {
 describe('SocketManager: маршрутизация портов', () => {
   it('sendConfig уходит на порт CONFIG_DATA', () => {
     sm.sendConfig('s1', { a: 1 });
-    expect(socket.send).toHaveBeenCalledWith(0, { a: 1 });
+    expect(socket.send).toHaveBeenCalledWith(0, { a: 1 }, true);
   });
 
-  it('sendPing уходит на порт PING', () => {
+  it('sendPing уходит на порт PING ненадёжным каналом', () => {
     sm.sendPing('s1', 7);
-    expect(socket.send).toHaveBeenCalledWith(10, 7);
+    expect(socket.send).toHaveBeenCalledWith(10, 7, false);
   });
 
   it('sendName формирует команду замены имени', () => {
@@ -53,29 +53,29 @@ describe('SocketManager: маршрутизация портов', () => {
     expect(socket.send).toHaveBeenCalledWith(9, {
       key: 'localstorageNameReplace',
       value: 'Bob',
-    });
+    }, true);
   });
 
   it('sendClear со списком и без', () => {
     sm.sendClear('s1', ['c1']);
-    expect(socket.send).toHaveBeenCalledWith(11, ['c1']);
+    expect(socket.send).toHaveBeenCalledWith(11, ['c1'], true);
 
     socket.send.mockClear();
     sm.sendClear('s1');
     // без данных второй аргумент явно undefined
-    expect(socket.send).toHaveBeenCalledWith(11, undefined);
+    expect(socket.send).toHaveBeenCalledWith(11, undefined, true);
   });
 });
 
 describe('SocketManager: технические сообщения', () => {
   it('sendTechInform по ключу подставляет код', () => {
     sm.sendTechInform('s1', 'fullServer');
-    expect(socket.send).toHaveBeenCalledWith(8, [0]);
+    expect(socket.send).toHaveBeenCalledWith(8, [0], true);
   });
 
   it('sendTechInform с массивом параметров', () => {
     sm.sendTechInform('s1', 'kickIdle', ['reason']);
-    expect(socket.send).toHaveBeenCalledWith(8, [3, ['reason']]);
+    expect(socket.send).toHaveBeenCalledWith(8, [3, ['reason']], true);
   });
 
   it('close с ключом отправляет код закрытия и данные', () => {
@@ -92,18 +92,18 @@ describe('SocketManager: технические сообщения', () => {
 describe('SocketManager: игровые сообщения', () => {
   it('sendRoundStart шлёт звук и информер', () => {
     sm.sendRoundStart('s1');
-    expect(socket.send).toHaveBeenCalledWith(6, 'roundStart');
-    expect(socket.send).toHaveBeenCalledWith(7, [1]);
+    expect(socket.send).toHaveBeenCalledWith(6, 'roundStart', true);
+    expect(socket.send).toHaveBeenCalledWith(7, [1], true);
   });
 
   it('sendRoundEnd с победителем включает команду', () => {
     sm.sendRoundEnd('s1', 'team1');
-    expect(socket.send).toHaveBeenCalledWith(7, [0, ['team1']]);
+    expect(socket.send).toHaveBeenCalledWith(7, [0, ['team1']], true);
   });
 
   it('sendRoundEnd без победителя — gameOver', () => {
     sm.sendRoundEnd('s1');
-    expect(socket.send).toHaveBeenCalledWith(7, [2]);
+    expect(socket.send).toHaveBeenCalledWith(7, [2], true);
   });
 
   it('sendFirstShot шлёт snapshot, статистику, панель и keySet своими каналами', () => {
@@ -121,24 +121,24 @@ describe('SocketManager: игровые сообщения', () => {
     expect(typeof firstShotCall[1][2]).toBe('number');
     expect(firstShotCall[1][3]).toBe(0);
 
-    expect(socket.send).toHaveBeenCalledWith(14, [[], []]); // stat
-    expect(socket.send).toHaveBeenCalledWith(13, ['t:120']); // panel
-    expect(socket.send).toHaveBeenCalledWith(17, 0); // keySet (наблюдатель)
+    expect(socket.send).toHaveBeenCalledWith(14, [[], []], true); // stat
+    expect(socket.send).toHaveBeenCalledWith(13, ['t:120'], true); // panel
+    expect(socket.send).toHaveBeenCalledWith(17, 0, true); // keySet (наблюдатель)
   });
 });
 
 describe('SocketManager: простые отправители', () => {
   it('sendAuthData / sendAuthResult', () => {
     sm.sendAuthData('s1', { fields: 1 });
-    expect(socket.send).toHaveBeenCalledWith(1, { fields: 1 });
+    expect(socket.send).toHaveBeenCalledWith(1, { fields: 1 }, true);
 
     sm.sendAuthResult('s1', null);
-    expect(socket.send).toHaveBeenCalledWith(2, null);
+    expect(socket.send).toHaveBeenCalledWith(2, null, true);
   });
 
   it('sendMap уходит на порт MAP_DATA', () => {
     sm.sendMap('s1', { map: 1 });
-    expect(socket.send).toHaveBeenCalledWith(3, { map: 1 });
+    expect(socket.send).toHaveBeenCalledWith(3, { map: 1 }, true);
   });
 
   it('sendShot передаёт бинарный кадр и флаг reliable через sendBinary', () => {
@@ -151,52 +151,52 @@ describe('SocketManager: простые отправители', () => {
 
   it('sendFirstVote шлёт запрос выбора команды на VOTE_DATA', () => {
     sm.sendFirstVote('s1');
-    expect(socket.send).toHaveBeenCalledWith(16, { name: 'teamChange' });
+    expect(socket.send).toHaveBeenCalledWith(16, { name: 'teamChange' }, true);
   });
 
   it('канальные отправители уходят на свои порты', () => {
     sm.sendPanel('s1', ['p:1']);
-    expect(socket.send).toHaveBeenCalledWith(13, ['p:1']);
+    expect(socket.send).toHaveBeenCalledWith(13, ['p:1'], true);
 
     sm.sendStat('s1', [[], []]);
-    expect(socket.send).toHaveBeenCalledWith(14, [[], []]);
+    expect(socket.send).toHaveBeenCalledWith(14, [[], []], true);
 
     sm.sendChat('s1', ['msg']);
-    expect(socket.send).toHaveBeenCalledWith(15, ['msg']);
+    expect(socket.send).toHaveBeenCalledWith(15, ['msg'], true);
 
     sm.sendVote('s1', { name: 'v' });
-    expect(socket.send).toHaveBeenCalledWith(16, { name: 'v' });
+    expect(socket.send).toHaveBeenCalledWith(16, { name: 'v' }, true);
 
     sm.sendKeySet('s1', 1);
-    expect(socket.send).toHaveBeenCalledWith(17, 1);
+    expect(socket.send).toHaveBeenCalledWith(17, 1, true);
   });
 
   it('sendPlayerDefaultShot шлёт полную панель и keySet 1', () => {
     sm.injectServices(null, { getFullPanel: () => ['p'] }, null);
     sm.sendPlayerDefaultShot('s1', 'g1');
-    expect(socket.send).toHaveBeenCalledWith(13, ['p']); // panel
-    expect(socket.send).toHaveBeenCalledWith(17, 1); // keySet (игрок)
+    expect(socket.send).toHaveBeenCalledWith(13, ['p'], true); // panel
+    expect(socket.send).toHaveBeenCalledWith(17, 1, true); // keySet (игрок)
   });
 
   it('sendSpectatorDefaultShot шлёт пустую панель и keySet 0', () => {
     sm.injectServices(null, { getEmptyPanel: () => ['e'] }, null);
     sm.sendSpectatorDefaultShot('s1');
-    expect(socket.send).toHaveBeenCalledWith(13, ['e']); // panel
-    expect(socket.send).toHaveBeenCalledWith(17, 0); // keySet (наблюдатель)
+    expect(socket.send).toHaveBeenCalledWith(13, ['e'], true); // panel
+    expect(socket.send).toHaveBeenCalledWith(17, 0, true); // keySet (наблюдатель)
   });
 
   it('звуковые отправители уходят на порт SOUND_DATA', () => {
     sm.sendVictory('s1');
-    expect(socket.send).toHaveBeenCalledWith(6, 'victory');
+    expect(socket.send).toHaveBeenCalledWith(6, 'victory', true);
 
     sm.sendDefeat('s1');
-    expect(socket.send).toHaveBeenCalledWith(6, 'defeat');
+    expect(socket.send).toHaveBeenCalledWith(6, 'defeat', true);
 
     sm.sendFragSound('s1');
-    expect(socket.send).toHaveBeenCalledWith(6, 'frag');
+    expect(socket.send).toHaveBeenCalledWith(6, 'frag', true);
 
     sm.sendGameOverSound('s1');
-    expect(socket.send).toHaveBeenCalledWith(6, 'gameOver');
+    expect(socket.send).toHaveBeenCalledWith(6, 'gameOver', true);
   });
 });
 

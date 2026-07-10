@@ -234,9 +234,25 @@ export default class SignalingServer {
       return;
     }
 
-    const { banned } = this._registry.report(hostId, session.ip, reason);
+    const { counted, banned } = this._registry.report(
+      hostId,
+      session.ip,
+      reason,
+    );
+
+    // жалобы — единственная анти-чит-мера: фиксируем их в логе мастера
+    // (только там их и можно посмотреть; наружу причины не отдаются)
+    if (counted) {
+      const room = this._registry.get(hostId);
+
+      console.log(
+        `[report] room "${room?.name ?? hostId}" (${hostId}): ` +
+          `"${reason}" — ${room?.reportCount ?? '?'} report(s) in window`,
+      );
+    }
 
     if (banned) {
+      console.warn(`[report] room ${hostId} banned by report threshold`);
       this._getHostSession(hostId)?.ws.close(4002, 'banned');
     }
   }

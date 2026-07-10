@@ -137,7 +137,8 @@ export default class HostConnectionManager {
 
   // раскладывает исходящий Worker-кадр по каналам meta/state
   _deliver(peer, payload, reliable) {
-    // строки (JSON-протокол) и событийные кадры — надёжно по meta
+    // JSON-протокол и событийные кадры — надёжно по meta; позиционные кадры
+    // и PING — по state (замер RTT не искажается ретрансмиссиями meta)
     const channel = reliable === false ? peer.state : peer.meta;
 
     if (!channel || channel.readyState !== 'open') {

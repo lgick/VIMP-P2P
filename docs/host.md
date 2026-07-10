@@ -54,9 +54,10 @@
   лобби;
 - `connect(socketId)` — новый клиент: регистрирует wire-сокет в `SocketManager`,
   шлёт `CONFIG_DATA` (порт 0), запускает handshake config→auth→map→firstShot.
-  **Полная комната** (`HostGame.isFull`, люди + боты против `maxPlayers`) —
-  отказ: `sendTechInform('roomFull')` + закрытие соединения кодом `4006`
-  (очереди ожидания легаси-сервера в P2P-комнате нет);
+  **Полная комната** (`HostGame.isFull`, **люди** против `maxPlayers`; боты
+  слот не занимают — при подключении человека сверх суммарного лимита один бот
+  кикается, `_freeSlotForHuman`) — отказ: закрытие соединения кодом `4006`
+  с причиной `roomFull` (очереди ожидания легаси-сервера в P2P-комнате нет);
 - `message(socketId, data)` — входящее сообщение клиента (`JSON [port, payload]`),
   диспетчеризуется по разрешённым портам;
 - `disconnect(socketId)` — удаляет участника из игры и реестра;
@@ -69,7 +70,14 @@
 голосованием/таймером — главный поток актуализирует комнату у мастера).
 Per-user **wire-сокет** (`makeWorkerSocket`) реализует контракт `SocketManager`
 (`send`/`sendBinary`/`close`) поверх `postMessage`, поэтому `SocketManager`
-переиспользуется **без единой правки**.
+переиспользуется **без единой правки**. Особенности против `ws`:
+
+- `close(code, data)`: закрытие data channel не несёт код/причину — причина
+  (кик за бездействие/RTT, полная комната) доставляется отдельным
+  `TECH_INFORM_DATA` по meta **до** `close_client` (reliable-ordered
+  гарантирует порядок), клиент показывает её вместо общего «Host left»;
+- `send(port, data, reliable)`: `reliable: false` уводит JSON-сообщение в
+  ненадёжный state-канал — так ходит только `PING` (см. `network.md`).
 
 Игровой цикл ~120 Гц стартует сам (конструктор `HostGame` → `RoundManager.createMap`
 → `TimerManager.startGameTimers`); кадры уходят только готовым к игре участникам.
@@ -92,7 +100,10 @@ Host-фасад — аналог `src/server/modules/VIMP.js`, но:
   сама комната, кик убил бы её для всех. `hostSocketId` приходит в опциях
   (из `lobbyConfig.create.hostSocketId`, значение `'local'` согласовано с
   `LoopbackTransport`); гости кикаются как на легаси-сервере;
-- `isFull`/`maxPlayers` — гейт заполненности комнаты для порт-машины Worker'а;
+- `isFull`/`maxPlayers` — гейт заполненности комнаты для порт-машины Worker'а:
+  считаются только люди; боты уступают место (при входе игрока в полную
+  команду бота кикает `RoundManager.changeTeam`, при подключении человека
+  сверх суммарного лимита — `_freeSlotForHuman`);
 - `updateMaps(maps)` — обновление каталога карт (Этап 5.1): `_maps`/`_mapList`
   правятся на месте (эти же ссылки держит `RoundManager` и голосования) —
   новые данные применяются со следующей смены карты, без правок `RoundManager`;
@@ -122,7 +133,9 @@ Host-фасад — аналог `src/server/modules/VIMP.js`, но:
   же точки, куда JS-`Game` писал напрямую — `health`/`ammo` →
   `panel.updateUser(..., 'set')`, `activeWeapon` → `panel.setActiveWeapon`,
   `shake` → `HostGame.triggerCameraShake`, `kill` → `HostGame.reportKill`
-  (здоровье/боезапас живут в ядре, панель — их проекция);
+  (здоровье/боезапас живут в ядре, панель — их проекция). Ядро оперирует
+  числовыми id (u32), мета ключует строками — id событий приводятся к
+  строкам на этой границе;
 - **упаковка**: `packBody` → `pack_body`, `packFrame` → `pack_frame` +
   `frame_bytes` (копия из памяти WASM, работает и на web-, и на nodejs-таргете);
 - **первый кадр**: `getPlayersData` → `players_data()` ядра (полный снапшот

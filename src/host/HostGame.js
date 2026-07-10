@@ -177,9 +177,11 @@ export default class HostGame {
     this._lastReportedMap = this._roundManager.currentMap;
   }
 
-  // комната заполнена (люди + боты) — новые подключения отклоняются
+  // комната заполнена людьми — новые подключения отклоняются.
+  // Боты место не занимают: при входе игрока в полную команду бот кикается
+  // (RoundManager.changeTeam → removeOneBotForPlayer), уступая слот
   get isFull() {
-    return this._participants.isFull;
+    return this._participants.getHumans().length >= this._maxPlayers;
   }
 
   // лимит участников комнаты (для сообщения об отказе)
@@ -448,8 +450,25 @@ export default class HostGame {
     }
   }
 
+  // освобождает слот под человека: если суммарный лимит (люди + боты) выбран,
+  // кикается один бот — из команды, где их больше всего
+  _freeSlotForHuman() {
+    if (!this._participants.isFull) {
+      return;
+    }
+
+    const counts = this._bots.getBotCountsPerTeam();
+    const team = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+
+    if (team) {
+      this._bots.removeOneBotForPlayer(team);
+    }
+  }
+
   // создаёт нового игрока
   createUser(params, socketId, cb) {
+    this._freeSlotForHuman();
+
     const gameId = this._participants.createHuman(params, socketId);
     const name = this._participants.get(gameId).name;
 

@@ -162,14 +162,23 @@ describe.skipIf(!coreAvailable)('HostGame (core-driven)', () => {
     expect(() => host.removeUser(gameId)).not.toThrow();
   });
 
-  it('isFull отражает лимит комнаты (люди + боты)', async () => {
+  it('isFull считает только людей — боты место не занимают', async () => {
     ({ host, socket, core } = await createHost({ game: { maxPlayers: 2 } }));
 
     expect(host.isFull).toBe(false);
 
     await connectPlayer(host, { name: 'P1', socketId: 's1' });
+
+    // комната «полна» ботами, но людей меньше лимита — вход открыт
+    host._bots.createBots(2, 'team1');
+    expect(host.isFull).toBe(false);
+
+    // подключение человека вытесняет бота (суммарный лимит был выбран)
+    const botsBefore = host._bots.getBotCount();
+
     await connectPlayer(host, { name: 'P2', socketId: 's2' });
 
+    expect(host._bots.getBotCount()).toBe(botsBefore - 1);
     expect(host.isFull).toBe(true);
     expect(host.maxPlayers).toBe(2);
   });

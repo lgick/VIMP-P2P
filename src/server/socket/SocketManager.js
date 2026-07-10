@@ -117,12 +117,14 @@ export default class SocketManager {
    * @param {string} socketId
    * @param {number} port
    * @param {*} data
+   * @param {boolean} [reliable] - надёжная ли доставка (WebRTC meta vs
+   *   state); легаси-транспорт (ws) флаг игнорирует.
    */
-  _send(socketId, port, data) {
+  _send(socketId, port, data, reliable = true) {
     const sender = this._senders.get(socketId);
 
     if (sender) {
-      sender(port, data);
+      sender(port, data, reliable);
     } else {
       this._logSendError(socketId, port, data);
     }
@@ -210,12 +212,14 @@ export default class SocketManager {
   }
 
   /**
-   * Отправка ping для измерения RTT.
+   * Отправка ping для измерения RTT. Идёт ненадёжным каналом (WebRTC state):
+   * замер отражает реальный сетевой путь, а не reliable-поток meta с его
+   * ретрансмиссиями; потерянный ping покрывается допуском maxMissedPings.
    * @param {string} socketId
    * @param {number} pingIdCounter
    */
   sendPing(socketId, pingIdCounter) {
-    this._send(socketId, this._PORT_PING, pingIdCounter);
+    this._send(socketId, this._PORT_PING, pingIdCounter, false);
   }
 
   /**

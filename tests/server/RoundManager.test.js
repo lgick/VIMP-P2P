@@ -128,6 +128,16 @@ describe('RoundManager.reportKill', () => {
     expect(rm._checkTeamWipe).not.toHaveBeenCalled();
     expect(rm._chat.pushSystem).not.toHaveBeenCalled();
   });
+
+  it('убийца покинул игру: фраг не начисляется, вайп проверяется', () => {
+    const rm = makeCtx();
+    rm.reportKill('v', 'gone');
+
+    expect(rm._participants.get('v').status).toBe('dead');
+    expect(rm._chat.pushSystem).not.toHaveBeenCalled();
+    expect(rm._socketManager.sendFragSound).not.toHaveBeenCalled();
+    expect(rm._checkTeamWipe).toHaveBeenCalledWith(1, null);
+  });
 });
 
 describe('RoundManager._checkTeamWipe', () => {

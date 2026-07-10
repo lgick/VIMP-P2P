@@ -156,7 +156,9 @@ describe('GameCoreAdapter', () => {
     });
   });
 
-  it('updateData проецирует события ядра в панель и фасад', () => {
+  // id событий ядра — числа (u32), мета ключует строками:
+  // адаптер обязан приводить их к строкам (иначе kill/shake теряются)
+  it('updateData проецирует события ядра в панель и фасад со строковыми id', () => {
     core = makeFakeCore([
       { type: 'health', id: 1, value: 80 },
       { type: 'ammo', id: 1, weapon: 'w1', value: 199 },
@@ -173,14 +175,14 @@ describe('GameCoreAdapter', () => {
     adapter.updateData(1 / 120);
 
     expect(core.calls).toContainEqual(['step', 1 / 120]);
-    expect(panel.updateUser).toHaveBeenCalledWith(1, 'health', 80, 'set');
-    expect(panel.updateUser).toHaveBeenCalledWith(1, 'w1', 199, 'set');
-    expect(panel.setActiveWeapon).toHaveBeenCalledWith(1, 'w2');
-    expect(vimp.triggerCameraShake).toHaveBeenCalledWith(2, {
+    expect(panel.updateUser).toHaveBeenCalledWith('1', 'health', 80, 'set');
+    expect(panel.updateUser).toHaveBeenCalledWith('1', 'w1', 199, 'set');
+    expect(panel.setActiveWeapon).toHaveBeenCalledWith('1', 'w2');
+    expect(vimp.triggerCameraShake).toHaveBeenCalledWith('2', {
       intensity: 20,
       duration: 200,
     });
-    expect(vimp.reportKill).toHaveBeenCalledWith(2, 1);
+    expect(vimp.reportKill).toHaveBeenCalledWith('2', '1');
   });
 
   it('packFrame прокидывает флаги камеры и playerId, возвращает ArrayBuffer', () => {

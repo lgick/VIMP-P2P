@@ -46,6 +46,7 @@ import BakingProvider from './providers/BakingProvider.js';
 import DependencyProvider from './providers/DependencyProvider.js';
 import wsports from '../config/wsports.js';
 import lobbyConfig from '../config/lobby.js';
+import clientConfig from '../config/client.js';
 import parts from './parts/index.js';
 
 // PS (server ports): порты получения данные от сервера
@@ -107,7 +108,11 @@ let gameInformer = null;
 let gameInformList = []; // массив игровых сообщений
 
 const techInformer = document.getElementById('tech-informer');
-let techInformList = []; // массив системных сообщений
+
+// массив системных сообщений: дефолт — из бандла, актуализируется CONFIG_DATA
+// хоста. Дефолт обязателен: отказ полной комнаты (roomFull) приходит ДО
+// CONFIG_DATA — без него клиент показал бы «Unknown error»
+let techInformList = clientConfig.techInformList;
 
 // код 'loading' — единственный не-терминальный tech-код (см. TECH_CODES)
 const TECH_LOADING_CODE = 2;
@@ -435,7 +440,7 @@ socketMethods[PS_MISC] = data => {
 
 // ping
 socketMethods[PS_PING] = pingId => {
-  sending(PC_PONG, pingId);
+  sending(PC_PONG, pingId, false);
 };
 
 // clear
@@ -764,8 +769,10 @@ function openMode(mode) {
 }
 
 // отправляет данные хосту (весь клиентский протокол — по надёжному каналу meta)
-function sending(name, data) {
-  transport?.send(JSON.stringify([name, data]));
+// reliable=false — по ненадёжному state-каналу (только pong: замер RTT
+// должен отражать сетевой путь, а не reliable-поток с ретрансмиссиями)
+function sending(name, data, reliable = true) {
+  transport?.send(JSON.stringify([name, data]), reliable);
 }
 
 // перехватывает /ban <причина> и шлёт жалобу напрямую мастеру по сигнальному WS,
@@ -894,8 +901,28 @@ let hostController = null;
 let hostConnections = null;
 let hostHeartbeat = null;
 
+// WebRTC обязателен для P2P-игры. В Firefox RTCPeerConnection может
+// отсутствовать (media.peerconnection.enabled = false, resistFingerprinting,
+// приватные сборки) — честное сообщение вместо падения с чёрным экраном
+function ensureWebRtcAvailable() {
+  if (typeof RTCPeerConnection !== 'undefined') {
+    return true;
+  }
+
+  socketMethods[PS_TECH_INFORM_DATA](
+    'WebRTC is unavailable in this browser: P2P play is impossible. ' +
+      'In Firefox check that media.peerconnection.enabled is on.',
+  );
+
+  return false;
+}
+
 // устанавливает P2P-соединение с выбранным хостом и уходит из лобби
 function connectToHost(hostId) {
+  if (!ensureWebRtcAvailable()) {
+    return;
+  }
+
   currentHostId = hostId;
 
   transport = new WebRtcManager(signaling, {
@@ -913,6 +940,10 @@ function connectToHost(hostId) {
 // loopback, удалённые клиенты — по WebRTC (answerer). Клиентский код одинаков,
 // отличается лишь транспорт. Выход хоста = смерть комнаты — как у клиента
 async function connectAsHost(room) {
+  if (!ensureWebRtcAvailable()) {
+    return;
+  }
+
   // фактическая карта комнаты (из 'ready'; далее актуализируется map_changed)
   let currentMapName = null;
 

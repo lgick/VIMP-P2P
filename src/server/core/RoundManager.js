@@ -400,6 +400,13 @@ class RoundManager {
     if (killerId) {
       const killerUser = this._participants.get(killerId);
 
+      // убийца мог покинуть игру до попадания (например, взрыв его бомбы) —
+      // фраг не начисляется, но раунд обязан корректно завершиться
+      if (!killerUser) {
+        this._checkTeamWipe(victimUser.teamId, null);
+        return;
+      }
+
       // если это не самоубийство
       if (victimId !== killerId) {
         // отслеживание противника
