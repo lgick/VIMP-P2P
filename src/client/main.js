@@ -1,4 +1,5 @@
 import './style.css';
+import 'pixi.js/unsafe-eval';
 import { Application, Ticker } from 'pixi.js';
 import init, { ClientCore } from '../../core/pkg-web/vimp_core.js';
 import InputListener from './InputListener.js';

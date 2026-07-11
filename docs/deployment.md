@@ -114,6 +114,8 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-
 
 Ключевые директивы: `script-src ... 'wasm-unsafe-eval'` (компиляция WASM-ядра в браузере), `worker-src 'self' blob:` (Web Worker хоста), `connect-src 'self' wss:` (сигнальный WebSocket мастера; WebRTC data channels CSP не гейтит). В **dev** CSP не применяется — ViteExpress + HMR требуют `'unsafe-inline'` и HMR-WebSocket.
 
+CSP сознательно не даёт `'unsafe-eval'` — PixiJS без него бросает `Current environment does not allow unsafe-eval`, поэтому `src/client/main.js` подключает `pixi.js/unsafe-eval` (до создания `Application`) — это переключает PixiJS на safe-eval путь без ослабления политики.
+
 Минификация JS-оболочки — штатная у `vite build`. Усиленная обфускация осознанно вне scope: против хоста-читера она бесполезна.
 
 ## 🛠 Обслуживание и удаление
