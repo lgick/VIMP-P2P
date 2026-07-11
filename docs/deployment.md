@@ -109,10 +109,10 @@
 add_header X-Content-Type-Options "nosniff" always;
 add_header Referrer-Policy "no-referrer" always;
 add_header X-Frame-Options "DENY" always;
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' wss:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' wss: data:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
 ```
 
-Ключевые директивы: `script-src ... 'wasm-unsafe-eval'` (компиляция WASM-ядра в браузере), `worker-src 'self' blob:` (Web Worker хоста), `connect-src 'self' wss:` (сигнальный WebSocket мастера; WebRTC data channels CSP не гейтит). В **dev** CSP не применяется — ViteExpress + HMR требуют `'unsafe-inline'` и HMR-WebSocket.
+Ключевые директивы: `script-src ... 'wasm-unsafe-eval'` (компиляция WASM-ядра в браузере), `worker-src 'self' blob:` (Web Worker хоста), `connect-src 'self' wss: data:` (сигнальный WebSocket мастера; `data:` — PixiJS проверяет поддержку `ImageBitmap` фетчем тестового `data:`-URL; WebRTC data channels CSP не гейтит). В **dev** CSP не применяется — ViteExpress + HMR требуют `'unsafe-inline'` и HMR-WebSocket.
 
 CSP сознательно не даёт `'unsafe-eval'` — PixiJS без него бросает `Current environment does not allow unsafe-eval`, поэтому `src/client/main.js` подключает `pixi.js/unsafe-eval` (до создания `Application`) — это переключает PixiJS на safe-eval путь без ослабления политики.
 

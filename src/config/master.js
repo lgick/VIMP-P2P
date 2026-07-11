@@ -38,13 +38,14 @@ export default {
   // заголовки безопасности (гигиена среды, Этап 5.4). CSP на статику/.wasm в
   // проде ставит Nginx (см. docs/deployment.md) — здесь single source of truth
   // политики; мастер применяет её к своим ответам только в проде (в dev CSP
-  // сломала бы Vite HMR). WASM требует 'wasm-unsafe-eval', Worker — 'blob:'
+  // сломала бы Vite HMR). WASM требует 'wasm-unsafe-eval', Worker — 'blob:';
+  // connect-src data: — PixiJS фетчит тестовый data:-URL для проверки ImageBitmap
   security: {
     csp: [
       "default-src 'self'",
       "script-src 'self' 'wasm-unsafe-eval'",
       "worker-src 'self' blob:",
-      "connect-src 'self' wss:",
+      "connect-src 'self' wss: data:",
       "img-src 'self' data: blob:",
       "style-src 'self' 'unsafe-inline'",
       "object-src 'none'",
