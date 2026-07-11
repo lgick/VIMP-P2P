@@ -1,19 +1,19 @@
 # Клиентские модули и системы
 
-Клиент — браузерное приложение на PixiJS (сборка Vite, шаблоны Pug в [src/client/views/](../src/client/views/)). Точка входа — [src/client/main.js](../src/client/main.js).
+Клиент — браузерное приложение на PixiJS (сборка Vite, шаблоны Pug в [src/client/views/](../../src/client/views/)). Точка входа — [src/client/main.js](../../src/client/main.js).
 
 ## main.js — бутстрап, диспетчер и рендер-цикл
 
 - **Бутстрап**: создаёт `SignalingClient`, подключается к мастеру; по `welcome` поднимает лобби (`initLobby`). Выбор сервера → `connectToHost` создаёт `WebRtcManager`, устанавливает P2P и запоминает `currentHostId` (для `/ban`).
-- **Соц-модерация `/ban`** (Этап 5.3): исходящий чат идёт через `handleChatSend` — он перехватывает `/ban <причина>` и вместо отправки хосту (порт `CHAT_DATA`) шлёт жалобу напрямую мастеру (`signaling.reportHost(currentHostId, reason)`), минуя хоста-читера. Причина обязательна, доступно только гостю (`currentHostId` есть); у хоста-игрока команда даёт локальную подсказку; при разорванном сигнальном WS — честное сообщение об ошибке (жалоба не отправлена). Мастер дополнительно принимает жалобу только от сессии, реально подключавшейся к комнате — см. [master.md](master.md#соц-модерация-ban-этап-53). Остальной чат — хосту как обычно.
+- **Соц-модерация `/ban`**: исходящий чат идёт через `handleChatSend` — он перехватывает `/ban <причина>` и вместо отправки хосту (порт `CHAT_DATA`) шлёт жалобу напрямую мастеру (`signaling.reportHost(currentHostId, reason)`), минуя хоста-читера. Причина обязательна, доступно только гостю (`currentHostId` есть); у хоста-игрока команда даёт локальную подсказку; при разорванном сигнальном WS — честное сообщение об ошибке (жалоба не отправлена). Мастер дополнительно принимает жалобу только от сессии, реально подключавшейся к комнате — см. [master.md](master.md#соц-модерация-ban). Остальной чат — хосту как обычно.
 - Ветвит входящие пакеты хоста (`handleMessage`) по типу данных: строка → JSON `[portId, payload]` → обработчик `socketMethods[portId]`; `ArrayBuffer` → `clientCore.push_frame` (распаковка, вставка в буфер по seq и reconciliation предикта — в ядре; несовпадение версии — кадр отброшен).
-- По `CONFIG_DATA` (порт 0) инициализирует все модули: PixiJS `Application`-ы, MVC-компоненты, `BakingProvider` (запекание текстур), `SoundManager` и **клиентское ядро** (`await init()` WASM + `new ClientCore(...)`, конфиг собирает [src/lib/clientCoreConfig.js](../src/lib/clientCoreConfig.js) из секций `prediction`/`interpolation` CONFIG_DATA); отвечает `CONFIG_READY`.
+- По `CONFIG_DATA` (порт 0) инициализирует все модули: PixiJS `Application`-ы, MVC-компоненты, `BakingProvider` (запекание текстур), `SoundManager` и **клиентское ядро** (`await init()` WASM + `new ClientCore(...)`, конфиг собирает [src/lib/clientCoreConfig.js](../../src/lib/clientCoreConfig.js) из секций `prediction`/`interpolation` CONFIG_DATA); отвечает `CONFIG_READY`.
 - Первый кадр (`FIRST_SHOT_DATA`, порт 4) применяется немедленно (`applyShot`), минуя ядро.
 - **Рендер-цикл** `renderTick` на `Ticker.shared` (rAF): `clientCore.sample(now)` → чтение плоского hot-буфера zero-copy из памяти WASM (танки/динамика/камера/предсказанный танк) + `take_frames()` для редких событийных кадров → применение прежним `parse`-конвейером (см. «Клиентское ядро» ниже).
 - Сбросы: смена карты (`MAP_DATA` → `set_map`) и `CLEAR` (→ `reset`) очищают буфер кадров и предикт в ядре.
 - **Разрыв P2P** (`handleDisconnect`): выход хоста = смерть комнаты (host-migration нет) — останавливает рендер-тик и `Application`-ы, показывает заглушку и возвращает в лобби перезагрузкой. Терминальная причина закрытия, уже показанная tech-informer'ом (кик, полная комната — любые коды, кроме `loading`), общим сообщением «Host left…» не затирается; причину Worker хоста доставляет `TECH_INFORM_DATA`-сообщением непосредственно перед закрытием канала (см. [network.md](network.md#rtt-pingpong-и-кики)). `techInformList` имеет дефолт из бандла (`src/config/client.js`) — отказ полной комнаты приходит до `CONFIG_DATA`.
 - **Отсутствие WebRTC** (`ensureWebRtcAvailable`): если `RTCPeerConnection` недоступен (Firefox с `media.peerconnection.enabled = false`, resistFingerprinting и т.п.), `connectToHost`/`connectAsHost` показывают честное сообщение и не покидают лобби вместо падения с чёрным экраном.
-- **Роль хоста**: `connectAsHost` перед стартом Worker'а фетчит каталог карт мастера (Этап 5.1, fallback на бандл), после `ready` регистрирует комнату и держит heartbeat; сигнальный WS хоста при разрыве переподключается с бэкоффом (`lobbyConfig.reconnect`) и заново регистрирует комнату (повторный `welcome` лобби не пересоздаёт — guard в `initLobby`). Сбой инициализации Worker'а (`error`) гасит комнату с сообщением и возвращает в лобби.
+- **Роль хоста**: `connectAsHost` перед стартом Worker'а фетчит каталог карт мастера (fallback на бандл), после `ready` регистрирует комнату и держит heartbeat; сигнальный WS хоста при разрыве переподключается с бэкоффом (`lobbyConfig.reconnect`) и заново регистрирует комнату (повторный `welcome` лобби не пересоздаёт — guard в `initLobby`). Сбой инициализации Worker'а (`error`) гасит комнату с сообщением и возвращает в лобби.
 
 ## Сетевой слой (src/client/network/)
 
@@ -36,13 +36,13 @@
 - **view** — рендер карточек, поиск, «Загрузить ещё»; **умный пинг** через `IntersectionObserver`: карточка в видимой зоне → `visible` → контроллер шлёт `ping_host`; `pong` обновляет задержку и пересортировывает карточки по возрастанию. `IntersectionObserver` инъектируется ради тестов.
 - **controller** — проксирует view-события в модель; дросселирование пинга — в модели (`pingHost` возвращает `false`, если сервер пинговали недавно, интервал `pingInterval`).
 
-Конфиг — [src/config/lobby.js](../src/config/lobby.js) (бандлится в сборку, т.к. лобби проходит до подключения к хосту). Замер пинга **приблизительный** (клиент→мастер→хост, не P2P RTT) — так и подаётся в UI.
+Конфиг — [src/config/lobby.js](../../src/config/lobby.js) (бандлится в сборку, т.к. лобби проходит до подключения к хосту). Замер пинга **приблизительный** (клиент→мастер→хост, не P2P RTT) — так и подаётся в UI.
 
 Publisher-паттерн связей внутри тройки:
 
 - `main.js` или `view` → методы `controller` вызываются **напрямую**;
 - `controller` → методы `model` вызываются **напрямую**;
-- `model` → `view` — **через `Publisher`** ([src/lib/Publisher.js](../src/lib/Publisher.js)): модель публикует событие, view подписана; на модель могут подписываться и внешние подписчики.
+- `model` → `view` — **через `Publisher`** ([src/lib/Publisher.js](../../src/lib/Publisher.js)): модель публикует событие, view подписана; на модель могут подписываться и внешние подписчики.
 
 Назначение компонентов:
 
@@ -55,13 +55,13 @@ Publisher-паттерн связей внутри тройки:
 - **Stat** — таблицы scoreboard с сортировкой (`sortList`), показывается по Tab.
 - **Vote** — окна голосований из шаблонов, пагинация, таймер жизни.
 
-## Клиентское ядро (ClientCore, срез 2.6)
+## Клиентское ядро (ClientCore)
 
 Клиентская математика — интерполяция снапшотов, предикт своего танка,
 визуальный спавн снарядов и распаковка кадров v3 — живёт в Rust-ядре
 (`core/src/client/`, wasm-bindgen класс `ClientCore` из того же WASM-бинаря,
 что `GameCore` хоста). JS-оболочка (`main.js`) только пересылает данные и
-применяет результат к рендеру; ABI и раскладки — в [core.md](core.md#clientcore--клиентский-режим-ядра-срез-26).
+применяет результат к рендеру; ABI и раскладки — в [core.md](core.md#clientcore--клиентский-режим-ядра).
 
 Поток данных:
 
@@ -85,14 +85,13 @@ Publisher-паттерн связей внутри тройки:
   раз (события `w1`/`w2e`, создания/удаления, reset/shake камеры), уже с
   подавленными дублями своих выстрелов; применяются прежним `applyShot`.
   Звук и эффекты триггерятся, как и раньше, самими parts при создании
-  сущностей — отдельного eventId-диспетчера нет (осознанное отступление от
-  буквы плана 2.6).
+  сущностей — отдельного eventId-диспетчера нет.
 - **Ввод**: `apply_input(action, name, now)` пишет историю предикта; на `down`
   `fire` — `try_fire(now)` (гейты кулдауна/патронов/pending-бомбы/жив внутри
   ядра) возвращает JSON спавна для `applyGameData`; `nextWeapon`/`prevWeapon` —
   `cycle_weapon`. Отправка хосту `"seq:action:name"` не изменилась.
 
-Внутри ядро повторяет прежние алгоритмы JS-модулей (портированы 1:1):
+Внутри ядро реализует следующие алгоритмы:
 
 - **интерполяция** (`client/interpolator.rs`): EMA-оффсет серверного времени,
   `renderTime = serverNow − delay` (конфиг `interpolation.delay: 100` мс),
@@ -118,30 +117,34 @@ Publisher-паттерн связей внутри тройки:
 
 ### parts/ — сущности
 
-[src/client/parts/](../src/client/parts/) — классы, отрисовываемые на PixiJS-полотнах: `Tank` (один класс и для своего, и для чужих танков), `TankRadar`, `Map`, `MapRadar`, `Bomb`, `Smoke`, `Tracks` (+`TrackMark`), `ParticlePool`. Эффекты — в `parts/effects/` (`BaseEffect`, `explosion/` — взрыв/воронка/дым, `shot/` — трассер/попадание), анимируются на `Ticker.shared`.
+[src/client/parts/](../../src/client/parts/) — классы, отрисовываемые на PixiJS-полотнах: `Tank` (один класс и для своего, и для чужих танков), `TankRadar`, `Map`, `MapRadar`, `Bomb`, `Smoke`, `Tracks` (+`TrackMark`), `ParticlePool`. Эффекты — в `parts/effects/` (`BaseEffect`, `explosion/` — взрыв/воронка/дым, `shot/` — трассер/попадание), анимируются на `Ticker.shared`.
 
 Соответствие снапшот-ключей классам и распределение по полотнам — `gameSets`/`entitiesOnCanvas` в `client.js`. Фиксированного контракта у part нет — при создании новой смотреть существующие как образец.
 
 ### Factory
 
-[src/lib/factory.js](../src/lib/factory.js) — реестр имя сущности → класс. `GameCtrl.parse(name, data)` по входным данным создаёт экземпляр, вызывает `update(data)` существующего или удаляет (`null`).
+[src/lib/factory.js](../../src/lib/factory.js) — реестр имя сущности → класс. `GameCtrl.parse(name, data)` по входным данным создаёт экземпляр, вызывает `update(data)` существующего или удаляет (`null`).
 
 ### Провайдеры
 
-- **`BakingProvider`** ([providers/BakingProvider.js](../src/client/providers/BakingProvider.js)) — однократная генерация процедурных текстур при старте по конфигу `bakedAssets`; функции запекания — в [providers/bakers/](../src/client/providers/bakers/) (фиксированного интерфейса нет, ориентироваться на существующие).
+- **`BakingProvider`** ([providers/BakingProvider.js](../../src/client/providers/BakingProvider.js)) — однократная генерация процедурных текстур при старте по конфигу `bakedAssets`; функции запекания — в [providers/bakers/](../../src/client/providers/bakers/) (фиксированного интерфейса нет, ориентироваться на существующие).
 - **`DependencyProvider`** — инъекция сервисов (`renderer`, `soundManager`) в компоненты по карте `componentDependencies`.
 
 ## SoundManager
 
-[src/client/SoundManager.js](../src/client/SoundManager.js) (на Howler.js). Звуки описаны в `src/config/sounds.js`.
+[src/client/SoundManager.js](../../src/client/SoundManager.js) (на Howler.js). Звуки описаны в `src/config/sounds.js`.
 
 - **UI/системные** (без позиции): `playSystemSound(name)` — немедленно, в обход приоритетов (используется и для звуков порта 6).
 - **Пространственные** (позиция в мире): `registerSound(name, { position })` → `processAudibility()` → `updateActiveSounds()` — менеджер сам решает, что слышно, соблюдая лимит голосов (`WORLD_VOICE_LIMIT = 30`) и приоритеты из конфига.
 
 ## InputListener
 
-[src/client/InputListener.js](../src/client/InputListener.js) — низкоуровневый перехват keydown/keyup для Controls; `modes`/`cmds` имеют приоритет над игровым набором клавиш.
+[src/client/InputListener.js](../../src/client/InputListener.js) — низкоуровневый перехват keydown/keyup для Controls; `modes`/`cmds` имеют приоритет над игровым набором клавиш.
 
 ## Иерархия UI (z-index)
 
 `vimp` (1) → `radar` (2) → `chat` (3) → `panel` (4) → `vote` (5) → `game-informer` (6) → `stat` (7) → `lobby`/`auth` (8) → `tech-informer` (9). Лобби (`#lobby`, z-index 8) — стартовый экран выбора сервера, показывается до подключения к хосту и скрывается при входе в игру.
+
+---
+
+[← Предыдущая: Rust-ядро](core.md) · [Следующая: Сетевой протокол →](network.md)

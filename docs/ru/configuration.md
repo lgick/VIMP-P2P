@@ -6,11 +6,11 @@
 2. **`src/config/`** — общие конфиги, используемые мастером (Node.js), Worker'ом браузерного хоста и клиентом (Vite-бандл).
 3. **`src/data/`** — статические игровые данные: карты, модели, оружие.
 
-Мастер собирает свой конфиг в единое хранилище `src/lib/config.js` (доступ по пути с двоеточием) в [src/master/main.js](../src/master/main.js); Worker хоста импортирует `game`/`client`/`auth`/`wsports` напрямую ([src/host/host.worker.js](../src/host/host.worker.js)) и применяет поверх них настройки комнаты. Клиент получает свой конфиг (`client`) от хоста при подключении (порт `0`).
+Мастер собирает свой конфиг в единое хранилище `src/lib/config.js` (доступ по пути с двоеточием) в [src/master/main.js](../../src/master/main.js); Worker хоста импортирует `game`/`client`/`auth`/`wsports` напрямую ([src/host/host.worker.js](../../src/host/host.worker.js)) и применяет поверх них настройки комнаты. Клиент получает свой конфиг (`client`) от хоста при подключении (порт `0`).
 
 ## Переменные окружения (.env)
 
-Читаются в [src/master/main.js](../src/master/main.js) при `NODE_ENV=production` (запуск `npm start` использует `node --env-file .env`). В режиме разработки игнорируются — действуют значения из `src/config/master.js`.
+Читаются в [src/master/main.js](../../src/master/main.js) при `NODE_ENV=production` (запуск `npm start` использует `node --env-file .env`). В режиме разработки игнорируются — действуют значения из `src/config/master.js`.
 
 | Переменная | Назначение | По умолчанию |
 | --- | --- | --- |
@@ -22,13 +22,13 @@
 
 ## src/config/game.js — серверные игровые параметры
 
-Источник: [src/config/game.js](../src/config/game.js). Импортирует карты, модели и оружие из `src/data/`.
+Источник: [src/config/game.js](../../src/config/game.js). Импортирует карты, модели и оружие из `src/data/`.
 
 ### Основные параметры
 
 | Параметр | Значение | Описание |
 | --- | --- | --- |
-| `maxPlayers` | `30` | Дефолтный лимит участников; комната хоста ограничивает его настройкой создателя (≤ 8, рамка P2P-плана), лимит считается по людям |
+| `maxPlayers` | `30` | Дефолтный лимит участников; комната хоста ограничивает его настройкой создателя (≤ 8), лимит считается по людям |
 | `chatMaxLength` | `60` | Максимальная длина сообщения чата (авторитетно на хосте; должна совпадать с `maxlength` инпута в `chat.pug`) |
 | `parts.friendlyFire` | `false` | Урон по своей команде |
 | `parts.mapConstructor` | `'Map'` | Имя конструктора карт |
@@ -99,10 +99,10 @@
 
 ## src/config/client.js — конфиг клиента
 
-Источник: [src/config/client.js](../src/config/client.js). Отправляется клиенту при подключении. Перед отправкой хост дописывает в него:
+Источник: [src/config/client.js](../../src/config/client.js). Отправляется клиенту при подключении. Перед отправкой хост дописывает в него:
 
 - `modules.vote.params.time` = `game:timers:voteTime`;
-- `prediction` — данные для клиентской реплики движения и стрельбы (`timeStep`, `playerKeys`, `models`, `weapons`) — собирает [src/lib/buildClientConfig.js](../src/lib/buildClientConfig.js).
+- `prediction` — данные для клиентской реплики движения и стрельбы (`timeStep`, `playerKeys`, `models`, `weapons`) — собирает [src/lib/buildClientConfig.js](../../src/lib/buildClientConfig.js).
 
 ### `parts` — игровые сущности
 
@@ -171,28 +171,28 @@
 - `protocol`, `domain`, `port` — адрес; порт по умолчанию `3002` (`3001` — Vite HMR). В production домен переопределяет `VIMP_DOMAIN`, порт — `VIMP_MASTER_PORT`;
 - `httpsOptions` — пути к локальным сертификатам `.certs/key.pem`/`cert.pem` (только для разработки; в production HTTPS терминирует Nginx);
 - `servers` — параметры `GET /servers`: `regionThreshold: 15` (комнат меньше или столько — региональный фильтр и пагинация отключаются), `defaultLimit: 10`, `maxLimit: 50`;
-- `host` — ограничения комнат: `maxNameLength: 30`, `maxPlayersLimit: 8` (рамка P2P-плана), `heartbeatTimeout: 30000` (без heartbeat дольше — комната удаляется), `sweepInterval: 10000`; соц-модерация `/ban` (Этап 5.3): `banThreshold: 5` (уникальных по IP жалоб для бана), `reportWindowMs: 3600000` (окно учёта жалоб и срок бана, 1 ч);
+- `host` — ограничения комнат: `maxNameLength: 30`, `maxPlayersLimit: 8`, `heartbeatTimeout: 30000` (без heartbeat дольше — комната удаляется), `sweepInterval: 10000`; соц-модерация `/ban`: `banThreshold: 5` (уникальных по IP жалоб для бана), `reportWindowMs: 3600000` (окно учёта жалоб и срок бана, 1 ч);
 - `regionHeader: 'x-region'` — заголовок с регионом хоста от Nginx/CDN;
 - `pingRateLimit` — лимит сигнальных `ping_host` с одного IP (`limit: 10` за `windowMs: 1000`);
-- `security` (гигиена среды, Этап 5.4) — `csp` (строка Content-Security-Policy: single source of truth политики, в проде мастер ставит её на свои ответы, авторитетно на статику/`.wasm` — Nginx, см. [deployment.md](deployment.md)) и `referrerPolicy: 'no-referrer'`; заголовки `nosniff`/`X-Frame-Options`/`Referrer-Policy` мастер шлёт всегда, CSP — только в проде (в dev сломала бы Vite HMR);
-- `iceServers` — ICE-конфигурация для клиентов и хостов (STUN; TURN — опционально по итогам Этапа 0).
+- `security` (гигиена среды) — `csp` (строка Content-Security-Policy: single source of truth политики, в проде мастер ставит её на свои ответы, авторитетно на статику/`.wasm` — Nginx, см. [deployment.md](deployment.md)) и `referrerPolicy: 'no-referrer'`; заголовки `nosniff`/`X-Frame-Options`/`Referrer-Policy` мастер шлёт всегда, CSP — только в проде (в dev сломала бы Vite HMR);
+- `iceServers` — ICE-конфигурация для клиентов и хостов (STUN; TURN — опционально).
 
 ## src/config/lobby.js
 
 Конфиг клиентского лобби (см. [client.md](client.md#mvc-компоненты-srcclientcomponents)). В отличие от `client.js` **бандлится в сборку**, а не приходит от хоста: лобби проходит до подключения к хосту.
 
 - `serversUrl: '/servers'` — REST-эндпоинт мастера со списком серверов;
-- `maps` — каталог карт мастера (Этап 5.1): `manifestUrl: '/maps/manifest.json'`, `baseUrl: '/maps'` — комната хоста стартует на актуальных картах (fallback на бандл при недоступности);
-- `worker` — манифест worker-бандла мастера (Этап 5.2): `manifestUrl: '/worker/manifest.json'` — Worker комнаты создаётся по `url` из манифеста, расхождение `codeVersion` при re-register запускает эстафету Worker'ов (fallback на бандловый URL без обновлений кода — dev/недоступность);
+- `maps` — каталог карт мастера: `manifestUrl: '/maps/manifest.json'`, `baseUrl: '/maps'` — комната хоста стартует на актуальных картах (fallback на бандл при недоступности);
+- `worker` — манифест worker-бандла мастера: `manifestUrl: '/worker/manifest.json'` — Worker комнаты создаётся по `url` из манифеста, расхождение `codeVersion` при re-register запускает эстафету Worker'ов (fallback на бандловый URL без обновлений кода — dev/недоступность);
 - `reconnect` — переподключение сигнального WS хоста: экспоненциальный бэкофф от `baseDelay: 1000` до `maxDelay: 30000` (мс);
 - `pageSize: 10` — размер страницы для «Загрузить ещё» (`offset`/`limit`);
 - `pingInterval: 5000` — минимальный интервал повторного `ping_host` одного сервера (защита от спама при скролле/перерисовке);
 - `elems` — id DOM-элементов лобби (из `lobby.pug`), включая `nameId`/`hostBtnId` — поле имени и кнопка «создать сервер» (браузерный хост, [host.md](host.md));
-- `create` — настройки создания комнаты: `defaultName`, `maxPlayers` (≤ 8, рамка P2P-плана), `heartbeatInterval` (период `update_host` у мастера), `hostSocketId: 'local'` — socketId loopback-соединения хоста-игрока (по нему Worker исключает хоста из kick-политик).
+- `create` — настройки создания комнаты: `defaultName`, `maxPlayers` (≤ 8), `heartbeatInterval` (период `update_host` у мастера), `hostSocketId: 'local'` — socketId loopback-соединения хоста-игрока (по нему Worker исключает хоста из kick-политик).
 
 ## src/config/auth.js
 
-Форма авторизации: id DOM-элементов (`elems`) и параметры формы (`params`). Каждый параметр: `name`, значение по умолчанию, `validator` (функция из [src/lib/validators.js](../src/lib/validators.js): `isValidName`, `isValidModel`) и ключ `storage` для localStorage. Валидация выполняется и на клиенте, и повторно хостом (Worker).
+Форма авторизации: id DOM-элементов (`elems`) и параметры формы (`params`). Каждый параметр: `name`, значение по умолчанию, `validator` (функция из [src/lib/validators.js](../../src/lib/validators.js): `isValidName`, `isValidModel`) и ключ `storage` для localStorage. Валидация выполняется и на клиенте, и повторно хостом (Worker).
 
 ## src/config/sounds.js
 
@@ -207,13 +207,13 @@
 
 ### models.js
 
-Единственная модель — танк `m1` ([src/data/models.js](../src/data/models.js)): конструктор `Tank`, стартовое оружие `w1`, размер (`size: 2`, габариты `size×4 : size×3`), параметры движения (ускорение/торможение, `maxForwardSpeed: 260`, `maxReverseSpeed: −130`, поворотный момент, демпфирование, боковое сцепление), физика (`density`, `friction`, `restitution`), «манера вождения» (пороги и скорости газа/поворота) и башня (`maxGunAngle: 1.4` рад, скорости поворота/центрирования).
+Единственная модель — танк `m1` ([src/data/models.js](../../src/data/models.js)): конструктор `Tank`, стартовое оружие `w1`, размер (`size: 2`, габариты `size×4 : size×3`), параметры движения (ускорение/торможение, `maxForwardSpeed: 260`, `maxReverseSpeed: −130`, поворотный момент, демпфирование, боковое сцепление), физика (`density`, `friction`, `restitution`), «манера вождения» (пороги и скорости газа/поворота) и башня (`maxGunAngle: 1.4` рад, скорости поворота/центрирования).
 
 > ⚠️ Коэффициенты `models.js` используются и авторитетным путём ядра, и репликой клиентского предикта (`core/src/client/predictor.rs`, формулы общие — `core/src/motion.rs`). Их изменение проверяется cargo-паритетом: `npm run core:test`.
 
 ### weapons.js
 
-Два архитектурно разных типа оружия ([src/data/weapons.js](../src/data/weapons.js)):
+Два архитектурно разных типа оружия ([src/data/weapons.js](../../src/data/weapons.js)):
 
 | | `w1` (пуля) | `w2` (бомба) |
 | --- | --- | --- |
@@ -226,4 +226,8 @@
 
 ### maps/
 
-Три карты: `pool mini` (малая), `canopy`, `garden`. Каждая описывает слои тайлов (`layers`, `tiles`), точки респауна (`respawns`), статическую (`physicsStatic`) и динамическую (`physicsDynamic`) физику. Регистрация — в [src/data/maps/index.js](../src/data/maps/index.js). Как добавить карту — см. [extending.md](extending.md#новая-карта).
+Три карты: `pool mini` (малая), `canopy`, `garden`. Каждая описывает слои тайлов (`layers`, `tiles`), точки респауна (`respawns`), статическую (`physicsStatic`) и динамическую (`physicsDynamic`) физику. Регистрация — в [src/data/maps/index.js](../../src/data/maps/index.js). Как добавить карту — см. [extending.md](extending.md#новая-карта).
+
+---
+
+[← Предыдущая: Сетевой протокол](network.md) · [Следующая: Расширение игры →](extending.md)
