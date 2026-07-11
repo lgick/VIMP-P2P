@@ -1,19 +1,24 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import poolMini from '../../src/data/maps/pool_mini.js';
-import { unpackFrame } from '../../src/lib/snapshotCodec.js';
 import {
   coreAvailable,
   makeCore,
+  makeClientCore,
+  decodeFrame,
   frameBuffer,
   stepTicks,
   takeEvents,
 } from './helpers.js';
 
 // JS↔WASM интеграционный харнесс ядра (Этап 2.5): команды/события ABI
-// и round-trip бинарного кадра v3 — ядро пакует (Rust), клиент
-// распаковывает существующим unpackFrame (src/lib/snapshotCodec.js).
+// и round-trip бинарного кадра v3 — ядро пакует (Rust), распаковывает
+// клиентское ядро (ClientCore.decode_frame, срез 2.6).
 
 const DT = 1 / 120;
+
+// распаковка кадров клиентским ядром (лениво: без pkg-node тесты скипаются)
+let decoder = null;
+const decode = buffer => decodeFrame((decoder ??= makeClientCore()), buffer);
 
 describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
   let core;
@@ -68,7 +73,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
     });
   });
 
-  describe('round-trip кадра v3 через unpackFrame', () => {
+  describe('round-trip кадра v3 через decode_frame', () => {
     it('кадр играющего: заголовок, камера, player-блок, танки, динамика', () => {
       core.load_map(JSON.stringify(poolMini));
       core.spawn_tank(1, 'm1', 1, 78, 312, 0);
@@ -82,7 +87,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
 
       core.pack_frame(serverTime, 42, true, cx, cy, false, undefined, 1);
 
-      const decoded = unpackFrame(frameBuffer(core));
+      const decoded = decode(frameBuffer(core));
 
       expect(decoded.port).toBe(5);
       expect(decoded.seq).toBe(42);
@@ -114,7 +119,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
       core.pack_body();
       core.pack_frame(1000, 7, true, 10.5, -3.25, true, '20:200', -1);
 
-      const decoded = unpackFrame(frameBuffer(core));
+      const decoded = decode(frameBuffer(core));
 
       expect(decoded.camera[0]).toBe(10.5);
       expect(decoded.camera[1]).toBe(-3.25);
@@ -134,7 +139,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
       core.pack_body();
       core.pack_frame(0, 1, false, 0, 0, false, undefined, -1);
 
-      const decoded = unpackFrame(frameBuffer(core));
+      const decoded = decode(frameBuffer(core));
       const tracers = decoded.snapshot.w1;
 
       expect(tracers).toHaveLength(1);
@@ -160,7 +165,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
       core.pack_body();
       core.pack_frame(0, 1, false, 0, 0, false, undefined, -1);
 
-      let decoded = unpackFrame(frameBuffer(core));
+      let decoded = decode(frameBuffer(core));
       const bombs = decoded.snapshot.w2;
       const ids = Object.keys(bombs);
 
@@ -177,7 +182,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
       stepTicks(core, 50);
       core.pack_body();
       core.pack_frame(0, 2, false, 0, 0, false, undefined, -1);
-      decoded = unpackFrame(frameBuffer(core));
+      decoded = decode(frameBuffer(core));
 
       expect(decoded.snapshot.w2[ids[0]]).toBeNull(); // удаление с полотна
       expect(decoded.snapshot.w2e).toHaveLength(1);
@@ -197,7 +202,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
       core.pack_body();
       core.pack_frame(0, 1, false, 0, 0, false, undefined, -1);
 
-      const decoded = unpackFrame(frameBuffer(core));
+      const decoded = decode(frameBuffer(core));
 
       expect(decoded.snapshot.m1[1]).toBeNull();
     });
@@ -216,14 +221,14 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
       core.pack_body();
       core.pack_frame(0, 1, false, 0, 0, false, undefined, -1);
 
-      let decoded = unpackFrame(frameBuffer(core));
+      let decoded = decode(frameBuffer(core));
 
       expect(decoded.snapshot.w1).toHaveLength(2);
 
       // после дренажа — событий нет
       core.pack_body();
       core.pack_frame(0, 2, false, 0, 0, false, undefined, -1);
-      decoded = unpackFrame(frameBuffer(core));
+      decoded = decode(frameBuffer(core));
 
       expect(decoded.snapshot.w1).toBeUndefined();
     });

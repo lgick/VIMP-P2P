@@ -1,18 +1,29 @@
 import { vi } from 'vitest';
-import { unpackFrame } from '../../src/lib/snapshotCodec.js';
-import { coreAvailable, makeCore } from '../core/helpers.js';
+import {
+  coreAvailable,
+  makeCore,
+  makeClientCore,
+  decodeFrame,
+} from '../core/helpers.js';
 
 // Каркас интеграционных тестов host-фасада: строит HostGame поверх
 // реального Rust-ядра (pkg-node) — сквозное покрытие core-driven пути
-// (GameCoreAdapter → panel/reportKill, pack_body/pack_frame через реальный
-// unpackFrame в FakeSocketManager). Пропускается, если core/pkg-node
-// не собран (см. npm run core:build).
+// (GameCoreAdapter → panel/reportKill, pack_body/pack_frame; бинарные
+// кадры декодирует клиентское ядро — ClientCore.decode_frame, срез 2.6).
+// Пропускается, если core/pkg-node не собран (см. npm run core:build).
 //
 // Все игровые модули — синглтоны, поэтому тест-файлы обязаны изолироваться
 // через vi.resetModules() в beforeEach и импортировать всё ДИНАМИЧЕСКИ
 // внутри теста (не статическим top-level import).
 
 export { coreAvailable };
+
+// распаковка бинарного кадра клиентским ядром (лениво: без pkg-node
+// тесты скипаются до первого вызова)
+let frameDecoder = null;
+
+export const decodeShot = buffer =>
+  decodeFrame((frameDecoder ??= makeClientCore()), buffer);
 
 // Загружает реальные конфиги в свежий синглтон config (зеркало init
 // host.worker.js). Должна вызываться после vi.resetModules().
@@ -94,7 +105,7 @@ export class FakeSocketManager {
   }
 
   // последний sendShot для конкретного сокета; бинарный кадр декодируется
-  // реальным кодеком в прежнюю форму [snapshot, camera, serverTime, seq]
+  // клиентским ядром в прежнюю форму [snapshot, camera, serverTime, seq]
   lastShot(socketId) {
     const shots = this.frames.filter(
       f => f.method === 'sendShot' && f.socketId === socketId,
@@ -104,7 +115,7 @@ export class FakeSocketManager {
       return null;
     }
 
-    const frame = unpackFrame(shots[shots.length - 1].args[0]);
+    const frame = decodeShot(shots[shots.length - 1].args[0]);
 
     return [frame.snapshot, frame.camera, frame.serverTime, frame.seq];
   }
@@ -116,7 +127,7 @@ export class FakeSocketManager {
     );
 
     return shots.length
-      ? unpackFrame(shots[shots.length - 1].args[0])
+      ? decodeShot(shots[shots.length - 1].args[0])
       : null;
   }
 

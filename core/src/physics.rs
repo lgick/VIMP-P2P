@@ -84,6 +84,34 @@ pub fn clamp(value: f32, min: f32, max: f32) -> f32 {
     value.min(max).max(min)
 }
 
+/// Интерполяция угла по кратчайшему пути (lib/math.js lerpAngle).
+pub fn lerp_angle(a: f32, b: f32, t: f32) -> f32 {
+    let mut diff = b - a;
+
+    while diff > core::f32::consts::PI {
+        diff -= core::f32::consts::PI * 2.0;
+    }
+
+    while diff < -core::f32::consts::PI {
+        diff += core::f32::consts::PI * 2.0;
+    }
+
+    a + diff * t
+}
+
+/// Нормализация угла к диапазону [-PI, PI] (lib/math.js normalizeAngle).
+pub fn normalize_angle(mut angle: f32) -> f32 {
+    while angle > core::f32::consts::PI {
+        angle -= core::f32::consts::PI * 2.0;
+    }
+
+    while angle < -core::f32::consts::PI {
+        angle += core::f32::consts::PI * 2.0;
+    }
+
+    angle
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

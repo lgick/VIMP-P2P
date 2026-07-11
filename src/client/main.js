@@ -1,5 +1,6 @@
 import './style.css';
 import { Application, Ticker } from 'pixi.js';
+import init, { ClientCore } from '../../core/pkg-web/vimp_core.js';
 import InputListener from './InputListener.js';
 import AuthModel from './components/model/Auth.js';
 import AuthView from './components/view/Auth.js';
@@ -25,15 +26,12 @@ import StatCtrl from './components/controller/Stat.js';
 import VoteModel from './components/model/Vote.js';
 import VoteView from './components/view/Vote.js';
 import VoteCtrl from './components/controller/Vote.js';
+import { buildClientCoreConfig } from '../lib/clientCoreConfig.js';
 import Factory from '../lib/factory.js';
 import { formatMessage } from '../lib/formatters.js';
 import { sanitizeMessage } from '../lib/sanitizers.js';
-import { unpackFrame } from '../lib/snapshotCodec.js';
 import { validateAuth } from '../lib/validators.js';
 import SoundManager from './SoundManager.js';
-import SnapshotInterpolator from './SnapshotInterpolator.js';
-import TankPredictor from './TankPredictor.js';
-import ShotPredictor from './ShotPredictor.js';
 import SignalingClient from './network/SignalingClient.js';
 import WebRtcManager from './network/WebRtcManager.js';
 import HostController from './network/HostController.js';
@@ -44,6 +42,7 @@ import LobbyView from './components/view/Lobby.js';
 import LobbyCtrl from './components/controller/Lobby.js';
 import BakingProvider from './providers/BakingProvider.js';
 import DependencyProvider from './providers/DependencyProvider.js';
+import { HOT_FLAGS, SNAPSHOT_KEYS_BY_ID } from '../config/opcodes.js';
 import wsports from '../config/wsports.js';
 import lobbyConfig from '../config/lobby.js';
 import clientConfig from '../config/client.js';
@@ -55,7 +54,6 @@ const PS_AUTH_DATA = wsports.server.AUTH_DATA;
 const PS_AUTH_RESULT = wsports.server.AUTH_RESULT;
 const PS_MAP_DATA = wsports.server.MAP_DATA;
 const PS_FIRST_SHOT_DATA = wsports.server.FIRST_SHOT_DATA;
-const PS_SHOT_DATA = wsports.server.SHOT_DATA;
 const PS_SOUND_DATA = wsports.server.SOUND_DATA;
 const PS_GAME_INFORM_DATA = wsports.server.GAME_INFORM_DATA;
 const PS_TECH_INFORM_DATA = wsports.server.TECH_INFORM_DATA;
@@ -126,18 +124,12 @@ let entitiesOnCanvas = {}; // сущности, отображаемые на п
 let currentMapSetId; // текущий id набора конструкторов для карт
 const socketMethods = []; // методы для обработки сокет-данных
 
-// буфер snapshot-интерполяции (создаётся при получении конфига)
-let interpolator = null;
-
-// предикшен своего танка (создаётся при получении конфига)
-let predictor = null;
-
-// визуальный спавн снарядов своего танка (создаётся при получении конфига)
-let shotPredictor = null;
+// клиентское ядро (WASM, срез 2.6): интерполяция снапшотов, предикт своего
+// танка, визуальный спавн выстрелов и распаковка кадров v3 — создаётся при
+// получении конфига; wasm — результат init() для zero-copy чтения памяти
+let clientCore = null;
+let wasm = null;
 let inputSeq = 0; // номер отправленного ввода (KEYS_DATA)
-let myGameId = null; // id своего танка (из player-блока кадра)
-let myModelName = null; // модель своего танка (из формы авторизации)
-let myTankMeta = null; // последние дискретные поля своего танка из снапшота
 
 // SOCKET МЕТОДЫ
 
@@ -146,13 +138,11 @@ socketMethods[PS_CONFIG_DATA] = async data => {
   gameSets = data.parts.gameSets;
   entitiesOnCanvas = data.parts.entitiesOnCanvas;
 
-  interpolator = new SnapshotInterpolator(data.interpolation);
-
-  // конфиг предикшена добавляет хост (buildClientConfig в Worker'е)
-  if (data.prediction) {
-    predictor = new TankPredictor(data.prediction);
-    shotPredictor = new ShotPredictor(data.prediction);
-  }
+  // клиентское ядро: интерполяция + предикт + спавн выстрелов; конфиг
+  // собирается из interpolation/prediction CONFIG_DATA (хост шлёт их
+  // через buildClientConfig в Worker'е)
+  wasm = await init();
+  clientCore = new ClientCore(JSON.stringify(buildClientCoreConfig(data)));
 
   // инициализация сущностей игры
   for (const entity of Object.keys(entitiesOnCanvas)) {
@@ -248,9 +238,7 @@ socketMethods[PS_AUTH_DATA] = data => {
 
   authModel.publisher.on('socket', data => {
     // модель танка пользователя — для реплик движения и выстрелов
-    myModelName = data.model;
-    predictor?.setModel(data.model);
-    shotPredictor?.setModel(data.model);
+    clientCore?.set_model(data.model);
 
     sending(PC_AUTH_RESPONSE, data);
   });
@@ -283,9 +271,20 @@ socketMethods[PS_AUTH_RESULT] = async err => {
 socketMethods[PS_MAP_DATA] = data => {
   const { scale, layers, map, step, setId, spriteSheet, physicsStatic } = data;
 
-  interpolator.reset();
-  predictor?.reset();
-  shotPredictor?.setMap(data);
+  // ядру — мир для raycast выстрелов (+сброс буфера кадров и предикта)
+  try {
+    clientCore?.set_map(
+      JSON.stringify({
+        map,
+        step,
+        scale,
+        physicsStatic,
+        physicsDynamic: data.physicsDynamic,
+      }),
+    );
+  } catch (e) {
+    console.warn('[clientCore] set_map failed:', e);
+  }
 
   // удаление данных карт
   const removeMap = setId => {
@@ -357,7 +356,7 @@ socketMethods[PS_FIRST_SHOT_DATA] = data => {
 // panel data
 socketMethods[PS_PANEL_DATA] = data => {
   modules.panel.update(data);
-  shotPredictor?.syncPanel(data);
+  clientCore?.sync_panel(JSON.stringify(data));
 };
 
 // stat data
@@ -378,8 +377,7 @@ socketMethods[PS_VOTE_DATA] = data => {
 // keyset data (смена режима спектатор/игрок)
 socketMethods[PS_KEYSET_DATA] = keySet => {
   modules.controls.changeKeySet(keySet);
-  predictor?.setActive(keySet === 1);
-  shotPredictor?.reset();
+  clientCore?.set_active(keySet === 1);
 };
 
 // sound data
@@ -462,9 +460,7 @@ socketMethods[PS_CLEAR] = function (setIdList) {
     }
   }
 
-  interpolator.reset();
-  predictor?.reset();
-  shotPredictor?.reset();
+  clientCore?.reset();
   soundManager.reset();
 };
 
@@ -500,83 +496,86 @@ function applyShot(game, camera) {
   applyCamera(camera);
 }
 
-// отслеживает свой танк в дискретном кадре: дискретные поля для предикшена,
-// заморозка при уничтожении, сброс предикта при reset камеры
-function trackOwnTank(frame) {
-  if (!predictor) {
-    return;
+// восстанавливает объект игровых данных из плоского hot-буфера ядра:
+// [3] N танков × 12 (keyId, gameId, x, y, angle, gun, vx, vy, engineLoad,
+// condition, size, teamId), затем M динамики × 5 (keyId, index, x, y, angle);
+// predicted-запись (последняя) перекрывает свой танк — предикт поверх
+// интерполяции тем же parse-конвейером
+function reconstructHot(hot) {
+  const game = {};
+  let i = 3;
+
+  const readTankRecord = () => {
+    const { key } = SNAPSHOT_KEYS_BY_ID[hot[i]];
+
+    (game[key] ??= {})[hot[i + 1]] = [
+      hot[i + 2],
+      hot[i + 3],
+      hot[i + 4],
+      hot[i + 5],
+      hot[i + 6],
+      hot[i + 7],
+      hot[i + 8],
+      hot[i + 9],
+      hot[i + 10],
+      hot[i + 11],
+    ];
+    i += 12;
+  };
+
+  const tankCount = hot[i];
+
+  i += 1;
+
+  for (let n = 0; n < tankCount; n += 1) {
+    readTankRecord();
   }
 
-  // reset камеры (respawn/телепорт/смена наблюдения) → сброс предсказания
-  if (frame.camera !== 0 && frame.camera[2] === true) {
-    predictor.reset();
+  const dynCount = hot[i];
+
+  i += 1;
+
+  for (let n = 0; n < dynCount; n += 1) {
+    const { key } = SNAPSHOT_KEYS_BY_ID[hot[i]];
+
+    (game[key] ??= {})[`d${hot[i + 1]}`] = [hot[i + 2], hot[i + 3], hot[i + 4]];
+    i += 5;
   }
 
-  if (myGameId === null || !myModelName) {
-    return;
+  if (hot[0] & HOT_FLAGS.PREDICTED) {
+    readTankRecord();
   }
 
-  const ownData = frame.game[myModelName]?.[myGameId];
-
-  if (ownData === null) {
-    myTankMeta = null; // танк удалён с полотна
-  } else if (ownData) {
-    myTankMeta = [ownData[7], ownData[8], ownData[9]];
-    predictor.freeze(ownData[7] === 0); // танк уничтожен — предикт заморожен
-  }
+  return game;
 }
 
-// рендер-тик: проигрывает пересечённые кадры (события, создания/удаления),
-// применяет интерполированные позиции/камеру и перекрывает свой танк
-// предсказанным состоянием
+// рендер-тик: ядро выдаёт пересечённые кадры (события, создания/удаления)
+// JSON-очередью, а горячие позиции (танки/динамика/камера + предсказанный
+// свой танк) — плоским Float32-буфером zero-copy из памяти WASM
 function renderTick() {
-  const now = performance.now();
-  const { frames, game, camera } = interpolator.sample(now);
-
-  shotPredictor?.setServerOffset(interpolator.offset);
-
-  frames.forEach(frame => {
-    trackOwnTank(frame);
-
-    // серверные дубли локально заспавненных выстрелов подавляются
-    const frameGame = shotPredictor
-      ? shotPredictor.filterServerSnapshot(frame.game, myGameId, now)
-      : frame.game;
-
-    applyShot(frameGame, frame.camera);
-    shotPredictor?.updateWorld(frameGame);
-  });
-
-  if (game) {
-    applyGameData(game);
-    shotPredictor?.updateWorld(game);
+  if (!clientCore) {
+    return;
   }
 
-  predictor?.update(now);
+  const len = clientCore.sample(performance.now());
 
-  const predicted = predictor?.getRenderState() ?? null;
+  // view пересоздаётся каждый тик: рост памяти WASM детачит buffer
+  const hot = new Float32Array(wasm.memory.buffer, clientCore.hot_ptr(), len);
+  const flags = hot[0];
 
-  if (predicted && myGameId !== null && myTankMeta) {
-    // свой танк рендерится предсказанным состоянием поверх интерполяции
-    applyGameData({
-      [myModelName]: {
-        [myGameId]: [
-          predicted.x,
-          predicted.y,
-          predicted.angle,
-          predicted.gunRotation,
-          predicted.vx,
-          predicted.vy,
-          predicted.engineLoad,
-          ...myTankMeta,
-        ],
-      },
+  if (flags & HOT_FLAGS.FRAMES) {
+    JSON.parse(clientCore.take_frames()).forEach(frame => {
+      applyShot(frame.game, frame.camera);
     });
+  }
 
-    // камера следует предсказанному танку (reset/shake — дискретными кадрами)
-    applyCamera([predicted.x, predicted.y]);
-  } else {
-    applyCamera(camera);
+  if (flags & (HOT_FLAGS.GAME | HOT_FLAGS.PREDICTED)) {
+    applyGameData(reconstructHot(hot));
+  }
+
+  if (flags & HOT_FLAGS.CAMERA) {
+    // камера уже разрешена ядром: предсказанная позиция либо интерполированная
+    applyCamera([hot[1], hot[2]]);
   }
 
   soundManager.processAudibility();
@@ -714,29 +713,19 @@ function runModules(data) {
     const now = performance.now();
 
     inputSeq = (inputSeq + 1) >>> 0;
-    predictor?.applyInput(action, name, now);
+    clientCore?.apply_input(action, name, now);
 
     // визуальный спавн своего выстрела и локальная смена оружия
-    // (только живой танк: myTankMeta[0] — condition)
-    if (
-      action === 'down' &&
-      shotPredictor &&
-      predictor?.hasState &&
-      myTankMeta &&
-      myTankMeta[0] !== 0
-    ) {
+    // (гейты в ядре: предикт активен, свой танк жив)
+    if (action === 'down' && clientCore) {
       if (name === 'fire') {
-        const spawn = shotPredictor.tryFire(
-          predictor.getRenderState(),
-          myGameId,
-          now,
-        );
+        const spawn = clientCore.try_fire(now);
 
         if (spawn) {
-          applyGameData(spawn);
+          applyGameData(JSON.parse(spawn));
         }
       } else if (name === 'nextWeapon' || name === 'prevWeapon') {
-        shotPredictor.cycleWeapon(name === 'prevWeapon');
+        clientCore.cycle_weapon(name === 'prevWeapon');
       }
     }
 
@@ -819,32 +808,10 @@ function handleVisibilityChange() {
 
 // обрабатывает входящий пакет: ArrayBuffer → кадр снапшота, строка → JSON-порт
 function handleMessage(data) {
-  // бинарный кадр (snapshot, порт SHOT_DATA) — в буфер интерполяции
+  // бинарный кадр (snapshot, порт SHOT_DATA) — в ядро: распаковка, вставка
+  // в буфер по seq, reconciliation предикта по player-блоку
   if (data instanceof ArrayBuffer) {
-    const frame = unpackFrame(data);
-
-    if (frame && frame.port === PS_SHOT_DATA) {
-      const now = performance.now();
-
-      interpolator.push(
-        frame.snapshot,
-        frame.camera,
-        frame.serverTime,
-        now,
-        frame.seq,
-      );
-
-      // authoritative-состояние своего танка → reconciliation предикшена
-      if (frame.player && predictor) {
-        myGameId = frame.player.gameId;
-        predictor.onServerState(
-          frame.player,
-          frame.serverTime,
-          interpolator.offset,
-          now,
-        );
-      }
-    }
+    clientCore?.push_frame(new Uint8Array(data), performance.now());
 
     return;
   }

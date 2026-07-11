@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { unpackFrame } from '../../src/lib/snapshotCodec.js';
 import {
   coreAvailable,
   createHost,
+  decodeShot,
   connectPlayer,
   joinTeam,
   tick,
@@ -11,8 +11,8 @@ import {
 
 // Интеграция host-фасада поверх реального Rust-ядра (pkg-node): полный
 // core-driven путь — онбординг, активный игрок, движение, стрельба, боты,
-// проекция событий ядра в мету. Бинарные кадры декодируются реальным
-// unpackFrame в FakeSocketManager. Пропуск без собранного ядра.
+// проекция событий ядра в мету. Бинарные кадры декодирует клиентское
+// ядро (ClientCore.decode_frame). Пропуск без собранного ядра.
 
 describe.skipIf(!coreAvailable)('HostGame (core-driven)', () => {
   let host;
@@ -88,7 +88,7 @@ describe.skipIf(!coreAvailable)('HostGame (core-driven)', () => {
     const withTracer = socket
       .framesOf('sendShot')
       .filter(f => f.socketId === 's1')
-      .map(f => unpackFrame(f.args[0]))
+      .map(f => decodeShot(f.args[0]))
       .some(frame => frame.snapshot.w1 && frame.snapshot.w1.length > 0);
 
     expect(withTracer).toBe(true);
@@ -146,7 +146,7 @@ describe.skipIf(!coreAvailable)('HostGame (core-driven)', () => {
     const nullMarker = socket
       .framesOf('sendShot')
       .filter(f => f.socketId === 's2')
-      .map(f => unpackFrame(f.args[0]))
+      .map(f => decodeShot(f.args[0]))
       .some(frame => frame.snapshot.m1?.[gameId] === null);
 
     expect(nullMarker).toBe(true);

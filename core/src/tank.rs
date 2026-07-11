@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{CoreConfig, KeyConfig, ModelConfig, WeaponConfig};
 use crate::events::CoreEvent;
-use crate::physics::{BodyTag, clamp, deg_to_rad, lerp, round2};
+use crate::motion::{self, TurretInput};
+use crate::physics::{BodyTag, deg_to_rad, round2};
 use crate::rng::Rng;
 
 /// Битовые маски клавиш игрока, разрешённые из config.playerKeys.
@@ -67,7 +68,7 @@ pub struct Tank {
     width: f32,
     height: f32,
     mass: f32,
-    effective_turn_torque: f32,
+    inertia: f32,
 
     // ввод
     current_keys: u32,
@@ -137,7 +138,6 @@ impl Tank {
         let body = &world.bodies[body_handle];
         let mass = body.mass();
         let inertia = body.mass_properties().local_mprops.principal_inertia();
-        let effective_turn_torque = model.base_turn_torque_factor * inertia;
 
         let current_weapon = cfg
             .weapons
@@ -159,7 +159,7 @@ impl Tank {
             width,
             height,
             mass,
-            effective_turn_torque,
+            inertia,
             current_keys: 0,
             one_shot_events: 0,
             gun_rotation: 0.0,
@@ -376,35 +376,14 @@ impl Tank {
         self.update_cooldowns(dt);
 
         // сначала поворот башни: gunRotation актуален перед расчётом выстрела
-        if g_center {
-            self.centering_gun = true;
-        }
+        let turret = TurretInput {
+            center: g_center,
+            left: g_left,
+            right: g_right,
+        };
 
-        if self.centering_gun {
-            self.gun_rotation = lerp(
-                self.gun_rotation,
-                0.0,
-                (model.gun_center_speed * dt).min(1.0),
-            );
-
-            if self.gun_rotation.abs() < 0.01 {
-                self.gun_rotation = 0.0;
-                self.centering_gun = false;
-            }
-
-            // ручной поворот во время центрирования отменяет центрирование
-            if g_left || g_right {
-                self.centering_gun = false;
-            }
-        } else {
-            let rotation_amount = model.gun_rotation_speed * dt;
-
-            if g_left {
-                self.gun_rotation = (self.gun_rotation - rotation_amount).max(-model.max_gun_angle);
-            } else if g_right {
-                self.gun_rotation = (self.gun_rotation + rotation_amount).min(model.max_gun_angle);
-            }
-        }
+        (self.gun_rotation, self.centering_gun) =
+            motion::step_turret(self.gun_rotation, self.centering_gun, turret, model, dt);
 
         if fire && self.try_consume_ammo_and_shoot(weapons, events) {
             let weapon = &weapons[self.current_weapon];
@@ -416,78 +395,42 @@ impl Tank {
             });
         }
 
-        if forward || back {
-            // игрок «давит на газ» — плавное увеличение до 1.0
-            self.engine_throttle =
-                (self.engine_throttle + model.throttle_increase_rate * dt).min(1.0);
-        } else {
-            self.engine_throttle =
-                (self.engine_throttle - model.throttle_decrease_rate * dt).max(0.0);
-        }
+        self.engine_throttle =
+            motion::step_throttle(self.engine_throttle, forward || back, model, dt);
 
         let current_velocity = body.linvel();
         let forward_vec = body.rotation().transform_vector(FORWARD);
         let current_forward_speed = current_velocity.dot(forward_vec);
 
-        // импульс против бокового скольжения (эквивалент силы F·dt)
+        // импульс против бокового скольжения: Δv · масса
         let lateral_vel = Self::lateral_velocity(body);
-        let sideways_magnitude = -lateral_vel * model.lateral_grip * self.mass;
+        let lateral_dv = motion::lateral_dv(lateral_vel, model, dt);
         let sideways_vec = body
             .rotation()
-            .transform_vector(Vector::new(0.0, sideways_magnitude));
+            .transform_vector(Vector::new(0.0, lateral_dv * self.mass));
 
-        body.apply_impulse(sideways_vec * dt, true);
+        body.apply_impulse(sideways_vec, true);
 
-        // сила тяги на основе engine_throttle
-        let mut force_magnitude = 0.0;
-        let effective_acceleration = model.acceleration_factor * self.mass;
+        // импульс тяги/торможения: ускорение · масса · dt
+        let accel = motion::drive_accel(
+            self.engine_throttle,
+            forward,
+            back,
+            current_forward_speed,
+            model,
+        );
 
-        if self.engine_throttle > 0.0 {
-            if forward && current_forward_speed < model.max_forward_speed {
-                force_magnitude = self.engine_throttle * effective_acceleration;
-            } else if back && current_forward_speed > model.max_reverse_speed {
-                force_magnitude = -self.engine_throttle * effective_acceleration;
-            }
+        if accel != 0.0 {
+            body.apply_impulse(forward_vec * (accel * self.mass * dt), true);
         }
 
-        // если газ отпущен — активное торможение
-        if force_magnitude == 0.0 && !forward && !back {
-            force_magnitude = -current_forward_speed * model.braking_factor * self.mass;
-        }
+        self.engine_load = motion::engine_load(self.engine_throttle, current_forward_speed, model);
 
-        if force_magnitude != 0.0 {
-            body.apply_impulse(forward_vec * (force_magnitude * dt), true);
-        }
+        // импульс поворота корпуса: Δω · инерция
+        let delta_omega = motion::turn_delta(left, right, current_forward_speed, model, dt);
 
-        // нагрузка двигателя (для звука): намерение + «напряжение»
-        let speed_ratio = self.speed_ratio(current_forward_speed, model);
-        let strain = (self.engine_throttle - speed_ratio).max(0.0);
-
-        self.engine_load = clamp(self.engine_throttle + strain * model.strain_factor, 0.0, 2.0);
-
-        // крутящий момент поворота
-        let mut turn_factor = 1.0;
-
-        if current_forward_speed.abs() < model.turn_speed_threshold {
-            turn_factor = model.base_turn_factor_ratio;
-        }
-
-        if current_forward_speed < 0.0 {
-            turn_factor *= model.reverse_turn_multiplier;
-        }
-
-        let mut torque = 0.0;
-
-        if left {
-            torque = -self.effective_turn_torque * turn_factor;
-        }
-
-        if right {
-            torque = self.effective_turn_torque * turn_factor;
-        }
-
-        if torque != 0.0 {
-            body.apply_torque_impulse(torque * dt, true);
+        if delta_omega != 0.0 {
+            body.apply_torque_impulse(delta_omega * self.inertia, true);
         }
 
         if next_weapon {
@@ -499,23 +442,6 @@ impl Tank {
         }
 
         shot_data
-    }
-
-    fn speed_ratio(&self, current_forward_speed: f32, model: &ModelConfig) -> f32 {
-        let ratio = if current_forward_speed > 0.0 {
-            clamp(current_forward_speed / model.max_forward_speed, 0.0, 1.0)
-        } else if current_forward_speed < 0.0 {
-            clamp(
-                (current_forward_speed / model.max_reverse_speed).abs(),
-                0.0,
-                1.0,
-            )
-        } else {
-            0.0
-        };
-
-        // округление до 4 знаков (JS +speedRatio.toFixed(4))
-        ((ratio as f64 * 10000.0).round() / 10000.0) as f32
     }
 
     /// Смена данных при переходе между командами / респауне

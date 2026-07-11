@@ -415,8 +415,9 @@ RTT-статистика, panel (здоровье/боезапас живут в
   хоста-игрока, `updateMaps`/`onMapChange`, эстафета Worker'ов (сбор меты на
   границе раунда, восстановление участников/счёта/`seq`, `completeHandoff` с
   киком не переподключившихся, `resumeAfterHandoff`, отказ по несовместимой
-  версии/ушедшей карте); бинарные кадры декодируются реальным `unpackFrame`
-  (каркас — `tests/host/harness.js` с `FakeSocketManager`).
+  версии/ушедшей карте); бинарные кадры декодирует клиентское ядро
+  (`ClientCore.decode_frame`; каркас — `tests/host/harness.js`
+  с `FakeSocketManager`).
 - `LoopbackTransport.test.js` — юнит на фейковом Worker: `HostController`
   (роутинг, очередь connect до `ready`, флаг `reliable`,
   `error`/`map_changed`/`updateMaps`; эстафета — `workerUrl`, буферизация на

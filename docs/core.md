@@ -2,8 +2,10 @@
 
 Единое ядро симуляции ([P2P-PLAN.md](../P2P-PLAN.md), Этап 2): физика,
 танки, оружие, боты и упаковка бинарных снапшотов написаны на Rust и
-компилируются в WASM. Ядро работает у браузерного хоста ([host.md](host.md));
-финальным срезом (п. 2.6 плана) в него переедет и клиентская математика.
+компилируются в WASM. Ядро работает у браузерного хоста (`GameCore`,
+[host.md](host.md)) **и у каждого клиента** (`ClientCore` — клиентская
+математика, перенесённая финальным срезом 2.6: интерполяция, предикт,
+визуальный спавн снарядов, распаковка кадров).
 
 **Граница ядра — симуляция, а не мета** (рамка плана): чат, голосования,
 статистика, панель, оркестрация раундов, реестр участников и auth остаются
@@ -15,24 +17,33 @@
 core/
 ├── Cargo.toml            # rapier2d (enhanced-determinism, serde), wasm-bindgen
 ├── src/
-│   ├── lib.rs            # публичный ABI (wasm-bindgen): GameCore
+│   ├── lib.rs            # публичный ABI (wasm-bindgen): GameCore + ClientCore
 │   ├── game.rs           # GameState — порт Game.js: тик, урон, детонация, hitscan
 │   ├── tank.rs           # Tank — порт Tank.js + BaseModel.js (движение, башня,
 │   │                     #   здоровье/боезапас/кулдауны — в ядре, не в панели)
+│   ├── motion.rs         # общие формулы движения (mass-free): один код для
+│   │                     #   авторитетного пути (импульсы Rapier) и реплики предикта
 │   ├── bomb.rs           # Bomb — тело снаряда (детонация в game.rs)
 │   ├── map.rs            # GameMap — порт Map.js + масштабирование карт
-│   ├── snapshot.rs       # SnapshotPacker — бинарный кадр v3 (байт-в-байт
-│   │                     #   с src/lib/snapshotCodec.js)
+│   ├── snapshot.rs       # SnapshotPacker — упаковка бинарного кадра v3
 │   ├── events.rs         # CoreEvent — события для JS-меты
-│   ├── config.rs         # serde-структуры init-конфига
+│   ├── config.rs         # serde-структуры init-конфигов (CoreConfig + ClientConfig)
 │   ├── physics.rs        # BodyTag (user_data тел), округления, углы
 │   ├── rng.rs            # детерминированный PRNG (SplitMix64)
-│   └── bots/             # ИИ ботов (порт легаси JS-ботов)
-│       ├── controller.rs # BotBrain — ИИ бота (ввод генерируется внутри ядра)
-│       ├── navigation.rs # нав-сетка + граф (NavigationSystem)
-│       ├── pathfinder.rs # A*
-│       └── spatial.rs    # пространственная сетка поиска целей
-├── tests/sim.rs          # интеграционные сценарии симуляции (cargo test)
+│   ├── bots/             # ИИ ботов (порт легаси JS-ботов)
+│   │   ├── controller.rs # BotBrain — ИИ бота (ввод генерируется внутри ядра)
+│   │   ├── navigation.rs # нав-сетка + граф (NavigationSystem)
+│   │   ├── pathfinder.rs # A*
+│   │   └── spatial.rs    # пространственная сетка поиска целей
+│   └── client/           # клиентский режим ядра (срез 2.6)
+│       ├── mod.rs        # ClientState — конвейер sample(), hot-буфер
+│       ├── unpack.rs     # декодер кадра v3 (порт unpackFrame) + JSON-формы
+│       ├── interpolator.rs # порт SnapshotInterpolator (буфер, seq, лерп)
+│       ├── predictor.rs  # порт TankPredictor (реплика движения на motion.rs)
+│       ├── shot.rs       # порт ShotPredictor (гейты, дубли, мир raycast)
+│       └── raycast.rs    # DDA по тайлам + OBB slab-тест
+├── tests/
+│   └── sim.rs            # интеграционные сценарии симуляции (cargo test)
 ├── pkg-web/              # сборка для браузера/Worker (генерируется, не в git)
 └── pkg-node/             # сборка для Node.js/Vitest (генерируется, не в git)
 ```
@@ -48,14 +59,14 @@ npm run core:build:node   # Node.js (тесты) → core/pkg-node/
 npm run core:test         # Rust-тесты ядра (cargo test)
 ```
 
-В `npm run build` сборка ядра пока не входит: рантайм его не потребляет до
-Этапа 4 (браузерный хост). На вехе Этапа 4 `core:build:web` включается в
-клиентскую сборку.
+`npm run build` включает `core:build:web`: WASM-бинарь нужен и Worker'у
+хоста, и клиенту (один ассет в сборке Vite).
 
 ## ABI: команды, события, кадры
 
-Единственный экспортируемый класс — `GameCore`. Данные при инициализации
-передаются JSON-строками; конфиг собирает `src/lib/coreConfig.js`
+Экспортируются два класса: **`GameCore`** (авторитетная симуляция хоста) и
+**`ClientCore`** (клиентский режим, см. ниже). Данные при инициализации
+передаются JSON-строками; конфиг `GameCore` собирает `src/lib/coreConfig.js`
 (`buildCoreConfig()`), карты экспортируются в JSON скриптом
 `npm run maps:export` (общий шаг с Этапом 5.1 — раздача карт без пересборки).
 
@@ -118,15 +129,59 @@ JSON-массив; буфер очищается при чтении. Топли
   web-таргета);
 - `frame_bytes()` — копия кадра (nodejs-таргет память наружу не отдаёт).
 
-Клиент распаковывает кадры существующим `unpackFrame`
-(`src/lib/snapshotCodec.js`) без изменений — совместимость закреплена
-round-trip-тестами `tests/core/core.test.js`.
+Кадры распаковывает клиентское ядро (`core/src/client/unpack.rs`) — pack и
+unpack живут в одном crate, расхождение раскладок исключено по построению;
+формы закреплены round-trip-тестами (`#[cfg(test)]` в `unpack.rs` +
+`tests/core/core.test.js` и `tests/core/clientCore.test.js`).
 
 ### Запросы состояния
 
 `is_alive(id)`, `position_of(id)` (скруглено до 2 знаков, как
 `Game.getPosition`), `last_input_seq(id)`, `alive_players()` (плоский массив
 `[id, teamId, x, y, ...]`).
+
+## ClientCore — клиентский режим ядра (срез 2.6)
+
+Второй wasm-bindgen класс того же бинаря; живёт в главном потоке вкладки
+клиента (у хоста-игрока — второй инстанс WASM рядом с Worker'ом). Конфиг
+собирает [src/lib/clientCoreConfig.js](../src/lib/clientCoreConfig.js) из
+секций `prediction`/`interpolation` CONFIG_DATA + бандлового реестра
+`opcodes.js`; поле `timeStepMs` фиксирует единицы (мс — в отличие от
+`CoreConfig.timeStep` в секундах).
+
+| Метод | Назначение |
+| --- | --- |
+| `new ClientCore(config_json)` | модели/оружие/клавиши + реестр снапшот-ключей + interpolation |
+| `push_frame(bytes, localNow)` | распаковка кадра, вставка в буфер по `seq` (+дедуп/опоздавшие), reconciliation предикта по player-блоку; `false` — кадр отброшен (порт/версия/повреждён) |
+| `my_game_id()` / `offset()` | свой id из player-блока (−1) / EMA-оценка `serverTime − localNow` (NaN) |
+| `sample(localNow)` | весь рендер-тик: выдача пересечённых кадров (фильтр дублей → JSON-очередь), интерполяция, шаг предикта; возвращает длину hot-буфера |
+| `hot_ptr()` / `hot_values()` | zero-copy указатель на hot-буфер (web) / копия (nodejs) |
+| `take_frames()` | событийные кадры JSON-строкой `[{game, camera}, …]` (форма `applyShot`); очередь очищается |
+| `apply_input(action, key, localNow)` | ввод в историю предикта |
+| `try_fire(localNow)` | локальный визуальный выстрел; гейты (кулдаун/патроны/pending-бомба/жив/активен) внутри; JSON спавна либо `undefined` |
+| `cycle_weapon(back)` | локальный цикл смены оружия (авторитетное подтверждение — панелью) |
+| `set_model(name)` / `set_active(bool)` / `set_map(json)` / `sync_panel(json)` / `reset()` | зеркала портов клиента: авторизация, KEYSET, MAP_DATA, PANEL_DATA, CLEAR |
+| `decode_frame(bytes)` | чистая распаковка v3 → JSON формы `unpackFrame` (тесты/харнесс); `'null'` при чужой версии |
+
+**Раскладка hot-буфера** (Float32, плоский, переиспользуемый):
+`[0]` — флаги (`HOT_FLAGS` в `opcodes.js`: game/camera/predicted/frames),
+`[1..2]` — камера x/y (уже разрешённая ядром: предсказанная позиция либо
+интерполированная), `[3]` — N танков, далее N×12
+(`keyId, gameId, x, y, angle, gun, vx, vy, engineLoad, condition, size,
+teamId`), затем M динамики × 5 (`keyId, index, x, y, angle`); последней —
+predicted-запись своего танка (12, тем же форматом — перекрывает
+интерполированную). `keyId` — числовые id из `SNAPSHOT_KEYS`.
+
+**motion.rs** — общие mass-free формулы тика движения (башня, дроссель,
+боковое сцепление, тяга/торможение, нагрузка двигателя, поворот):
+авторитетный путь (`Tank::update`) домножает их на массу/инерцию для
+импульсов Rapier, реплика предикта интегрирует вручную (позиция скоростью
+ДО демпфирования → `v *= 1/(1+dt·d)` — эмпирический порядок Rapier).
+Реплика не может разойтись с авторитетным путём по формулам; паритет
+интеграции закрепляют cargo-тесты `client::predictor::parity` (6 сценариев,
+замена удалённого JS-паритета `predictorParity.test.js`).
+⚠️ **Любая правка движения в ядре или `models.js` — обязательный прогон
+`npm run core:test`.**
 
 ## Детерминизм
 
@@ -141,10 +196,10 @@ round-trip-тестами `tests/core/core.test.js`.
 
 | Слой | Где | Что покрывает |
 | --- | --- | --- |
-| Rust unit | `core/src/*` (`#[cfg(test)]`) | PRNG, BodyTag, раскладка кадра, нав-сетка, A*, пространственная сетка |
+| Rust unit | `core/src/*` (`#[cfg(test)]`) | PRNG, BodyTag, раскладка кадра, нав-сетка, A*, пространственная сетка; клиентский модуль: round-trip unpack, интерполятор (seq/дедуп/late/лерп), предикт (replay/visualError/freeze), выстрелы (гейты/дубли/RTT), raycast, hot-буфер |
+| Паритет реплики | `core/src/client/predictor.rs` (`mod parity`) | реплика движения предикта против Rapier-мира (6 сценариев) — **обязателен к прогону при любой правке движения в ядре или `models.js`** |
 | Rust интеграция | `core/tests/sim.rs` | сценарии симуляции: езда, стены, hitscan-килл, friendly fire, бомба, смена оружия, боты (патруль и бой), очистки, handoff |
-| JS↔WASM харнесс | `tests/core/core.test.js` | ABI на реальном конфиге/картах + round-trip кадров через `unpackFrame` |
-| Паритет реплики | `tests/core/predictorParity.test.js` | `TankPredictor` (клиентская реплика движения) против ядра — обязателен к прогону при любой правке движения в ядре или `models.js` |
+| JS↔WASM харнесс | `tests/core/core.test.js` + `tests/core/clientCore.test.js` | ABI на реальном конфиге/картах, round-trip кадров через `decode_frame`; e2e клиентского ядра: интерполяция, реордер seq, предикт (сходимость с ядром на реальном конфиге), try_fire и подавление дублей |
 
 Тесты `tests/core/` входят в `npm test` и **пропускаются**, если
 `core/pkg-node/` не собран (JS-разработка возможна без Rust-тулчейна).

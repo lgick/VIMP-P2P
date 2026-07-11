@@ -3,9 +3,9 @@
 Игровой протокол между клиентом и хостом использует два формата сообщений:
 
 - **JSON**: `[portId, payload]` — все каналы, кроме снапшота. `portId` — числовой id из [src/config/wsports.js](../src/config/wsports.js) (источник истины).
-- **Бинарный**: кадр игрового снапшота (порт `5`, SHOT_DATA) — `ArrayBuffer`, упакованный кодеком [src/lib/snapshotCodec.js](../src/lib/snapshotCodec.js).
+- **Бинарный**: кадр игрового снапшота (порт `5`, SHOT_DATA) — `ArrayBuffer`, упакованный ядром (`core/src/snapshot.rs`).
 
-Клиент различает форматы по типу входящих данных: строка → JSON-диспетчер `socketMethods[portId]` ([src/client/main.js](../src/client/main.js) `handleMessage`), `ArrayBuffer` → `unpackFrame` → буфер интерполятора.
+Клиент различает форматы по типу входящих данных: строка → JSON-диспетчер `socketMethods[portId]` ([src/client/main.js](../src/client/main.js) `handleMessage`), `ArrayBuffer` → `ClientCore.push_frame` (распаковка и буфер интерполяции — в клиентском ядре, см. [core.md](core.md#clientcore--клиентский-режим-ядра-срез-26)).
 
 ## Транспорт (WebRTC)
 
@@ -97,7 +97,7 @@
 
 ## Бинарный snapshot-кадр (порт 5)
 
-Кодек: [src/lib/snapshotCodec.js](../src/lib/snapshotCodec.js) (`SnapshotPacker` на сервере, `unpackFrame` на клиенте). Реестр ключей и версия формата: [src/config/opcodes.js](../src/config/opcodes.js) (`SNAPSHOT_FORMAT_VERSION = 3`). `DataView`, big-endian, ручной block-layout без библиотек. При несовпадении версии клиент отбрасывает кадр.
+Кодек целиком в Rust-ядре: упаковка — `core/src/snapshot.rs` (у хоста), распаковка — `core/src/client/unpack.rs` (у клиента); обе стороны в одном crate — расхождение раскладок исключено по построению. Реестр ключей и версия формата: [src/config/opcodes.js](../src/config/opcodes.js) (`SNAPSHOT_FORMAT_VERSION = 3`). Big-endian, ручной block-layout без библиотек. При несовпадении версии клиент отбрасывает кадр.
 
 Сервер пакует **тело** (broadcast-часть) один раз за тик (`packBody`), затем для каждого пользователя собирает кадр `packFrame` = персональный заголовок + копия тела.
 
@@ -127,9 +127,9 @@
 | `w2e` | 4 | `explosions` | массив `[x, y, radius]` |
 | `c1`/`c2` | 5/6 | `dynamics` | `{'dN': [x, y, angle]}` — динамические элементы карты |
 
-Все float исходно округлены сервером до 2 знаков; декодер восстанавливает значения повторным округлением Float32. События оружия несут id автора (`shooterId`/`ownerId`, добавлены в v3) — по нему стрелок подавляет серверные дубли локально заспавненных выстрелов (`ShotPredictor.filterServerSnapshot`).
+Все float исходно округлены хостом до 2 знаков; декодер восстанавливает значения повторным округлением Float32 (player-блок — без округления). События оружия несут id автора (`shooterId`/`ownerId`, добавлены в v3) — по нему стрелок подавляет авторитетные дубли локально заспавненных выстрелов (клиентское ядро, `core/src/client/shot.rs`).
 
-При добавлении нового оружия/сущности его snapshot-ключ **обязан** быть зарегистрирован в `SNAPSHOT_KEYS`, иначе `packBody` бросит ошибку. Если существующие `kind` не подходят — добавить новую раскладку блока в `snapshotCodec.js` и поднять версию формата. См. [extending.md](extending.md#новое-оружие).
+При добавлении нового оружия/сущности его snapshot-ключ **обязан** быть зарегистрирован в `SNAPSHOT_KEYS`, иначе `pack_body` бросит ошибку. Если существующие `kind` не подходят — добавить новую раскладку блока в `core/src/snapshot.rs` + `core/src/client/unpack.rs` и поднять версию формата. См. [extending.md](extending.md#новое-оружие).
 
 ## Формат ввода: `"seq:action:name"`
 

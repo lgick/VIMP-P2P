@@ -4,7 +4,7 @@
 
 - **Node.js 22** (CI использует Node 22), npm;
 - **mkcert** — локальные HTTPS-сертификаты обязательны для разработки (сигнальный WebSocket работает по `wss://`, WebRTC требует secure context);
-- **Rust-тулчейн** (`rustup` + `wasm-pack`) — для сборки WASM-ядра, которое грузит браузерный хост (см. [ниже](#rust-тулчейн-ядро-core)).
+- **Rust-тулчейн** (`rustup` + `wasm-pack`) — для сборки WASM-ядра, которое грузят браузерный хост и клиент (см. [ниже](#rust-тулчейн-ядро-core)).
 
 ## Установка
 
@@ -82,6 +82,6 @@ npm run core:test             # Rust-тесты
 - `node` — `tests/master`, `tests/host`, `tests/lib`, `tests/config`, `tests/core` (окружение node);
 - `client` — `tests/client` (окружение happy-dom).
 
-Тесты лежат в `tests/` и зеркалят структуру `src/`. Интеграция host-фасада поверх реального ядра — `tests/host/HostGame.test.js`; JS↔WASM харнесс Rust-ядра — в `tests/core/` (пропускается без собранного `core/pkg-node/`, см. [core.md](core.md)); Rust-тесты ядра гоняются отдельно (`npm run core:test`). Правило проекта: **любое изменение кода завершается зелёными `npx eslint .` и `npm test`**; при правке движения в ядре или `models.js` обязателен паритет-тест `tests/core/predictorParity.test.js`.
+Тесты лежат в `tests/` и зеркалят структуру `src/`. Интеграция host-фасада поверх реального ядра — `tests/host/HostGame.test.js`; JS↔WASM харнесс Rust-ядра — в `tests/core/` (пропускается без собранного `core/pkg-node/`, см. [core.md](core.md)); Rust-тесты ядра гоняются отдельно (`npm run core:test`). Правило проекта: **любое изменение кода завершается зелёными `npx eslint .` и `npm test`**; при правке движения в ядре или `models.js` обязателен cargo-паритет реплики предикта (`npm run core:test`).
 
 CI (`.github/workflows/test.yml`) гоняет eslint, Rust-тесты ядра, сборку nodejs-таргета ядра и Vitest на каждый push/PR.

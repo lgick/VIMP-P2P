@@ -48,14 +48,15 @@ src/
                    Chat, Panel, Stat, Vote)
     parts/       — PixiJS-сущности и эффекты
     providers/   — BakingProvider (текстуры), DependencyProvider
-    SnapshotInterpolator.js / TankPredictor.js / ShotPredictor.js / SoundManager.js
+    SoundManager.js / InputListener.js
   config/        — общие конфиги (game, client, auth, sounds, wsports, opcodes,
                    lobby, master)
   data/          — статические данные: maps/, models.js, weapons.js
-  lib/           — общие утилиты: Publisher, factory, math, vec2, raycast,
-                   snapshotCodec, validators, sanitizers, security, config, …
+  lib/           — общие утилиты: Publisher, factory, math, validators,
+                   sanitizers, security, config, clientCoreConfig, …
 core/            — Rust-ядро симуляции → WASM: физика, танки, оружие, боты,
-                   упаковка снапшотов (docs/core.md)
+                   кодек снапшотов и клиентская математика — интерполяция,
+                   предикт, спавн снарядов (src/client в core/, docs/core.md)
 tests/           — Vitest (tests/host — хост и мета; tests/core — JS↔WASM
                    харнесс ядра; tests/master, tests/client, tests/lib)
 public/          — статика (звуки)
@@ -144,17 +145,19 @@ Worker'е.
 
 ## Клиентская сторона
 
-Клиент строится вокруг трёх механизмов сглаживания сети (подробно — [client.md](client.md)):
+Клиент строится вокруг трёх механизмов сглаживания сети; все три живут в клиентском ядре — WASM-классе `ClientCore` того же Rust-бинаря (срез 2.6; подробно — [client.md](client.md), ABI — [core.md](core.md#clientcore--клиентский-режим-ядра-срез-26)):
 
-- **Интерполяция** (`SnapshotInterpolator`): кадры буферизуются, мир рендерится в прошлом (`serverNow − 100 мс`); события выдаются ровно один раз, позиции интерполируются.
-- **Предсказание** (`TankPredictor`): свой танк симулируется локальной репликой авторитетной модели движения; хост подтверждает ввод (`lastInputSeq`), reconciliation переигрывает неподтверждённые вводы, расхождение плавно затухает.
-- **Клиентский спавн снарядов** (`ShotPredictor`): выстрел виден и слышен мгновенно, дубли от хоста подавляются по id автора.
+- **Интерполяция** (`core/src/client/interpolator.rs`): кадры буферизуются, мир рендерится в прошлом (`serverNow − 100 мс`); события выдаются ровно один раз, позиции интерполируются.
+- **Предсказание** (`core/src/client/predictor.rs`): свой танк симулируется репликой авторитетной модели движения (формулы общие с ядром — `motion.rs`); хост подтверждает ввод (`lastInputSeq`), reconciliation переигрывает неподтверждённые вводы, расхождение плавно затухает.
+- **Клиентский спавн снарядов** (`core/src/client/shot.rs`): выстрел виден и слышен мгновенно, дубли от хоста подавляются по id автора.
+
+JS-оболочка читает результат рендер-тика плоским Float32-буфером zero-copy из памяти WASM (горячие позиции) и JSON-строкой (редкие событийные кадры), применяя его прежним parse-конвейером.
 
 Рендеринг — MVC-компоненты + PixiJS-сущности `parts/` на двух полотнах (`vimp`, `radar`), процедурные текстуры запекаются при старте.
 
 ## Ключевые инварианты
 
 - **Источник истины по портам** — `src/config/wsports.js`; по snapshot-ключам и версии бинарного формата — `src/config/opcodes.js`.
-- **Паритет реплики движения**: движение танка в Rust-ядре и клиентская реплика `TankPredictor` обязаны совпадать численно; закреплено тестом `tests/core/predictorParity.test.js` — любая правка движения в ядре или коэффициентов `models.js` требует его прогона.
+- **Паритет реплики движения**: авторитетное движение (Rapier) и реплика клиентского предикта делят формулы тика (`core/src/motion.rs`); паритет интеграции закреплён cargo-тестами (`client::predictor::parity`) — любая правка движения в ядре или коэффициентов `models.js` требует прогона `npm run core:test`.
 - **Единое числовое пространство id** для людей и ботов; различение — `isBot`/`isNetworked`. Ядро оперирует числовыми id, мета ключует строками — приведение на границе `GameCoreAdapter`.
 - Все отправки клиенту — только через `SocketManager`.

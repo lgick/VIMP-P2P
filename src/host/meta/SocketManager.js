@@ -290,7 +290,7 @@ export default class SocketManager {
   /**
    * Отправка игровых данных (бинарный snapshot-кадр).
    * @param {string} socketId
-   * @param {ArrayBuffer} frameBuffer - Кадр из SnapshotPacker.packFrame.
+   * @param {ArrayBuffer} frameBuffer - Кадр из pack_frame ядра.
    * @param {boolean} [reliable] - событийный ли кадр (WebRTC meta) или
    *   позиционный (state).
    */

@@ -175,3 +175,33 @@ pub struct SnapshotConfig {
     pub port: u8,
     pub keys: IndexMap<String, SnapshotKeyInfo>,
 }
+
+/// Настройки snapshot-интерполяции (src/config/client.js interpolation).
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterpolationConfig {
+    /// Задержка рендера в прошлом (мс).
+    pub delay: f64,
+    /// Максимальный возраст кадра в буфере (мс).
+    pub max_frame_age: f64,
+}
+
+/// Конфигурация клиентского ядра (ClientCore, срез 2.6): собирается на
+/// клиенте из prediction/interpolation-данных CONFIG_DATA + бандловых
+/// opcodes/wsports (src/lib/clientCoreConfig.js).
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientConfig {
+    /// Шаг симуляции предикта (миллисекунды, как в клиентском конфиге;
+    /// имя поля фиксирует единицы — CoreConfig.timeStep задаётся в секундах).
+    pub time_step_ms: f64,
+    pub models: IndexMap<String, ModelConfig>,
+    pub weapons: IndexMap<String, WeaponConfig>,
+    pub player_keys: IndexMap<String, KeyConfig>,
+    pub snapshot: SnapshotConfig,
+    pub interpolation: InterpolationConfig,
+    /// Сид PRNG разброса локальных трассеров (не синхронизирован с хостом —
+    /// авторитетный трассер приходит кадром).
+    #[serde(default = "default_seed")]
+    pub seed: u64,
+}
