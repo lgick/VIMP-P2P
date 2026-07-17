@@ -1,6 +1,6 @@
 # Architecture
 
-VIMP Tank Battle is a real-time multiplayer 2D game built on a **P2P
+VIMP P2P Tank Battle is a real-time multiplayer 2D game built on a **P2P
 architecture**. **The host is authoritative**: all physics (Rapier 2D in the
 Rust core, WASM), damage, and rules are computed in the Web Worker of the room
 creator's tab; clients render the world (PixiJS) and mask network latency

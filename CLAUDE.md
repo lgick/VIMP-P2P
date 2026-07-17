@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-VIMP Tank Battle — a multiplayer 2D real-time online tank game on a P2P architecture. The authoritative match runs in a Web Worker in the room creator's browser tab (Rust simulation core compiled to WASM); clients render via PixiJS and connect over WebRTC. A lightweight Node.js master server provides the lobby, WebRTC signaling and map catalog. Легаси авторитетный WS-сервер полностью демонтирован.
+VIMP P2P — a multiplayer 2D real-time online tank game on a P2P architecture. The authoritative match runs in a Web Worker in the room creator's browser tab (Rust simulation core compiled to WASM); clients render via PixiJS and connect over WebRTC. A lightweight Node.js master server provides the lobby, WebRTC signaling and map catalog. Легаси авторитетный WS-сервер полностью демонтирован.
 
 ## Documentation
 

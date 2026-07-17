@@ -2,7 +2,7 @@
 name = "vimp_core"
 version = "0.1.0"
 edition = "2024"
-description = "VIMP Tank Battle — единое ядро симуляции (физика, танки, оружие, боты, снапшоты)"
+description = "VIMP P2P — единое ядро симуляции (физика, танки, оружие, боты, снапшоты)"
 license = "MIT"
 
 [lib]

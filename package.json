@@ -5,13 +5,13 @@
   "license": "MIT",
   "private": false,
   "description": "game",
-  "homepage": "https://github.com/lgick/VIMP-Tank-Battle#readme",
+  "homepage": "https://github.com/lgick/VIMP-P2P#readme",
   "bugs": {
-    "url": "https://github.com/lgick/VIMP-Tank-Battle/issues"
+    "url": "https://github.com/lgick/VIMP-P2P/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/lgick/VIMP-Tank-Battle.git"
+    "url": "git+ssh://git@github.com/lgick/VIMP-P2P.git"
   },
   "type": "module",
   "main": "src/master/main.js",

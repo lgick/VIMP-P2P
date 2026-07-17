@@ -1,4 +1,4 @@
-# VIMP Tank Battle
+# VIMP P2P
 
 A multiplayer 2D real-time online game: team-based tank battles played in rounds.
 
@@ -12,8 +12,8 @@ A multiplayer 2D real-time online game: team-based tank battles played in rounds
 ## Quick start
 
 ```bash
-git clone https://github.com/lgick/VIMP-Tank-Battle.git
-cd VIMP-Tank-Battle
+git clone https://github.com/lgick/VIMP-P2P.git
+cd VIMP-P2P
 npm install
 npm run core:build   # WASM core (needs the Rust toolchain: rustup + wasm-pack)
 npm run dev

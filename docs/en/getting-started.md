@@ -9,8 +9,8 @@
 ## Install
 
 ```bash
-git clone https://github.com/lgick/VIMP-Tank-Battle.git
-cd VIMP-Tank-Battle
+git clone https://github.com/lgick/VIMP-P2P.git
+cd VIMP-P2P
 npm install
 ```
 
@@ -29,6 +29,7 @@ Certificate paths are set in `src/config/master.js` (`httpsOptions`). Certificat
 
 ```bash
 npm run core:build     # WASM core (once; repeat after editing core/)
+npm run audio:process
 npm run dev
 ```
 

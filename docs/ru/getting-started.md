@@ -9,8 +9,8 @@
 ## Установка
 
 ```bash
-git clone https://github.com/lgick/VIMP-Tank-Battle.git
-cd VIMP-Tank-Battle
+git clone https://github.com/lgick/VIMP-P2P.git
+cd VIMP-P2P
 npm install
 ```
 
@@ -29,6 +29,7 @@ mkcert -key-file key.pem -cert-file cert.pem localhost 127.0.0.1 ::1
 
 ```bash
 npm run core:build     # WASM-ядро (один раз; повторять при правках core/)
+npm run audio:process
 npm run dev
 ```
 
