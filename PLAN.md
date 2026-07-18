@@ -66,7 +66,8 @@ vimp-p2p/
   "title": "VIMP Tanks",                   // для лобби
   "entries": {
     "client": "/games/tanks/client-<hash>.js",  // ESM, default export = ClientPlugin
-    "host":   "/games/tanks/host-<hash>.js"     // ESM worker-safe, default export = HostPlugin
+    "host":   "/games/tanks/host-<hash>.js",    // ESM worker-safe, default export = HostPlugin
+    "wasm":   "/games/tanks/core-<hash>.wasm"   // единый hashed .wasm обоих entry (общий HTTP-кеш)
   },
   "assetsBase": "/games/tanks/",           // база звуков/ассетов
   "maps": { "version": "<hash>", "list": ["pool mini", "canopy", "garden"] },
@@ -75,7 +76,7 @@ vimp-p2p/
 }
 ```
 
-Проекции: **мастер** — весь манифест + раздача `/games/:id/maps/*`; **хост** — `entries.host` (dynamic import в Worker'е) + карты с мастера; **клиент** — `entries.client` (dynamic import после выбора комнаты) + `assetsBase`. Богатые схемы (панель, тексты, keysets) в манифест НЕ входят — едут кодом плагинов и, как сейчас, данными CONFIG_DATA (порт 0) от хоста: клиентские данные игры всегда согласованы с хостом комнаты.
+Проекции: **мастер** — весь манифест + раздача `/games/:id/maps/*`; **хост** — `entries.host` (dynamic import в Worker'е) + `entries.wasm` + карты с мастера; **клиент** — `entries.client` (dynamic import после выбора комнаты) + `entries.wasm` + `assetsBase`. Богатые схемы (панель, тексты, keysets) в манифест НЕ входят — едут кодом плагинов и, как сейчас, данными CONFIG_DATA (порт 0) от хоста: клиентские данные игры всегда согласованы с хостом комнаты.
 
 ### 3.2. HostPlugin API (default export host-entry игры, worker-safe)
 
@@ -83,7 +84,7 @@ vimp-p2p/
 export default {
   id: 'tanks',
   engineApi: 1,
-  async createCore(coreConfigJson) { /* init() wasm игры; return new GameCore(...) */ },
+  async createCore(coreConfigJson, { wasmUrl }) { /* init(wasmUrl); return new GameCore(...) */ },
 
   gameConfig: {                       // игровая половина бывшего config/game.js
     teams: { team1: 1, team2: 2, spectators: 3 },   // произвольное число команд
@@ -124,10 +125,11 @@ export default {
 export default {
   id: 'tanks',
   engineApi: 1,
-  async createClientCore(clientConfigJson) { /* wasm игры; return { core, memory } */ },
+  async createClientCore(clientConfigJson, { wasmUrl }) { /* init(wasmUrl); return { core, memory } */ },
   parts:  { Map, MapRadar, Tank, TankRadar, Bomb, ExplosionEffect, Smoke, Tracks, ShotEffect },
   bakers: { explosionTexture, …, trackMarkTexture },
   styles: '…css…',                    // игровой CSS (спрайты оружия панели и т.п.)
+  views: { Panel: CustomPanelView },  // опционально: свои view вместо schema-генератора (см. ниже)
   hooks: {
     onAuth(core, authData)   { core.set_model(authData.model); },
     onPanel(core, panelData) { core.sync_panel(JSON.stringify(panelData)); },
@@ -151,9 +153,13 @@ export default {
 | Controls (client) | player-keyset и раскладка; спектаторский набор — движковый |
 | Auth | схема формы (`authSchema`) + валидатор модели |
 
+Опциональный обход схемы: `views: { Panel?, Stat? }` — кастомный view-класс игры, реализующий view-интерфейс MVC-тройки (подписка на движковую модель через `Publisher`; model/controller остаются движковыми). В v1 движок реализует только schema-генератор — поле лишь валидируется при загрузке плагина, подстановка добавится при первой необходимости. Радиальные/canvas-индикаторы возможны и без этого: HUD-сущность на canvas — обычный `part`.
+
 ### 3.4. Generic WASM ABI (Wasm Host ABI v1)
 
 Обёртки `#[wasm_bindgen] GameCore/ClientCore` живут в game-crate (wasm-bindgen не экспортирует generics), но обязательный набор методов фиксирует движок (часть `engineApi`) — их вызывает движковый JS. Принцип: **горячий путь без JSON** (скаляры + zero-copy указатели); JSON — конструктор/карта/события/редкие запросы.
+
+Бойлерплейт делегации (~45 методов на два класса) снимают движковые макросы `export_game_core_abi!($Sim)` / `export_client_core_abi!($Client)` (`macro_rules!` в `vimp-engine-core` — единственный источник истины обязательного набора, дрейф исключён): game-crate вызывает их рядом со своими дополнительными методами (`try_fire`, `set_model`, `sync_panel`, кастомные аргументы `spawn_actor`). Раскрытие происходит в game-crate, поэтому `#[wasm_bindgen]`/`JsError` резолвятся против его зависимостей — engine-crate от wasm-bindgen по-прежнему не зависит. Procedural macro не нужен: список методов фиксирован.
 
 GameCore — переименования: `spawn_tank`→`spawn_actor`, `remove_tank`→`remove_actor`, `reset_tank`→`reset_actor`, `add_bot`→`spawn_scripted_actor`, `remove_bot`→`remove_scripted_actor`. Без изменений: `new(configJson)` (формат `{engine:{timeStep,seed,snapshot,mapScale,mapSetId}, game:{models,weapons,panel,playerKeys,friendlyFire}}`), `load_map`, `map_info`, `apply_input`, `step`, `take_events`, `pack_body`, `pack_frame`, `body_has_events`, `frame_ptr/frame_bytes`, `is_alive`, `position_of`, `players_data`, `alive_players`, `last_input_seq`, `reset_all_vitals`, `remove_players_and_shots`, `clear`, `serialize_state/deserialize_state`.
 
@@ -183,7 +189,7 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 - `trait GameSim<G>`: `new`, `spawn_actor`, `spawn_scripted`, `remove_actor`, `reset_actor`, `reset_all_vitals`, `apply_input`, `on_fixed_step(ctx, dt)`, `on_contacts(ctx, pairs)`, `on_ai_tick(ctx, dt)`, `build_blocks(ctx) -> (Vec<(String, RowBlock)>, has_events)`, `prediction_state`, `players_json`, `alive`, `position`, `last_input_seq`, `clear`, `remove_players_and_shots`, `serialize/deserialize` (mid-round handoff — задел, сохраняется).
 - `SimCtx<'a, G>` — доступ игры к движковому: `world` (Rapier), `map` (respawns — `IndexMap<String, Vec<[f32;3]>>`, произвольные команды), `nav`/`spatial` (A*/сетка — движковые утилиты в модуле `nav/`, без слова «bot»), `rng`, `events`, `game_cfg`, destroy-очередь.
 - Движок владеет: аккумулятор фикс-шага, сбор контактов, destroy-очередь, schema-driven `SnapshotPacker`, handoff-каркас, `EngineEvent`.
-- Клиентская половина: `trait GameClientDef { type Config; const STATE_LEN; fn motion_step(state, keys, model, dt); fn render_from_state(state) }`; движок — `Interpolator` (schema-driven), `Predictor<G>` (история ввода, reconciliation, visual-error decay), hot-буфер, raycast. `ShotPredictor` (try_fire/cycle_weapon/sync_panel/filter_frame_game/клиентский спавн) — целиком в game-crate, зовёт движковый raycast.
+- Клиентская половина: `trait GameClientDef { type Config; const STATE_LEN; fn motion_step(state, keys, model, dt, ctx: &PredictCtx); fn render_from_state(state) }`; `PredictCtx` даёт опциональный доступ к движковой сетке статических тайлов (та же, что у raycast — клиентское ядро уже владеет картой через `set_map`) — задел под клиентское скольжение вдоль стен для жанров без инерции; танки контекст игнорируют (parity-тесты не меняются). Движок — `Interpolator` (schema-driven), `Predictor<G>` (история ввода, reconciliation, visual-error decay), hot-буфер, raycast. `ShotPredictor` (try_fire/cycle_weapon/sync_panel/filter_frame_game/клиентский спавн) — целиком в game-crate, зовёт движковый raycast.
 
 Разъезд модулей текущего `core/src/`:
 
@@ -217,6 +223,7 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 - Корневой `package.json` → `workspaces: ["packages/engine", "games/tanks"]`; создать `games/tanks/package.json` (`@vimp/tanks`, exports `./data/*`, `./config/*`). Движковый код пока остаётся в `src/` корня.
 - Перенести: `src/data/{models.js,weapons.js,maps/}` → `games/tanks/src/data/`; `src/config/sounds.js` и `src/assets/audio-raw` → `games/tanks/`.
 - Поправить все точки входа игровых данных (их ровно три): `src/config/game.js:1-3`, `src/lib/coreConfig.js:7-8`, `src/master/main.js:11`; плюс `scripts/export-maps.js`, `scripts/process-audio.js`, пути coverage в `vitest.config.js`, nodemon watch (`games/tanks/src`).
+- `vite.config.js`: `server.fs.allow` расширить до корня репо — Vite dev должен читать воркспейс-симлинк `node_modules/@vimp/tanks` и файлы `games/` вне будущего Vite-root `packages/engine`.
 - Готово: тесты/линт/dev/`maps:export`/`audio:process` работают; smoke: Vite и бандл worker'а переваривают workspace-симлинк `node_modules/@vimp/tanks`.
 
 ### Этап 3. JS-инверсия на месте (XL, 8–10 мелких PR)
@@ -247,7 +254,7 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 - Готово: `cargo test` (~90) зелёный, `tests/core/*` + `tests/host/HostGame.test.js` зелёные на пересобранном `pkg-node`, бенчмарк-гейт `step+pack_body` без деградации, ручной smoke.
 
 **4b. Физический распил на два crate (L, 1–2 PR).**
-- `packages/engine/core` (`vimp-engine-core`, rlib, БЕЗ wasm-bindgen) + `games/tanks/core` (`vimp-tanks-core`, cdylib+rlib, обёртки `GameCore/ClientCore`); корневой cargo workspace.
+- `packages/engine/core` (`vimp-engine-core`, rlib, БЕЗ wasm-bindgen) + `games/tanks/core` (`vimp-tanks-core`, cdylib+rlib, обёртки `GameCore/ClientCore` — через движковые макросы `export_game_core_abi!`/`export_client_core_abi!`, см. 3.4); корневой cargo workspace.
 - npm-скрипты: `core:build:web/node` → `wasm-pack build games/tanks/core ...` (артефакты `pkg-web/pkg-node` — теперь игры); харнессы `tests/core/helpers.js`, `tests/host/harness.js`, `describe.skipIf`-пути; CI `test.yml`.
 - Тесты движковых модулей (интерполятор, предиктор, raycast, unpack, snapshot, nav) — в engine-crate на `#[cfg(test)]`-фикстуре `TestGame`; parity и `tests/sim.rs` — в tanks-crate.
 - Готово: обе цели собираются, все тесты зелёные, `cargo test --workspace` в CI.
@@ -265,10 +272,10 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 
 | PR | Задача |
 | --- | --- |
-| 6.1 | **Сборка игры**: `games/tanks/vite.config.js` — два независимых build-прогона (client-entry, host-entry worker-safe) в общий `dist/games/tanks/`; wasm — hashed asset (общий у обоих entry); пост-шаги: `maps:export` → `dist/games/tanks/maps/*.json`, звуки → `dist/games/tanks/sounds/`, генерация `manifest.json` (хеш-версии). Проверка: host-бандл не содержит DOM-кода |
-| 6.2 | **Мастер**: `GameCatalog` (`packages/engine/src/master/GameCatalog.js`, по образцу `WorkerCatalog`) — сканирует `dist/games/*/manifest.json`; REST `/games/manifest.json`, `/games/:id/manifest.json`, `/games/:id/maps/*` (per-game `MapCatalog`); `HostRegistry` + `GET /servers` + `register_host`/`host_registered` — поля `gameId`/`gameVersion`. Dev-режим: манифест с URL исходников через Vite (`games/tanks/src/client/index.js`), карты — из `games/tanks/src/data` напрямую |
-| 6.3 | **Клиент**: лобби — `roomDefaults` из манифеста в форму создания комнаты (селект игры скрыт, пока игра одна); join: `GET /games/:id/manifest.json` → `import(entries.client)` → проверка `engineApi` → подключение; `sounds.path` от `assetsBase`; удалить клиентскую половину `gameRegistry.static.js` |
-| 6.4 | **Worker**: `init`-сообщение несёт `room.game = {id, version, hostEntryUrl}`; `host.worker.js` → `await import(hostEntryUrl)` → `plugin.createCore(...)`; `applyRoomOverrides` валидирует по `roomDefaults`; удалить `gameRegistry.static.js` целиком |
+| 6.1 | **Сборка игры**: `games/tanks/vite.config.js` — два независимых build-прогона (client-entry, host-entry worker-safe) в общий `dist/games/tanks/`; wasm — hashed asset (общий у обоих entry; URL — `entries.wasm` манифеста); пост-шаги: `maps:export` → `dist/games/tanks/maps/*.json`, звуки → `dist/games/tanks/sounds/`, генерация `manifest.json` (хеш-версии). Проверка: host-бандл не содержит DOM-кода |
+| 6.2 | **Мастер**: `GameCatalog` (`packages/engine/src/master/GameCatalog.js`, по образцу `WorkerCatalog`) — сканирует `dist/games/*/manifest.json`; REST `/games/manifest.json`, `/games/:id/manifest.json`, `/games/:id/maps/*` (per-game `MapCatalog`); `HostRegistry` + `GET /servers` + `register_host`/`host_registered` — поля `gameId`/`gameVersion`. Dev-режим: манифест с Vite-URL исходников (`/@fs/…/games/tanks/src/client/index.js` — трансформация и HMR штатные), `entries.wasm` — Vite-URL `.wasm` из `pkg-web`; ассеты (звуки, карты из `games/tanks/src/data`) — `express.static`-mount `/games/:id/` на мастере |
+| 6.3 | **Клиент**: лобби — `roomDefaults` из манифеста в форму создания комнаты (селект игры скрыт, пока игра одна); «Создать сервер» — фича-детект module worker + dynamic import с внятной ошибкой («браузер не может быть хостом»; join не блокируется); join: `GET /games/:id/manifest.json` → `import(entries.client)` → проверка `engineApi` → подключение; `sounds.path` от `assetsBase`; удалить клиентскую половину `gameRegistry.static.js` |
+| 6.4 | **Worker**: `init`-сообщение несёт `room.game = {id, version, hostEntryUrl, wasmUrl}`; `host.worker.js` → `await import(hostEntryUrl)` → `plugin.createCore(coreConfigJson, { wasmUrl })`; `applyRoomOverrides` валидирует по `roomDefaults`; удалить `gameRegistry.static.js` целиком |
 | 6.5 | **Эстафета**: составной `codeVersion` (движок+игра), `HANDOFF_VERSION=2` (+gameId/gameVersion), при свопе новый Worker получает свежий `hostEntryUrl`; сбой → существующий `resume`-путь |
 
 Готово: `npm run build` даёт dist движка + `dist/games/tanks/`; ручной сценарий эстафеты с подменой версии игры; dev-режим без пересборки работает; тесты зелёные.
@@ -293,9 +300,9 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 
 1. **wasm-bindgen и generics** — решено обёртками в game-crate; engine-crate не должен зависеть от wasm-bindgen вовсе (иначе конфликт glue). Проверить в 4b сборку `wasm-pack build games/tanks/core` с path-dependency.
 2. **Производительность** — мономорфизация без оверхеда; schema-driven кодек — интерпретация на ~30 упаковок/сек, пренебрежимо на фоне Rapier; `sample()` без аллокаций (переиспользуемый буфер). Бенчмарк-гейт в 4a (время `step+pack_body` до/после).
-3. **Vite и мульти-entry игры** — общие chunks могут утащить DOM-код в worker-бандл: собирать client/host двумя независимыми прогонами; wasm-URL в glue (`new URL(...)`) проверить в Worker-контексте dev и prod (известные грабли; fallback — явный `init(url)`).
+3. **Vite и мульти-entry игры** — общие chunks могут утащить DOM-код в worker-бандл: собирать client/host двумя независимыми прогонами. WASM грузится только по явному `entries.wasm` через `init(url)` — `import.meta.url`-резолюция glue не используется вовсе (известные грабли динамически импортируемых модулей в Worker'е); base64-инлайн отвергнут (+33% размера, ломает `instantiateStreaming`, дублирует WASM в двух бандлах вместо общего HTTP-кеша).
 4. **Двойной WASM во вкладке хоста** (GameCore в Worker + ClientCore в main thread) — уже так; следить, чтобы оба entry ссылались на один hashed `.wasm` (HTTP-кеш).
-5. **CSP/динамический import** — бандлы игры same-origin (`/games/...`): `script-src 'self'` достаточно, для wasm — `'wasm-unsafe-eval'` в prod-CSP Nginx (задокументировать в deployment.md). Dynamic import в module-Worker'е — включить в smoke (особенно Firefox).
+5. **CSP/динамический import** — бандлы игры same-origin (`/games/...`): `script-src 'self'` достаточно, для wasm — `'wasm-unsafe-eval'` в prod-CSP Nginx (задокументировать в deployment.md). Module-Worker — уже требование текущего прода (`HostController` создаёт `new Worker(url, {type:'module'})`), и нужен он только хосту комнаты; classic-fallback не строим (запретил бы ESM и потребовал инлайн WASM) — вместо него фича-детект при «Создать сервер» (6.3). Dynamic import в module-Worker'е — включить в smoke этапов 6 и 8 (особенно Firefox/Safari).
 6. **Эстафета при рассинхроне** — плагин с чужим `engineApi` отвергается при init нового Worker'а → штатный `resume`; хеши по содержимому, чтобы смена только манифеста не провоцировала эстафету.
 7. **Schema-driven DOM панели/статы** — самый заметный UI-рефакторинг (генерация вместо pug): регресс стилей/z-index; игровой CSS отделяется от движкового. Митигируется ручным smoke в 3.10 и скриншот-сравнением.
 8. **Объём правок тестов** (~620 JS) — этапы 3 (моки SocketManager/CommandProcessor/Panel), 4a (формы decode_frame в harness), 5 (пути). Митигируется мелкой нарезкой PR и правилом «тесты в том же PR».
@@ -315,6 +322,7 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 - Формат тайл-карты — движковый (`map.rs` + `MapCatalog`/`maps:export`), контент — игровой: редактор карт станет страницей движка, пишущей движковый формат.
 - `respawns` как словарь произвольных команд (3.6) и schema-driven снапшот (3.4) — уже готовы к «полноценным игровым слоям» (слой как поле сущности в схеме, семантика слоёв — у игры).
 - Схемы panel/stat/vote (произвольные команды/поля) не будут мешать картам с иным числом команд.
+- `PredictCtx` в `motion_step` (3.6) — готовый канал доступа предиктора к сетке статических тайлов карты: клиентские коллизии/скольжение вдоль стен для будущих жанров без инерции, без bump `ENGINE_API_VERSION`.
 
 ## 8. Верификация всего плана
 
