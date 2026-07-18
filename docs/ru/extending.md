@@ -31,7 +31,7 @@
 4. Зарегистрируйте сущность в `src/config/client.js`: `parts.gameSets` (snapshot-ключ → классы) и `parts.entitiesOnCanvas` (класс → полотно).
 5. Зарегистрируйте snapshot-ключи оружия (и его эффектов) в `SNAPSHOT_KEYS` в [src/config/opcodes.js](../../src/config/opcodes.js) — незарегистрированный ключ уронит упаковку кадра. Если существующие `kind` не подходят под формат данных — добавьте новую раскладку блока в `core/src/snapshot.rs` и зеркально в клиентский декодер `core/src/client/unpack.rs`, подняв версию формата.
 6. Последним элементом данных события/сущности передавайте **id автора** (как `shooterId` у `w1` и `ownerId` у `w2`) — по нему клиентское ядро (`core/src/client/shot.rs`) подавляет авторитетные дубли клиентского спавна; типы `hitscan`/`explosive` оно поддерживает автоматически по конфигу оружия.
-7. Добавьте боезапас в `game.js` (`panel`) и ключ панели в `client.js` (`modules.panel`).
+7. Добавьте боезапас в `games/tanks/src/config/game.js` (`panel`) и ключ панели в `client.js` (`modules.panel`).
 
 ## Новый звук
 

@@ -38,8 +38,10 @@
 с настройками комнаты и держит per-client порт-машину — автомат клиентских
 портов 0–8 (см. [network.md](network.md)). Сообщения главного потока:
 
-- `init(room, handoff?)` — применяет настройки комнаты к конфигу игры
-  (`applyRoomOverrides`: имя/карта/лимит ≤ 8/таймеры/friendly fire; карты —
+- `init(room, handoff?)` — собирает конфиг игры (merge движковых дефолтов
+  `src/config/hostDefaults.js` и игрового `@vimp/tanks/config/game.js`) и
+  применяет к нему настройки комнаты (`applyRoomOverrides`: имя/карта/лимит
+  ≤ `roomDefaults.maxPlayers`/таймеры/friendly fire; карты —
   из `room.maps`, если главный поток скачал каталог мастера), инициализирует
   ядро, создаёт `HostGame`, отвечает `ready`; `handoff` — состояние эстафеты
   Worker'ов: комната восстанавливается вместо холодного старта. Сбой

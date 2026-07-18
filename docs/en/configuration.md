@@ -10,11 +10,12 @@ The project's configuration splits into three layers:
 
 The master collects its config into a single store,
 `src/lib/config.js` (accessed via colon-separated paths), inside
-[src/master/main.js](../../src/master/main.js); the host Worker imports
-`game`/`client`/`auth`/`wsports` directly
-([src/host/host.worker.js](../../src/host/host.worker.js)) and layers the
-room's settings on top. The client receives its config (`client`) from
-the host on connect (port `0`).
+[src/master/main.js](../../src/master/main.js); the host Worker
+([src/host/host.worker.js](../../src/host/host.worker.js)) assembles the
+game config as a merge of the engine defaults (`hostDefaults`) and the
+game config (`@vimp/tanks/config/game.js`), layers the room's settings on
+top, and imports `client`/`auth`/`wsports` directly. The client receives
+its config (`client`) from the host on connect (port `0`).
 
 ## Environment variables (.env)
 
@@ -30,30 +31,24 @@ development — values from `src/config/master.js` apply instead.
 
 Game parameters (map, player limit, timers, friendly fire) aren't set
 through environment variables: the room's creator picks them in the lobby,
-and defaults live in `src/config/game.js`.
+and defaults live in `src/config/hostDefaults.js` (engine) and
+`games/tanks/src/config/game.js` (game).
 
-## src/config/game.js — server-side game parameters
+## src/config/hostDefaults.js — engine host defaults
 
-Source: [src/config/game.js](../../src/config/game.js). Imports maps,
-models, and weapons from `games/tanks/src/data/`.
-
-### Core parameters
+Source: [src/config/hostDefaults.js](../../src/config/hostDefaults.js).
+The engine half of the host config: limits, timers, kick policies, and the
+spectator keyset (spectating is an engine mechanism). The host Worker
+merges it with the tanks game config and layers the room's settings on
+top; in stage 6 of the plan `HostPlugin.gameConfig` replaces the static
+merge.
 
 | Parameter | Value | Description |
 | --- | --- | --- |
-| `maxPlayers` | `30` | The default participant limit; a host's room clamps it to the creator's setting (≤ 8), counted by humans |
+| `isDevMode` | `false` | Development-mode flag (unlocks dev chat commands) |
+| `maxPlayers` | `30` | The default participant limit; a host's room clamps it to the creator's setting (capped by the game's `roomDefaults.maxPlayers`), counted by humans |
 | `chatMaxLength` | `60` | The max chat message length (authoritative on the host; must match the `maxlength` of the input in `chat.pug`) |
-| `parts.friendlyFire` | `false` | Damage to your own team |
-| `parts.mapConstructor` | `'Map'` | The map constructor's name |
-| `parts.hitscanService` | `'HitscanService'` | The hitscan-shot calculation service |
-| `mapScale` | `0.3` | Map scale |
-| `currentMap` | `'pool mini'` | The default map |
-| `mapsInVote` | `4` | How many maps show up in a vote |
-| `mapSetId` | `'c1'` | The default snapshot key for the map constructor |
-| `soundCues` | `roundStart, victory, defeat, frag, death: 'gameOver'` | Maps engine events to the game's sound names (`SocketManager.sendSoundCue`) |
-| `initialVote` | `'teamChange'` | The vote sent to a player right after the first frame |
-| `spectatorTeam` | `'spectators'` | The spectator team's name |
-| `teams` | `team1: 1, team2: 2, spectators: 3` | Teams and their ids |
+| `spectatorKeys` | `nextPlayer`/`prevPlayer` | Commands of a spectator or inactive player (switching the observed player) |
 
 ### Timers (`timers`, ms)
 
@@ -81,6 +76,30 @@ models, and weapons from `games/tanks/src/data/`.
 - `idleKickTimeout.player: 120000` — kicks an idle player (2 minutes);
 - `idleKickTimeout.spectator: null` — `null` disables the kick (spectators
   are never kicked).
+
+## games/tanks/src/config/game.js — the game config (tanks)
+
+Source: [games/tanks/src/config/game.js](../../games/tanks/src/config/game.js).
+The game half of the host config (imported by the Worker as
+`@vimp/tanks/config/game.js` — temporary static composition until stage 6).
+Imports maps, models, and weapons from `games/tanks/src/data/`.
+
+### Core parameters
+
+| Parameter | Value | Description |
+| --- | --- | --- |
+| `parts.friendlyFire` | `false` | Damage to your own team |
+| `parts.mapConstructor` | `'Map'` | The map constructor's name |
+| `parts.hitscanService` | `'HitscanService'` | The hitscan-shot calculation service |
+| `mapScale` | `0.3` | Map scale |
+| `currentMap` | `'pool mini'` | The default map |
+| `mapsInVote` | `4` | How many maps show up in a vote |
+| `mapSetId` | `'c1'` | The default snapshot key for the map constructor |
+| `roomDefaults.maxPlayers` | `8` | The bounds for the lobby's room settings: caps the limit picked by the creator (the future `GameManifest.roomDefaults`, stage 6) |
+| `soundCues` | `roundStart, victory, defeat, frag, death: 'gameOver'` | Maps engine events to the game's sound names (`SocketManager.sendSoundCue`) |
+| `initialVote` | `'teamChange'` | The vote sent to a player right after the first frame |
+| `spectatorTeam` | `'spectators'` | The spectator team's name |
+| `teams` | `team1: 1, team2: 2, spectators: 3` | Teams and their ids |
 
 ### Stats (`stat`)
 
@@ -110,9 +129,10 @@ The client-side mapping of keys to DOM elements is in `client.js`
 
 ### Keys (`spectatorKeys`, `playerKeys`)
 
-`spectatorKeys` — a spectator's commands (`nextPlayer`/`prevPlayer`).
+`spectatorKeys` — a spectator's commands (`nextPlayer`/`prevPlayer`); the
+set is engine-owned and lives in `src/config/hostDefaults.js`.
 
-`playerKeys` — a player's commands. Each key has a bitmask `key` (`1 <<
+`playerKeys` — a player's commands (game config). Each key has a bitmask `key` (`1 <<
 n`, used by the predictor and the core in the input history) and an
 optional `type`:
 

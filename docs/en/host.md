@@ -42,8 +42,11 @@ Loads the WASM core (`init()` + `GameCore` from `core/pkg-web`), builds
 machine — an automaton over client ports 0–8 (see [network.md](network.md)).
 Main-thread messages:
 
-- `init(room, handoff?)` — applies room settings to the game config
-  (`applyRoomOverrides`: name/map/limit ≤ 8/timers/friendly fire; maps come
+- `init(room, handoff?)` — assembles the game config (a merge of the engine
+  defaults `src/config/hostDefaults.js` and the game's
+  `@vimp/tanks/config/game.js`) and applies room settings to it
+  (`applyRoomOverrides`: name/map/limit ≤ `roomDefaults.maxPlayers`/timers/
+  friendly fire; maps come
   from `room.maps` if the main thread fetched the master's catalog),
   initializes the core, creates `HostGame`, replies `ready`; `handoff` is the
   Worker handoff state: the room is restored instead of a cold start. A

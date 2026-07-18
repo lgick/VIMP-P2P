@@ -4,12 +4,13 @@ import {
 } from '../config/opcodes.js';
 import models from '@vimp/tanks/data/models.js';
 import weapons from '@vimp/tanks/data/weapons.js';
-import gameConfig from '../config/game.js';
+import tanksGameConfig from '@vimp/tanks/config/game.js';
+import hostDefaults from '../config/hostDefaults.js';
 import wsports from '../config/wsports.js';
 
-// Сборка JSON-конфига Rust-ядра (core/): куски game.js + данные баланса +
-// реестр снапшот-ключей. Единственная точка соответствия JS-конфигов и
-// ABI ядра (см. docs/core.md).
+// Сборка JSON-конфига Rust-ядра (core/): движковый timeStep + игровой конфиг
+// и данные баланса + реестр снапшот-ключей. Единственная точка соответствия
+// JS-конфигов и ABI ядра (см. docs/core.md).
 
 /**
  * Собирает объект конфигурации ядра.
@@ -18,14 +19,14 @@ import wsports from '../config/wsports.js';
  * @returns {Object} Конфиг для `new GameCore(JSON.stringify(config))`.
  */
 export const buildCoreConfig = (overrides = {}) => ({
-  timeStep: gameConfig.timers.timeStep / 1000,
-  friendlyFire: gameConfig.parts.friendlyFire,
-  mapScale: gameConfig.mapScale,
-  mapSetId: gameConfig.mapSetId,
+  timeStep: hostDefaults.timers.timeStep / 1000,
+  friendlyFire: tanksGameConfig.parts.friendlyFire,
+  mapScale: tanksGameConfig.mapScale,
+  mapSetId: tanksGameConfig.mapSetId,
   models,
   weapons,
-  playerKeys: gameConfig.playerKeys,
-  panel: gameConfig.panel,
+  playerKeys: tanksGameConfig.playerKeys,
+  panel: tanksGameConfig.panel,
   snapshot: {
     version: SNAPSHOT_FORMAT_VERSION,
     port: wsports.server.SHOT_DATA,

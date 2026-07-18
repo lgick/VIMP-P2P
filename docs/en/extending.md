@@ -63,8 +63,8 @@ Steps:
    (`core/src/client/shot.rs`) uses it to suppress authoritative
    duplicates of client-side spawns; it supports `hitscan`/`explosive`
    automatically from the weapon config.
-7. Add ammo to `game.js` (`panel`) and a panel key in `client.js`
-   (`modules.panel`).
+7. Add ammo to `games/tanks/src/config/game.js` (`panel`) and a panel key
+   in `client.js` (`modules.panel`).
 
 ## New sound
 

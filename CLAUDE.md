@@ -161,9 +161,9 @@ Publisher-паттерн внутри MVC-тройки:
 
 ### Shared
 
-- **`src/config/`** — shared config consumed by the master (Node.js), the host Worker and the client (Vite bundler): `game.js`, `client.js`, `auth.js`, `wsports.js`, `opcodes.js` (реестр ключей бинарного снапшота + версия формата), `lobby.js`, `master.js`.
+- **`src/config/`** — shared config consumed by the master (Node.js), the host Worker and the client (Vite bundler): `hostDefaults.js` (движковые дефолты хоста: лимиты, таймеры, кики, spectatorKeys; игровая половина бывшего `game.js` — `games/tanks/src/config/game.js`, merge выполняет `host.worker.js`), `client.js`, `auth.js`, `wsports.js`, `opcodes.js` (реестр ключей бинарного снапшота + версия формата), `lobby.js`, `master.js`.
 - **`src/lib/`** — utilities: `Publisher` (observer), `AbstractTimer`, `factory`, `math`, `formatters`, `sanitizers`, `validators`, `security`, `buildClientConfig` (CONFIG_DATA порта 0), `coreConfig` (init-конфиг GameCore), `clientCoreConfig` (init-конфиг ClientCore; отдельный модуль — не тянет `games/tanks/src/data/*` в клиентский бандл), `rateLimiter`. Бинарный кодек снапшота целиком в ядре (`core/src/snapshot.rs` + `core/src/client/unpack.rs`).
-- **`games/tanks/`** — npm-workspace `@vimp/tanks` (план отделения движка, этап 2): листовые данные игры, импортируются как `@vimp/tanks/data/*` и `@vimp/tanks/config/*`. Состав: `src/data/` — static game data: `maps/` (tiled map definitions with respawns + physics bodies), `models.js`, `weapons.js`; `src/config/sounds.js` — звуки; `assets/audio-raw/` — исходники аудио.
+- **`games/tanks/`** — npm-workspace `@vimp/tanks` (план отделения движка, этап 2): листовые данные игры, импортируются как `@vimp/tanks/data/*` и `@vimp/tanks/config/*`. Состав: `src/data/` — static game data: `maps/` (tiled map definitions with respawns + physics bodies), `models.js`, `weapons.js`; `src/config/game.js` — игровой конфиг хоста (teams, panel, stat, playerKeys, карты/баланс, roomDefaults); `src/config/sounds.js` — звуки; `src/host/` — игровые host-модули (роутер core-событий, `/bot`, системные сообщения `b:*`); `assets/audio-raw/` — исходники аудио.
 
 ### Протокол портов
 

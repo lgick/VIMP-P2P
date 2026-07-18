@@ -2,8 +2,9 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import models from '@vimp/tanks/data/models.js';
 import weapons from '@vimp/tanks/data/weapons.js';
+import tanksGameConfig from '@vimp/tanks/config/game.js';
 import clientConfig from '../../src/config/client.js';
-import gameConfig from '../../src/config/game.js';
+import hostDefaults from '../../src/config/hostDefaults.js';
 import { buildClientCoreConfig } from '../../src/lib/clientCoreConfig.js';
 import { buildCoreConfig } from '../../src/lib/coreConfig.js';
 
@@ -47,8 +48,8 @@ export const makeClientCore = (overrides = {}) => {
   const config = buildClientCoreConfig(
     {
       prediction: {
-        timeStep: gameConfig.timers.timeStep,
-        playerKeys: gameConfig.playerKeys,
+        timeStep: hostDefaults.timers.timeStep,
+        playerKeys: tanksGameConfig.playerKeys,
         models,
         weapons,
       },

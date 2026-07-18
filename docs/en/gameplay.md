@@ -86,7 +86,7 @@ The host switches the active key set by status (spectator/player):
 - **Player**: `w/s` — throttle/reverse, `a/d` — turn, `k/l` — turret rotation, `u` — center turret, `j` — fire, `n/p` — next/previous weapon.
 - **Modes** (in any status): `c` — chat, `m` — vote, `Tab` — stats; `Esc`/`Enter` — control within modes.
 
-Key layout is configured in `client.js` (`modules.controls`), commands and their types in `game.js` (`playerKeys`), see [configuration.md](configuration.md#keys-spectatorkeys-playerkeys).
+Key layout is configured in `client.js` (`modules.controls`), commands and their types in `games/tanks/src/config/game.js` (`playerKeys`), see [configuration.md](configuration.md#keys-spectatorkeys-playerkeys).
 
 ## Weapons and the tank
 

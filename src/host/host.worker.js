@@ -6,7 +6,10 @@
 // бинарные ArrayBuffer'ы через Transferable).
 
 import init, { GameCore } from '../../core/pkg-web/vimp_core.js';
-import gameConfig from '../config/game.js';
+// временная статическая композиция движок+игра (до этапа 6 —
+// динамической загрузки HostPlugin)
+import tanksGameConfig from '@vimp/tanks/config/game.js';
+import hostDefaults from '../config/hostDefaults.js';
 import clientConfig from '../config/client.js';
 import authConfig from '../config/auth.js';
 import wsports from '../config/wsports.js';
@@ -30,8 +33,6 @@ const PC_PONG = wsports.client.PONG;
 // PS (server ports): порты отправки данных клиенту
 const PS_TECH_INFORM_DATA = wsports.server.TECH_INFORM_DATA;
 
-const MAX_ROOM_PLAYERS = 8; // целевой размер комнаты (рамка P2P-плана)
-
 let host = null;
 let socketManager = null;
 let clientCfg = null;
@@ -43,9 +44,10 @@ const clients = new Map();
 // из handoff-меты — их порт-машины поднимаются минуя хендшейк
 let handoffClients = null;
 
-// применяет пользовательские настройки комнаты к конфигу игры
+// собирает конфиг игры (движковые дефолты + игровая половина) и применяет
+// пользовательские настройки комнаты
 function applyRoomOverrides(room = {}) {
-  const game = structuredClone(gameConfig);
+  const game = structuredClone({ ...hostDefaults, ...tanksGameConfig });
 
   // Этап 5.1: актуальные карты мастера (фетчит главный поток) вместо бандла
   if (room.maps && Object.keys(room.maps).length) {
@@ -58,7 +60,10 @@ function applyRoomOverrides(room = {}) {
   }
 
   if (Number.isFinite(room.maxPlayers)) {
-    game.maxPlayers = Math.max(1, Math.min(MAX_ROOM_PLAYERS, room.maxPlayers));
+    game.maxPlayers = Math.max(
+      1,
+      Math.min(game.roomDefaults.maxPlayers, room.maxPlayers),
+    );
   }
 
   if (room.map && game.maps[room.map]) {

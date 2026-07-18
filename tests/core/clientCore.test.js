@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import gameConfig from '../../src/config/game.js';
+import hostDefaults from '../../src/config/hostDefaults.js';
 import {
   coreAvailable,
   makeCore,
@@ -14,7 +14,7 @@ import {
 // Распаковка проверяется decode_frame (замена unpackFrame — pack и unpack
 // живут в одном crate, расхождение форматов исключено по построению).
 
-const TIME_STEP_MS = gameConfig.timers.timeStep;
+const TIME_STEP_MS = hostDefaults.timers.timeStep;
 const DT = TIME_STEP_MS / 1000;
 
 // флаги hot-буфера (зеркало core/src/client/mod.rs)

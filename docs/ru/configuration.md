@@ -6,7 +6,7 @@
 2. **`src/config/`** — общие конфиги, используемые мастером (Node.js), Worker'ом браузерного хоста и клиентом (Vite-бандл).
 3. **`games/tanks/src/data/`** — статические игровые данные: карты, модели, оружие.
 
-Мастер собирает свой конфиг в единое хранилище `src/lib/config.js` (доступ по пути с двоеточием) в [src/master/main.js](../../src/master/main.js); Worker хоста импортирует `game`/`client`/`auth`/`wsports` напрямую ([src/host/host.worker.js](../../src/host/host.worker.js)) и применяет поверх них настройки комнаты. Клиент получает свой конфиг (`client`) от хоста при подключении (порт `0`).
+Мастер собирает свой конфиг в единое хранилище `src/lib/config.js` (доступ по пути с двоеточием) в [src/master/main.js](../../src/master/main.js); Worker хоста ([src/host/host.worker.js](../../src/host/host.worker.js)) собирает конфиг игры как merge движковых дефолтов (`hostDefaults`) и игрового конфига (`@vimp/tanks/config/game.js`), применяет поверх него настройки комнаты, а `client`/`auth`/`wsports` импортирует напрямую. Клиент получает свой конфиг (`client`) от хоста при подключении (порт `0`).
 
 ## Переменные окружения (.env)
 
@@ -18,29 +18,18 @@
 | `VIMP_DOMAIN` | Домен мастера. **Обязательна** в production (иначе процесс завершится с ошибкой) | `localhost` |
 | `VIMP_MASTER_PORT` | Порт мастер-сервера | `3002` |
 
-Игровые параметры (карта, лимит игроков, таймеры, friendly fire) переменными окружения не задаются: их выбирает создатель комнаты в лобби, а дефолты живут в `src/config/game.js`.
+Игровые параметры (карта, лимит игроков, таймеры, friendly fire) переменными окружения не задаются: их выбирает создатель комнаты в лобби, а дефолты живут в `src/config/hostDefaults.js` (движковые) и `games/tanks/src/config/game.js` (игровые).
 
-## src/config/game.js — серверные игровые параметры
+## src/config/hostDefaults.js — движковые дефолты хоста
 
-Источник: [src/config/game.js](../../src/config/game.js). Импортирует карты, модели и оружие из `games/tanks/src/data/`.
-
-### Основные параметры
+Источник: [src/config/hostDefaults.js](../../src/config/hostDefaults.js). Движковая половина конфига хоста: лимиты, таймеры, кик-политики, спектаторский keyset (наблюдение — механизм движка). Worker хоста merge'ит её с игровым конфигом танков и применяет поверх настройки комнаты; в этапе 6 плана статический merge заменит `HostPlugin.gameConfig`.
 
 | Параметр | Значение | Описание |
 | --- | --- | --- |
-| `maxPlayers` | `30` | Дефолтный лимит участников; комната хоста ограничивает его настройкой создателя (≤ 8), лимит считается по людям |
+| `isDevMode` | `false` | Флаг режима разработки (открывает dev-команды чата) |
+| `maxPlayers` | `30` | Дефолтный лимит участников; комната хоста ограничивает его настройкой создателя (кламп к `roomDefaults.maxPlayers` игры), лимит считается по людям |
 | `chatMaxLength` | `60` | Максимальная длина сообщения чата (авторитетно на хосте; должна совпадать с `maxlength` инпута в `chat.pug`) |
-| `parts.friendlyFire` | `false` | Урон по своей команде |
-| `parts.mapConstructor` | `'Map'` | Имя конструктора карт |
-| `parts.hitscanService` | `'HitscanService'` | Сервис расчёта hitscan-выстрелов |
-| `mapScale` | `0.3` | Масштаб карт |
-| `currentMap` | `'pool mini'` | Карта по умолчанию |
-| `mapsInVote` | `4` | Количество карт в голосовании |
-| `mapSetId` | `'c1'` | Дефолтный snapshot-ключ конструктора карты |
-| `soundCues` | `roundStart, victory, defeat, frag, death: 'gameOver'` | Маппинг движковых событий на имена звуков игры (`SocketManager.sendSoundCue`) |
-| `initialVote` | `'teamChange'` | Голосование, отправляемое игроку после первого кадра |
-| `spectatorTeam` | `'spectators'` | Название команды наблюдателей |
-| `teams` | `team1: 1, team2: 2, spectators: 3` | Команды и их id |
+| `spectatorKeys` | `nextPlayer`/`prevPlayer` | Команды наблюдателя и неактивного игрока (переключение наблюдаемого) |
 
 ### Таймеры (`timers`, мс)
 
@@ -64,6 +53,27 @@
 - `rtt.maxLatency: 1000` — сглаженная (EMA) задержка (мс), при превышении которой игрок кикается; порог рассчитан на P2P-хостинг с домашних каналов (реальный RTT 200–300 мс и спайки на смене карты — норма);
 - `idleKickTimeout.player: 120000` — кик игрока за бездействие (2 минуты);
 - `idleKickTimeout.spectator: null` — `null` отключает кик (наблюдатели не кикаются).
+
+## games/tanks/src/config/game.js — игровой конфиг (танки)
+
+Источник: [games/tanks/src/config/game.js](../../games/tanks/src/config/game.js). Игровая половина конфига хоста (импортируется Worker'ом как `@vimp/tanks/config/game.js` — временная статическая композиция до этапа 6). Импортирует карты, модели и оружие из `games/tanks/src/data/`.
+
+### Основные параметры
+
+| Параметр | Значение | Описание |
+| --- | --- | --- |
+| `parts.friendlyFire` | `false` | Урон по своей команде |
+| `parts.mapConstructor` | `'Map'` | Имя конструктора карт |
+| `parts.hitscanService` | `'HitscanService'` | Сервис расчёта hitscan-выстрелов |
+| `mapScale` | `0.3` | Масштаб карт |
+| `currentMap` | `'pool mini'` | Карта по умолчанию |
+| `mapsInVote` | `4` | Количество карт в голосовании |
+| `mapSetId` | `'c1'` | Дефолтный snapshot-ключ конструктора карты |
+| `roomDefaults.maxPlayers` | `8` | Рамка настроек комнаты в лобби: кламп лимита, выбранного создателем (будущий `GameManifest.roomDefaults`, этап 6) |
+| `soundCues` | `roundStart, victory, defeat, frag, death: 'gameOver'` | Маппинг движковых событий на имена звуков игры (`SocketManager.sendSoundCue`) |
+| `initialVote` | `'teamChange'` | Голосование, отправляемое игроку после первого кадра |
+| `spectatorTeam` | `'spectators'` | Название команды наблюдателей |
+| `teams` | `team1: 1, team2: 2, spectators: 3` | Команды и их id |
 
 ### Статистика (`stat`)
 
@@ -90,9 +100,9 @@
 
 ### Клавиши (`spectatorKeys`, `playerKeys`)
 
-`spectatorKeys` — команды наблюдателя (`nextPlayer`/`prevPlayer`).
+`spectatorKeys` — команды наблюдателя (`nextPlayer`/`prevPlayer`); набор движковый, живёт в `src/config/hostDefaults.js`.
 
-`playerKeys` — команды игрока. Каждая клавиша имеет битовую маску `key` (`1 << n`, используется предиктором и ядром в истории ввода) и опциональный `type`:
+`playerKeys` — команды игрока (игровой конфиг). Каждая клавиша имеет битовую маску `key` (`1 << n`, используется предиктором и ядром в истории ввода) и опциональный `type`:
 
 - `type: 0` (по умолчанию) — многократное действие: начинается на keyDown, завершается на keyUp (движение, поворот башни);
 - `type: 1` — срабатывает один раз на keyDown (`gunCenter`, `fire`, `nextWeapon`, `prevWeapon`).

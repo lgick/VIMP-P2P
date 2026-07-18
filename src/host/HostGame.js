@@ -57,7 +57,8 @@ class SnapshotThrottle {
 // panel/reportKill/shake).
 export default class HostGame {
   /**
-   * @param {Object} data - конфиг игры (config/game.js).
+   * @param {Object} data - конфиг игры (merge hostDefaults + игровой
+   *   конфиг @vimp/tanks/config/game.js; см. host.worker.js).
    * @param {Object} socketManager - транспорт (per-user send/close).
    * @param {GameCore} core - экземпляр WASM-ядра.
    * @param {Object} [opts]

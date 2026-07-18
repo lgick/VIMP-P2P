@@ -69,7 +69,7 @@
 - **Игрок**: `w/s` — газ/назад, `a/d` — поворот, `k/l` — поворот башни, `u` — башня в центр, `j` — огонь, `n/p` — следующее/предыдущее оружие.
 - **Режимы** (в любом статусе): `c` — чат, `m` — голосование, `Tab` — статистика; `Esc`/`Enter` — управление внутри режимов.
 
-Раскладка настраивается в `client.js` (`modules.controls`), команды и их типы — в `game.js` (`playerKeys`), см. [configuration.md](configuration.md#клавиши-spectatorkeys-playerkeys).
+Раскладка настраивается в `client.js` (`modules.controls`), команды и их типы — в `games/tanks/src/config/game.js` (`playerKeys`), см. [configuration.md](configuration.md#клавиши-spectatorkeys-playerkeys).
 
 ## Оружие и танк
 
