@@ -258,7 +258,10 @@ callback + participant list), `reset`. Topic cooldown — `timeBlockedVote`
 - **`Chat`** (`meta/modules/chat/`) — user messages and system templates
   (`systemMessages.js`): `push` (broadcast), `pushSystem`/
   `pushSystemByUser` (templated `'group:number:params'`), queues
-  `shift`/`shiftByUser`.
+  `shift`/`shiftByUser`. The code registry holds the engine groups
+  `s`/`v`/`m`/`c`/`n`; game codes are registered via `registerCodes` (tanks
+  brings the `b:*` group, `games/tanks/src/host/systemMessages.js`); the
+  template texts live on the client.
 - **`Vote`** — vote mechanics: a queue (a new vote during an active one
   isn't rejected, it waits), lifetime `voteTime`, list pagination (more
   than 7 options gets Back/More pages), tie resolution by random pick,

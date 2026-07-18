@@ -1,10 +1,12 @@
 // Временная статическая композиция движок→игра (этап 3 плана):
-// в этапе 6 роутер и команды приедут динамическим HostPlugin'ом
+// в этапе 6 роутер, команды и коды приедут динамическим HostPlugin'ом
 import coreEventRouter from '@vimp/tanks/host/coreEventRouter.js';
 import botCommand from '@vimp/tanks/host/botCommand.js';
+import tanksSystemMessages from '@vimp/tanks/host/systemMessages.js';
 import Panel from './meta/modules/Panel.js';
 import Stat from './meta/modules/Stat.js';
 import Chat from './meta/modules/chat/index.js';
+import { registerCodes } from './meta/modules/chat/systemMessages.js';
 import Vote from './meta/modules/Vote.js';
 import RTTManager from './meta/modules/RTTManager.js';
 import TimerManager from './meta/modules/TimerManager.js';
@@ -173,8 +175,10 @@ export default class HostGame {
       isDevMode: this._isDevMode,
     });
 
-    // игровые чат-команды (в этапе 6 — из HostPlugin.chatCommands)
+    // игровые чат-команды и коды системных сообщений
+    // (в этапе 6 — из HostPlugin.chatCommands/systemMessages)
     this._commandProcessor.registerCommand(botCommand.name, botCommand.handler);
+    registerCodes(tanksSystemMessages);
 
     // инкрементный номер snapshot-кадра
     this._seq = 0;

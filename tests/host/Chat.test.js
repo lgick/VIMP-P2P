@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { buildSystemMessage } from '../../src/host/meta/modules/chat/systemMessages.js';
+import {
+  buildSystemMessage,
+  registerCodes,
+} from '../../src/host/meta/modules/chat/systemMessages.js';
+import tanksSystemMessages from '@vimp/tanks/host/systemMessages.js';
 
 // Chat — синглтон, перезагружаем модуль для изоляции
 let Chat;
@@ -22,6 +26,29 @@ describe('buildSystemMessage', () => {
 
   it('неизвестный ключ даёт undefined (текущее поведение)', () => {
     expect(buildSystemMessage('NOPE')).toBeUndefined();
+  });
+});
+
+describe('registerCodes: игровые коды', () => {
+  it('незарегистрированный игровой код неизвестен движку', () => {
+    expect(buildSystemMessage('BOT_CREATED')).toBeUndefined();
+  });
+
+  it('merge кодов игры в реестр движка (группа b:* танков)', () => {
+    registerCodes(tanksSystemMessages);
+
+    expect(buildSystemMessage('BOT_PLAYERS_ONLY')).toBe('b:0');
+    expect(buildSystemMessage('BOT_CREATED', [3])).toBe('b:5:3');
+
+    // движковые коды не задеты
+    expect(buildSystemMessage('USER_JOINED')).toBe('s:5');
+  });
+
+  it('повторная регистрация идемпотентна', () => {
+    registerCodes(tanksSystemMessages);
+    registerCodes(tanksSystemMessages);
+
+    expect(buildSystemMessage('BOT_REMOVED')).toBe('b:6');
   });
 });
 

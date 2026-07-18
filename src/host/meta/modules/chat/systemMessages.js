@@ -1,3 +1,7 @@
+// Реестр кодов системных сообщений чата. Движковые группы: s (статусы),
+// v (голосования), m (карты), c (команды), n (имена). Игровые коды
+// (у танков — группа b:*) добавляются через registerCodes и не должны
+// пересекаться с движковыми группами. Тексты шаблонов — на клиенте.
 const MESSAGE_CODES = {
   TEAMS_TEAM_FULL: 's:0', // Team {0} is full. Your current team: {1}
   TEAMS_YOUR_TEAM: 's:1', // Your team: {0}
@@ -21,15 +25,16 @@ const MESSAGE_CODES = {
 
   NAME_INVALID: 'n:0', // Invalid name
   NAME_CHANGED: 'n:1', // {0} changed name to {1}
-
-  BOT_PLAYERS_ONLY: 'b:0', // Only active players can use /bot
-  BOT_INVALID_COUNT: 'b:1', // Invalid bot count
-  BOT_INVALID_TEAM: 'b:2', // Invalid team name
-  BOT_CREATED_FOR_TEAM: 'b:3', // {0} bot(s) created for {1}
-  BOT_REMOVED_FROM_TEAM: 'b:4', // All bots removed from {0}
-  BOT_CREATED: 'b:5', // {0} bot(s) created
-  BOT_REMOVED: 'b:6', // All bots removed
 };
+
+/**
+ * Регистрирует игровые коды системных сообщений (merge в реестр движка).
+ * Идемпотентна: повторная регистрация тех же кодов безопасна.
+ * @param {Object} codes - { KEY: '<группа>:<номер>' }
+ */
+export function registerCodes(codes) {
+  Object.assign(MESSAGE_CODES, codes);
+}
 
 /**
  * Собирает финальную строку системного сообщения из ключа и параметров.
