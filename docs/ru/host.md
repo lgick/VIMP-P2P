@@ -199,9 +199,12 @@ Worker-safe (только изоморфные API — `Date`/`Math`/`performanc
 - `setActive`/`setSpectator` — переводы игрок↔наблюдатель с отправкой keySet
   и панели.
 
-**CommandProcessor** — парсинг чат-команд (сообщения, начинающиеся с `/`):
-`/name <ник>`, `/timeleft`, `/mapname`, `/nr` (новый раунд, **только в
-dev-режиме**), `/bot`:
+**CommandProcessor** — парсинг чат-команд (сообщения, начинающиеся с `/`).
+Движковое ядро: `/name <ник>`, `/timeleft`, `/mapname`, `/nr` (новый раунд,
+**только в dev-режиме**); игровые команды регистрируются через
+`registerCommand(name, handler)` и получают контекст меты —
+`handler(ctx, gameId, args)`. У танков зарегистрирована `/bot`
+(`games/tanks/src/host/botCommand.js`):
 
 ```
 /bot 5 team1   # создать 5 ботов в team1

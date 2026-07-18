@@ -216,9 +216,12 @@ are dependency-injected and Worker-safe (isomorphic APIs only —
 - `setActive`/`setSpectator` — player↔spectator transitions, sending the key
   set and the panel.
 
-**CommandProcessor** — parses chat commands (messages starting with `/`):
-`/name <nick>`, `/timeleft`, `/mapname`, `/nr` (new round, **dev mode
-only**), `/bot`:
+**CommandProcessor** — parses chat commands (messages starting with `/`).
+The engine core: `/name <nick>`, `/timeleft`, `/mapname`, `/nr` (new round,
+**dev mode only**); game commands are registered via
+`registerCommand(name, handler)` and receive the meta context —
+`handler(ctx, gameId, args)`. Tanks registers `/bot`
+(`games/tanks/src/host/botCommand.js`):
 
 ```
 /bot 5 team1   # spawn 5 bots into team1
