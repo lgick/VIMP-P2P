@@ -3,6 +3,7 @@
 let panel;
 
 class Panel {
+  // config — схема панели игры: { fields: { имя: { key, value } }, activeKey }
   constructor(config) {
     if (panel) {
       return panel;
@@ -10,18 +11,19 @@ class Panel {
 
     panel = this;
 
-    this._config = config;
+    this._fields = config.fields;
+    this._activeKey = config.activeKey;
 
     this._data = {};
     this._timerManager = null;
 
-    this._emptyPanel = Object.values(this._config).map(item => item.key);
+    this._emptyPanel = Object.values(this._fields).map(item => item.key);
     this._defaultPanel = {};
 
     this._lastSentRoundTime = -1; // кеширование последнего значения времени
 
-    for (const key of Object.keys(this._config)) {
-      this._defaultPanel[key] = this._config[key].value;
+    for (const key of Object.keys(this._fields)) {
+      this._defaultPanel[key] = this._fields[key].value;
     }
   }
 
@@ -68,7 +70,7 @@ class Panel {
   }
 
   // обновляет данные пользователя
-  // param: имя параметра из _config (например, 'health', 'w1')
+  // param: имя поля из схемы (например, 'health', 'w1')
   // value: значение
   // operation: 'set', 'decrement', 'increment'
   updateUser(gameId, param, value, operation = 'decrement') {
@@ -90,13 +92,13 @@ class Panel {
     }
 
     values[param] = newValue;
-    user.pendingChanges[this._config[param].key] = newValue;
+    user.pendingChanges[this._fields[param].key] = newValue;
   }
 
-  // устанавливает активное оружие
+  // устанавливает активное оружие (ключ кадра — activeKey схемы)
   setActiveWeapon(gameId, weaponKey) {
     const user = this._data[gameId];
-    user.pendingChanges['wa'] = weaponKey;
+    user.pendingChanges[this._activeKey] = weaponKey;
   }
 
   // проверяет, достаточно ли у пользователя ресурсов для действия
@@ -161,7 +163,7 @@ class Panel {
 
     for (const param in values) {
       if (Object.hasOwn(values, param)) {
-        const key = this._config[param].key;
+        const key = this._fields[param].key;
         const value = values[param];
 
         panelData.push(`${key}:${value}`);

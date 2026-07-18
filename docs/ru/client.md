@@ -11,7 +11,7 @@
 - Первый кадр (`FIRST_SHOT_DATA`, порт 4) применяется немедленно (`applyShot`), минуя ядро.
 - **Рендер-цикл** `renderTick` на `Ticker.shared` (rAF): `clientCore.sample(now)` → чтение плоского hot-буфера zero-copy из памяти WASM (танки/динамика/камера/предсказанный танк) + `take_frames()` для редких событийных кадров → применение прежним `parse`-конвейером (см. «Клиентское ядро» ниже).
 - Сбросы: смена карты (`MAP_DATA` → `set_map`) и `CLEAR` (→ `reset`) очищают буфер кадров и предикт в ядре.
-- **Разрыв P2P** (`handleDisconnect`): выход хоста = смерть комнаты (host-migration нет) — останавливает рендер-тик и `Application`-ы, показывает заглушку и возвращает в лобби перезагрузкой. Терминальная причина закрытия, уже показанная tech-informer'ом (кик, полная комната — любые коды, кроме `loading`), общим сообщением «Host left…» не затирается; причину Worker хоста доставляет `TECH_INFORM_DATA`-сообщением непосредственно перед закрытием канала (см. [network.md](network.md#rtt-pingpong-и-кики)). `techInformList` имеет дефолт из бандла (`src/config/client.js`) — отказ полной комнаты приходит до `CONFIG_DATA`.
+- **Разрыв P2P** (`handleDisconnect`): выход хоста = смерть комнаты (host-migration нет) — останавливает рендер-тик и `Application`-ы, показывает заглушку и возвращает в лобби перезагрузкой. Терминальная причина закрытия, уже показанная tech-informer'ом (кик, полная комната — любые коды, кроме `loading`), общим сообщением «Host left…» не затирается; причину Worker хоста доставляет `TECH_INFORM_DATA`-сообщением непосредственно перед закрытием канала (см. [network.md](network.md#rtt-pingpong-и-кики)). `techInformList` имеет дефолт из бандла (`src/config/clientDefaults.js`) — отказ полной комнаты приходит до `CONFIG_DATA`.
 - **Отсутствие WebRTC** (`ensureWebRtcAvailable`): если `RTCPeerConnection` недоступен (Firefox с `media.peerconnection.enabled = false`, resistFingerprinting и т.п.), `connectToHost`/`connectAsHost` показывают честное сообщение и не покидают лобби вместо падения с чёрным экраном.
 - **Роль хоста**: `connectAsHost` перед стартом Worker'а фетчит каталог карт мастера (fallback на бандл), после `ready` регистрирует комнату и держит heartbeat; сигнальный WS хоста при разрыве переподключается с бэкоффом (`lobbyConfig.reconnect`) и заново регистрирует комнату (повторный `welcome` лобби не пересоздаёт — guard в `initLobby`). Сбой инициализации Worker'а (`error`) гасит комнату с сообщением и возвращает в лобби.
 
@@ -47,12 +47,12 @@ Publisher-паттерн связей внутри тройки:
 Назначение компонентов:
 
 - **Auth** — форма входа (имя, модель), клиентская валидация (`validators.js`), localStorage.
-- **CanvasManager** — управляет несколькими PixiJS `Application` одновременно: `vimp` (основной игровой canvas) и `radar` (мини-карта). Адаптивное масштабирование (эталон 1920px), `aspectRatio`/`fixSize`/`baseScale`, динамическая камера (look-ahead, zoom от скорости) и тряска — параметры в [configuration.md](configuration.md#modulescanvasmanager--полотна-и-камера).
+- **CanvasManager** — управляет несколькими PixiJS `Application` одновременно: `vimp` (основной игровой canvas) и `radar` (мини-карта); canvas-элементы генерирует `main.js` из конфига канвасов игры (`modules.canvasManager.canvases`, включая стартовые `width`/`height`) — в HTML их нет. Адаптивное масштабирование (эталон 1920px), `aspectRatio`/`fixSize`/`baseScale`, динамическая камера (look-ahead, zoom от скорости) и тряска — параметры в [configuration.md](configuration.md#modulescanvasmanager--полотна-и-камера).
 - **Controls** — перехват клавиатуры (`InputListener`), активный набор клавиш диктует сервер (порт 17), режимы `chat`/`vote`/`stat`, отправка ввода `"seq:action:name"`.
 - **Game** — ядро рендеринга: `GameCtrl.parse(name, data)` создаёт/обновляет/удаляет экземпляры сущностей по снапшот-данным через `Factory`.
 - **Chat** — вывод сообщений (лимит строк, время жизни), командная строка; экранирование на выводе (`textContent`).
-- **Panel** — HUD: время раунда, здоровье, боезапас, активное оружие (по строкам `'ключ:значение'`).
-- **Stat** — таблицы scoreboard с сортировкой (`sortList`), показывается по Tab.
+- **Panel** — HUD: время раунда, здоровье, боезапас, активное оружие (по строкам `'ключ:значение'`). `PanelView` **генерирует DOM по схеме игры** (`modules.panel.elems`: порядок health → оружие → time) внутри движкового контейнера `#panel`; внешний вид ячеек — CSS игры.
+- **Stat** — таблицы scoreboard с сортировкой (`sortList`), показывается по Tab. `StatView` **генерирует шапку и таблицы по схеме игры** (`modules.stat.params`: `columns` — подписи колонок, `bodies` — произвольное число команд) внутри контейнера `#stat`; цвета/подписи команд — CSS игры.
 - **Vote** — окна голосований из шаблонов, пагинация, таймер жизни.
 
 ## Клиентское ядро (ClientCore)
@@ -86,10 +86,18 @@ Publisher-паттерн связей внутри тройки:
   подавленными дублями своих выстрелов; применяются прежним `applyShot`.
   Звук и эффекты триггерятся, как и раньше, самими parts при создании
   сущностей — отдельного eventId-диспетчера нет.
-- **Ввод**: `apply_input(action, name, now)` пишет историю предикта; на `down`
-  `fire` — `try_fire(now)` (гейты кулдауна/патронов/pending-бомбы/жив внутри
-  ядра) возвращает JSON спавна для `applyGameData`; `nextWeapon`/`prevWeapon` —
-  `cycle_weapon`. Отправка хосту `"seq:action:name"` не изменилась.
+- **Ввод**: `apply_input(action, name, now)` пишет историю предикта; игровые
+  действия идут через хук `ClientPlugin.hooks.onLocalAction` (`try_fire(now)` —
+  гейты кулдауна/патронов/pending-бомбы/жив внутри ядра — возвращает JSON
+  спавна для `applyGameData`; `nextWeapon`/`prevWeapon` — `cycle_weapon`).
+  Отправка хосту `"seq:action:name"` не изменилась.
+
+**ClientPlugin танков** (`games/tanks/src/client/index.js`, временная
+статическая композиция до этапа 6): игровые методы ядра зовутся только из его
+хуков — `onAuth` (`set_model` при авторизации), `onPanel` (`sync_panel` на
+кадр панели), `onLocalAction` (`try_fire`/`cycle_weapon`); `main.js` игровых
+методов ядра не знает. Игровой CSS (ячейки панели, полотна, цвета команд) —
+`games/tanks/src/client/tanks.css`, движковый каркас UI — `src/client/style.css`.
 
 Внутри ядро реализует следующие алгоритмы:
 

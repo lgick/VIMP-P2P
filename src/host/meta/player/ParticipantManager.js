@@ -1,15 +1,18 @@
 import HumanParticipant from './HumanParticipant.js';
 import BotParticipant from './BotParticipant.js';
 
-// Единый источник истины об участниках игры (люди + боты).
+// Единый источник истины об участниках игры (люди + scripted-участники).
 // Владеет реестром, размерами команд, списком активных игроков,
 // генерацией id (единое числовое пространство) и проверкой имён.
 class ParticipantManager {
-  constructor(teams, spectatorTeam, maxPlayers) {
+  // scripted — параметры scripted-участников из конфига игры:
+  // { namePrefix, defaultModel }
+  constructor(teams, spectatorTeam, maxPlayers, scripted = {}) {
     this._teams = teams; // { team1: 1, team2: 2, spectators: 3 }
     this._spectatorTeam = spectatorTeam;
     this._spectatorId = teams[spectatorTeam];
     this._maxPlayers = maxPlayers;
+    this._scripted = scripted;
 
     this._participants = new Map(); // gameId -> Participant
     this._teamSizes = {}; // team -> Set<gameId>
@@ -50,16 +53,16 @@ class ParticipantManager {
     return gameId;
   }
 
-  // создаёт участника-бота в команде, возвращает gameId
-  createBot({ team, model }) {
+  // создаёт scripted-участника в команде, возвращает gameId
+  createScripted({ team, model }) {
     const gameId = this._nextGameId();
-    const name = this.checkName(`Bot${gameId}`);
+    const name = this.checkName(`${this._scripted.namePrefix}${gameId}`);
     const teamId = this._teams[team];
 
     const participant = new BotParticipant({
       gameId,
       name,
-      model,
+      model: model ?? this._scripted.defaultModel,
       team,
       teamId,
     });
@@ -93,8 +96,9 @@ class ParticipantManager {
     return participant;
   }
 
-  // восстанавливает бота с исходным gameId (эстафета Worker'ов, Этап 5.2)
-  restoreBot({ gameId, name, model, team, teamId }) {
+  // восстанавливает scripted-участника с исходным gameId
+  // (эстафета Worker'ов, Этап 5.2)
+  restoreScripted({ gameId, name, model, team, teamId }) {
     if (this._participants.has(gameId) || !this._teamSizes[team]) {
       return null;
     }
@@ -138,8 +142,8 @@ class ParticipantManager {
     return this.getAll().filter(p => p.isNetworked);
   }
 
-  getBots() {
-    return this.getAll().filter(p => p.isBot);
+  getScripted() {
+    return this.getAll().filter(p => p.isScripted);
   }
 
   // люди, готовые к игре (получатели сетевого кадра)
@@ -147,7 +151,7 @@ class ParticipantManager {
     return this.getHumans().filter(p => p.isReady);
   }
 
-  // проверяет уникальность имени по всему реестру (люди + боты)
+  // проверяет уникальность имени по всему реестру (люди + scripted)
   checkName(name, number = 1) {
     for (const participant of this._participants.values()) {
       if (participant.name === name) {
@@ -229,7 +233,7 @@ class ParticipantManager {
     }
   }
 
-  // суммарно люди + боты (для лимита maxPlayers)
+  // суммарно люди + scripted (для лимита maxPlayers)
   get totalCount() {
     return this._participants.size;
   }

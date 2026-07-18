@@ -9,8 +9,14 @@ class Participant {
     this.status = 'spectator'; // 'spectator' | 'active' | 'dead'
   }
 
-  get isBot() {
+  // участник, управляемый кодом (ИИ), а не сетевым игроком
+  get isScripted() {
     return false;
+  }
+
+  // алиас isScripted до конца этапа 5 (миграция на нейтральный термин)
+  get isBot() {
+    return this.isScripted;
   }
 
   get isNetworked() {

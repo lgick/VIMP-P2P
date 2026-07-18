@@ -1,0 +1,97 @@
+@charset "UTF-8";
+
+/* Игровой CSS танков: иконки/подписи ячеек панели, полотна игры,
+   цвета и подписи таблиц команд scoreboard. Движковый каркас UI —
+   src/client/style.css. В этапе 6 приедет через ClientPlugin.styles. */
+
+#panel table td#panel-bullet:before {
+  content: 'bullet: ';
+}
+
+#panel table td#panel-bomb:before {
+  content: 'bomb: ';
+}
+
+#panel table td#panel-time:before {
+  content: 'time: ';
+}
+
+#vimp {
+  background: #222;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: auto;
+  z-index: 1;
+}
+
+#radar {
+  position: absolute;
+  right: 1%;
+  top: 35px;
+  z-index: 2;
+  border-radius: 50%;
+  background-color: rgba(0, 190, 90, 0.8);
+  box-shadow:
+    inset 0 0 47px 0 #ee6,
+    0px 0px 0px 3px #054;
+}
+
+#team1 {
+  color: #f56;
+}
+
+#team2 {
+  color: #7ed;
+}
+
+#spectators {
+  color: #fe5;
+}
+
+#team1 tHead tr,
+#team2 tHead tr,
+#spectators tHead tr {
+  border-bottom: 1px solid #888;
+  text-transform: capitalize;
+  font-weight: bold;
+}
+
+#team1 tBody tr,
+#team2 tBody tr {
+  border-bottom: 1px solid #444;
+}
+
+#team1 tHead td:first-child:before {
+  content: 'team1 (';
+}
+
+#team1 tHead td:first-child:after {
+  content: ')';
+}
+
+#team2 tHead td:first-child:before {
+  content: 'team2 (';
+}
+
+#team2 tHead td:first-child:after {
+  content: ')';
+}
+
+#spectators tHead td:first-child:before {
+  content: 'spectators';
+}
+
+#spectators tBody td:nth-child(1) {
+  padding: 0 1%;
+  line-height: 1.4em;
+}
+
+#spectators tBody td:nth-child(2),
+#spectators tBody td:nth-child(3),
+#spectators tBody td:nth-child(4),
+#spectators tBody td:nth-child(5) {
+  display: none;
+}

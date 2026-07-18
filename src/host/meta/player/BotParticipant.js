@@ -1,6 +1,7 @@
 import Participant from './Participant.js';
 
-// Участник-бот: управляется ИИ, всегда active-или-удалён, наблюдателем не бывает
+// Scripted-участник (бот): управляется ИИ, всегда active-или-удалён,
+// наблюдателем не бывает
 class BotParticipant extends Participant {
   constructor({ gameId, name, model, team, teamId }) {
     super({ gameId, name, model, team, teamId });
@@ -9,7 +10,7 @@ class BotParticipant extends Participant {
     this.controller = null; // BotController
   }
 
-  get isBot() {
+  get isScripted() {
     return true;
   }
 }

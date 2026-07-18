@@ -35,7 +35,6 @@ src/
     host.worker.js — Web Worker: WASM core + meta + port state machine + ~120 Hz loop
     HostGame.js  — host facade: wires meta modules, drives the core tick
     GameCoreAdapter.js — physics/bots/packing surface over GameCore
-    HostBotManager.js  — thin bot registry (AI lives in the core)
     meta/        — JS meta running in the Worker: core/ (RoundManager, CommandProcessor,
                    VoteCoordinator), modules/ (Panel, Stat, Vote, chat/,
                    TimerManager, RTTManager), player/ (Participant/Human/Bot +
@@ -110,7 +109,7 @@ HostGame (facade/wiring + core-driven tick)
  ├─ GameCoreAdapter      — the core: physics, Tank/Bomb/Hitscan, bots, packBody/packFrame
  ├─ Cold path: Panel, Stat, Chat, Vote (JSON, on change)
  ├─ TimerManager         — all timers  /  RTTManager — pings and kicks
- └─ HostBotManager       — bot participant registry (AI lives in the core)
+ └─ TanksBotManager      — the game's scripted module (games/tanks; AI lives in the core)
 ```
 
 **The core's boundary is simulation, not meta**: physics, tanks, both weapon
@@ -207,7 +206,7 @@ migration (the split is listed per file).
 
 - **Source of truth for ports** — `src/config/wsports.js`; for snapshot keys and the binary format version — `src/config/opcodes.js`.
 - **Motion replica parity**: authoritative motion (Rapier) and the client prediction replica share the tick formulas (`core/src/motion.rs`); integration parity is locked in by cargo tests (`client::predictor::parity`) — any edit to motion in the core or the `models.js` coefficients requires running `npm run core:test`.
-- **A single numeric id space** for humans and bots; distinguished via `isBot`/`isNetworked`. The core operates on numeric ids, meta keys by string — the conversion happens at the `GameCoreAdapter` boundary.
+- **A single numeric id space** for humans and scripted participants (bots); distinguished via `isScripted`/`isNetworked`. The core operates on numeric ids, meta keys by string — the conversion happens at the `GameCoreAdapter` boundary.
 - Every send to a client goes only through `SocketManager`.
 
 ---

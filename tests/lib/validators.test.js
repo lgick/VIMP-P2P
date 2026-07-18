@@ -1,9 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import {
-  isValidName,
-  isValidModel,
-  validateAuth,
-} from '../../src/lib/validators.js';
+import tanksAuthConfig from '@vimp/tanks/config/auth.js';
+import { isValidName, validateAuth } from '../../src/lib/validators.js';
 
 describe('isValidName', () => {
   it('принимает корректные имена', () => {
@@ -36,47 +33,73 @@ describe('isValidName', () => {
   });
 });
 
-describe('isValidModel', () => {
-  it('принимает только m1', () => {
-    expect(isValidModel('m1')).toBe(true);
-    expect(isValidModel('m2')).toBe(false);
-    expect(isValidModel('')).toBe(false);
-  });
-});
-
 describe('validateAuth', () => {
   const authParams = [
     { name: 'name', options: { validator: 'isValidName' } },
     { name: 'model', options: { validator: 'isValidModel' } },
   ];
 
+  // игровой валидатор инжектируется (движок isValidModel не знает)
+  const validators = { isValidModel: model => model === 'm1' };
+
   it('возвращает undefined при валидных данных', () => {
-    const result = validateAuth({ name: 'John', model: 'm1' }, authParams);
+    const result = validateAuth(
+      { name: 'John', model: 'm1' },
+      authParams,
+      validators,
+    );
     expect(result).toBeUndefined();
   });
 
   it('сообщает об отсутствующем свойстве', () => {
-    const result = validateAuth({ name: 'John' }, authParams);
+    const result = validateAuth({ name: 'John' }, authParams, validators);
     expect(result).toEqual([{ name: 'model', error: 'Property is missing' }]);
   });
 
   it('сообщает о нестроковом значении', () => {
-    const result = validateAuth({ name: 123, model: 'm1' }, authParams);
+    const result = validateAuth({ name: 123, model: 'm1' }, authParams, validators);
     expect(result).toEqual([
       { name: 'name', error: 'Property must be a string' },
     ]);
   });
 
   it('накапливает ошибки валидации', () => {
-    const result = validateAuth({ name: '1', model: 'm9' }, authParams);
+    const result = validateAuth({ name: '1', model: 'm9' }, authParams, validators);
     expect(result).toEqual([
       { name: 'name', error: 'not valid' },
       { name: 'model', error: 'not valid' },
     ]);
   });
 
+  it('игровой валидатор может переопределить движковый', () => {
+    const params = [{ name: 'name', options: { validator: 'isValidName' } }];
+    const strict = { isValidName: () => false };
+
+    expect(validateAuth({ name: 'John' }, params, strict)).toEqual([
+      { name: 'name', error: 'not valid' },
+    ]);
+  });
+
   it('параметр без валидатора считается валидным, если это строка', () => {
     const params = [{ name: 'free', options: {} }];
     expect(validateAuth({ free: 'anything' }, params)).toBeUndefined();
+  });
+});
+
+describe('authSchema танков (@vimp/tanks/config/auth.js)', () => {
+  it('isValidModel принимает модели из данных игры', () => {
+    const { isValidModel } = tanksAuthConfig.validators;
+
+    expect(isValidModel('m1')).toBe(true);
+    expect(isValidModel('m2')).toBe(false);
+    expect(isValidModel('')).toBe(false);
+  });
+
+  it('все params ссылаются на существующие валидаторы', () => {
+    const known = new Set(['isValidName', ...Object.keys(tanksAuthConfig.validators)]);
+
+    for (const { options } of tanksAuthConfig.params) {
+      expect(known.has(options.validator)).toBe(true);
+    }
   });
 });

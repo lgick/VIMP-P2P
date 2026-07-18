@@ -5,14 +5,22 @@ import Publisher from '../../../lib/Publisher.js';
 let statView;
 
 export default class StatView {
-  constructor(model, elems) {
+  // config — { elems (движок: контейнер), params (схема игры: columns —
+  // подписи колонок, bodies — таблицы команд) }
+  constructor(model, config) {
     if (statView) {
       return statView;
     }
 
     statView = this;
 
+    const { elems, params } = config;
+
     this._stat = document.getElementById(elems.stat);
+
+    // DOM scoreboard генерируется по схеме игры: произвольное число
+    // команд (bodies) и колонок (columns)
+    this._buildStat(params);
 
     this.publisher = new Publisher();
 
@@ -23,6 +31,50 @@ export default class StatView {
     this._mPublic.on('tHead', 'updateTableHead', this);
     this._mPublic.on('tBody', 'updateTableBody', this);
     this._mPublic.on('clearBodies', 'clearBodies', this);
+  }
+
+  // генерирует шапку и таблицы по схеме (замена хардкода stat.pug)
+  _buildStat(params) {
+    const { columns, bodies } = params;
+
+    const head = document.createElement('div');
+
+    head.className = 'stat-head';
+
+    for (const label of columns) {
+      const span = document.createElement('span');
+
+      span.textContent = label;
+      head.appendChild(span);
+    }
+
+    const tables = document.createElement('div');
+
+    tables.className = 'stat-tables';
+
+    // порядок таблиц — по числовым ключам bodies (id команд)
+    const tableNames = Object.keys(bodies)
+      .sort((a, b) => a - b)
+      .map(key => bodies[key]);
+
+    for (const name of tableNames) {
+      const table = document.createElement('table');
+
+      table.setAttribute('id', name);
+
+      const tHead = table.createTHead();
+      const headRow = tHead.insertRow(-1);
+
+      for (let i = 0, len = columns.length; i < len; i += 1) {
+        headRow.insertCell(-1);
+      }
+
+      table.appendChild(document.createElement('tbody'));
+      tables.appendChild(table);
+    }
+
+    this._stat.appendChild(head);
+    this._stat.appendChild(tables);
   }
 
   // открывает статистику

@@ -1,5 +1,9 @@
-import sounds from '@vimp/tanks/config/sounds.js';
+import sounds from './sounds.js';
 
+// Игровая половина клиентского CONFIG_DATA: сущности рендера, канвасы,
+// keyset игрока, схемы panel/stat, тексты chat/vote/gameInform. Движковые
+// дефолты — src/config/clientDefaults.js; merge выполняет buildClientConfig
+// (в этапе 6 этот объект соберёт HostPlugin.buildClientGameConfig).
 export default {
   // ***** parts ***** //
   parts: {
@@ -126,47 +130,23 @@ export default {
 
   initIdList: ['vimp', 'radar', 'panel', 'chat'],
 
-  // ***** interpolation ***** //
-  // snapshot-интерполяция: мир рендерится в прошлом (serverNow − delay)
-  interpolation: {
-    delay: 100, // мс; ~3 кадра при 30 пакетах/сек
-    maxFrameAge: 1000, // мс; страховочная очистка старых кадров буфера
-  },
-
   // ***** modules ***** //
   modules: {
     canvasManager: {
-      dynamicCamera: {
-        // сила смещения камеры вперед (чем больше, тем дальше смотрит)
-        lookAheadFactor: 30,
-
-        // чувствительность зума (0 - 1)
-        // 0.1 - мягкое отдаление
-        // 0.5 - агрессивное отдаление
-        // 1.0 - экстремально сильная реакция на скорость
-        zoomOutFactor: 0.5,
-
-        // максимально возможное отдаление (от базового масштаба)
-        maxZoomOut: 0.6,
-
-        // плавность изменений позиции камеры (0 - 1)
-        smoothnessPosition: 0.008,
-
-        // плавность изменений зума камеры (0 - 1)
-        smoothnessZoom: 0.005,
-
-        // плавность входящей скорости (0 - 1)
-        // (игнорирует мелкие рывки сети, но реагирует на разгон)
-        smoothnessVelocity: 0.15,
-      },
+      // полотна создаёт main.js из этого конфига (canvas#<id> в DOM);
+      // width/height — стартовый размер до первого resize
       canvases: {
         vimp: {
+          width: 960,
+          height: 600,
           aspectRatio: '16:9',
           baseScale: '5:1',
           dynamicCamera: true,
           shakeCamera: true,
         },
         radar: {
+          width: 150,
+          height: 150,
           fixSize: '150',
           baseScale: '1:8',
         },
@@ -194,27 +174,10 @@ export default {
           80: 'prevWeapon', // prev weapon (p)
         },
       ],
-      modes: {
-        67: 'chat', // чат (c)
-        77: 'vote', // опрос (m)
-        9: 'stat', // статистика (tab)
-      },
-      cmds: {
-        27: 'escape', // отмена (escape)
-        13: 'enter', // ввод (enter)
-      },
     },
 
     chat: {
-      elems: {
-        chatBox: 'chat-box',
-        cmd: 'cmd',
-      },
       params: {
-        listLimit: 5,
-        lineTime: 15000,
-        cacheMin: 200,
-        cacheMax: 300,
         messages: {
           // teams/status
           s: [
@@ -256,6 +219,15 @@ export default {
     },
 
     panel: {
+      keys: {
+        t: 'time',
+        h: 'health',
+        wa: 'activeWeapon',
+        w1: 'bullet',
+        w2: 'bomb',
+      },
+      // схема DOM панели: PanelView генерирует ячейки в порядке
+      // health → оружие → time; внешний вид — CSS игры
       elems: {
         time: 'panel-time',
         health: 'panel-health',
@@ -264,20 +236,12 @@ export default {
           bomb: 'panel-bomb',
         },
       },
-      keys: {
-        t: 'time',
-        h: 'health',
-        wa: 'activeWeapon',
-        w1: 'bullet',
-        w2: 'bomb',
-      },
     },
 
     stat: {
-      elems: {
-        stat: 'stat',
-      },
       params: {
+        // подписи колонок scoreboard (StatView генерирует шапку и таблицы)
+        columns: ['names', 'status', 'score', 'deaths', 'latency'],
         heads: {
           1: 'team1',
           2: 'team2',
@@ -301,13 +265,6 @@ export default {
     },
 
     vote: {
-      elems: {
-        voteId: 'vote',
-        titleClass: 'vote-title',
-        listClass: 'vote-list',
-        navClass: 'vote-nav',
-        navActiveClass: 'active',
-      },
       params: {
         templates: {
           teamChange: ['Choose a team', 'teams', true],
@@ -340,27 +297,6 @@ export default {
 
   // game information
   gameInform: {
-    id: 'game-informer',
     list: ['{0} WINS!', 'ROUND START!', 'GAME OVER!'],
   },
-
-  // technical information
-  techInformList: [
-    `Server is full! Please wait or try again later.
-     Max players: {0}
-     You are #{1} in the queue.
-    `,
-
-    'Connection closed due to a new login from another device!',
-
-    'Loading...',
-
-    'Kicked for inactivity.',
-
-    'Connection terminated due to high network latency.',
-
-    'Connection terminated due to missed network pings.',
-
-    'Room is full! Max players: {0}. Try again later.',
-  ],
 };

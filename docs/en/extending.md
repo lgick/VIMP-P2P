@@ -49,7 +49,7 @@ Steps:
    `bomb.rs`; block packing — `snapshot.rs`), following the existing
    weapon of the same type.
 3. Create the client-side rendering in `src/client/parts/`.
-4. Register the entity in `src/config/client.js`: `parts.gameSets`
+4. Register the entity in `games/tanks/src/config/client.js`: `parts.gameSets`
    (snapshot key → classes) and `parts.entitiesOnCanvas` (class →
    canvas).
 5. Register the weapon's snapshot keys (and its effects) in
@@ -82,7 +82,7 @@ Steps:
 1. Create a class in `src/client/parts/` following the existing ones
    (`Tank`, `Bomb`, effects in `parts/effects/`) and export it from
    `parts/index.js` — it lands in the `Factory` registry.
-2. Add it to `gameSets`/`entitiesOnCanvas` (`src/config/client.js`).
+2. Add it to `gameSets`/`entitiesOnCanvas` (`games/tanks/src/config/client.js`).
 3. If it needs a procedural texture, add a baker in
    `src/client/providers/bakers/` (follow the existing ones) and an
    entry in `bakedAssets`.

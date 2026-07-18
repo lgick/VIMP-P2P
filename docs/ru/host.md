@@ -39,7 +39,7 @@
 портов 0–8 (см. [network.md](network.md)). Сообщения главного потока:
 
 - `init(room, handoff?)` — собирает конфиг игры (merge движковых дефолтов
-  `src/config/hostDefaults.js` и игрового `@vimp/tanks/config/game.js`) и
+  `src/config/hostDefaults.js` и `HostPlugin.gameConfig`) и
   применяет к нему настройки комнаты (`applyRoomOverrides`: имя/карта/лимит
   ≤ `roomDefaults.maxPlayers`/таймеры/friendly fire; карты —
   из `room.maps`, если главный поток скачал каталог мастера), инициализирует
@@ -133,9 +133,9 @@ prediction) собирает `src/lib/buildClientConfig.js`.
 - **жизненный цикл/физика** → ABI ядра: `createMap` → `load_map` (карта уже
   отмасштабирована в JS `RoundManager.scaleMapData`, поэтому грузится со
   `scale: 1` — ядро не масштабирует повторно); `createPlayer`/`removePlayer`
-  различают бота и человека по `participant.isBot` (`add_bot`/`remove_bot` —
-  танк + ИИ в ядре — против `spawn_tank`/`remove_tank`); `changePlayerData` →
-  `reset_tank`;
+  различают scripted-участника и человека по `participant.isScripted`
+  (`add_bot`/`remove_bot` — танк + ИИ в ядре — против
+  `spawn_tank`/`remove_tank`); `changePlayerData` → `reset_tank`;
 - **ввод** → `apply_input` (seq подтверждается ядром в player-блоке кадра);
 - **проекция событий**: после `step` дренирует `take_events()` и отдаёт каждое
   событие инъецируемому игровому `eventRouter`'у
@@ -152,9 +152,23 @@ prediction) собирает `src/lib/buildClientConfig.js`.
 - **первый кадр**: `getPlayersData` → `players_data()` ядра (полный снапшот
   игроков без дренажа накопителей — для `FIRST_SHOT_DATA`).
 
-`HostBotManager` (`src/host/HostBotManager.js`) — тонкий менеджер ботов:
-регистрация участников-ботов и связка со `Stat`/`Panel` (ИИ, навигация и
-пространственная сетка — в ядре).
+`TanksBotManager` (`games/tanks/src/host/TanksBotManager.js`) — игровой
+scripted-модуль: тонкий менеджер ботов, регистрация участников и связка со
+`Stat`/`Panel` (ИИ, навигация и пространственная сетка — в ядре). Создаётся
+фабрикой `createModules(ctx)` (`games/tanks/src/host/createModules.js` —
+будущий `HostPlugin.createModules`); движок дергает контракт scripted-модуля:
+`createMap`, `createBots(count, team?)`, `removeBots(team?)`,
+`removeOneBotForPlayer(team)`, `getBots`, `getBotCount`,
+`getBotCountsPerTeam`. Параметры — `scripted` из конфига игры
+(`namePrefix`, `defaultModel`).
+
+**HostPlugin танков** (`games/tanks/src/host/index.js`, временная статическая
+композиция до этапа 6) — вся игровая половина хоста одним объектом:
+`gameConfig`, `authSchema`, `coreEventRouter`, `chatCommands` (`/bot`),
+`systemMessages` (группа `b:*`), `createModules` (scripted-модуль ботов),
+`buildClientGameConfig()` (игровая половина CONFIG_DATA). Его потребляют
+`host.worker.js` (конфиги/авторизация) и `HostGame` (роутер событий, команды,
+коды, модули).
 
 ## Мета-модули (`src/host/meta/`)
 
@@ -164,19 +178,22 @@ Worker-safe (только изоморфные API — `Date`/`Math`/`performanc
 
 ### ParticipantManager — реестр участников (`meta/player/`)
 
-**Единый источник истины об участниках** (люди + боты):
+**Единый источник истины об участниках** (люди + scripted-участники/боты):
 
 - классы `Participant` (база: `gameId`, `name`, `model`, `team`, `teamId`,
   `status`) → `HumanParticipant` (`socketId`, `isReady`, `currentMap`,
   `isWatching`, `watchedGameId`, `forceCameraReset`, `pendingShake`,
   `lastActionTime`, `lastInputSeq`) и `BotParticipant`;
-- различение бот/человек — геттеры `isBot`/`isNetworked`, **не** по формату id:
-  люди и боты делят единое числовое пространство id (генератор — наименьший
-  свободный);
-- API: `createHuman`/`createBot`/`remove`/`get`/`getAll`/`getHumans`/`getBots`/
-  `getNetworkedReady` (готовые к рассылке), `checkName` (дедупликация имён),
-  размеры команд (`getTeamSize`/`addToTeam`/`resetTeamSizes`), список активных
-  для наблюдения (`addActive`/`removeActive`/`getActiveList`/`replaceWatched`),
+- различение scripted/человек — геттеры `isScripted`/`isNetworked` (`isBot` —
+  алиас `isScripted` до конца этапа 5), **не** по формату id: люди и
+  scripted-участники делят единое числовое пространство id (генератор —
+  наименьший свободный);
+- API: `createHuman`/`createScripted`/`remove`/`get`/`getAll`/`getHumans`/
+  `getScripted`/`getNetworkedReady` (готовые к рассылке), `checkName`
+  (дедупликация имён; имя scripted — `scripted.namePrefix` + id из конфига
+  игры), размеры команд (`getTeamSize`/`addToTeam`/`resetTeamSizes`), список
+  активных для наблюдения
+  (`addActive`/`removeActive`/`getActiveList`/`replaceWatched`),
   лимит `maxPlayers` (`totalCount`).
 
 ### Менеджеры `meta/core/`
@@ -228,12 +245,13 @@ found». (`/ban` до хоста не доходит — клиент перех
 
 ### Модули `meta/modules/`
 
-- **`Panel`** — HUD per-user: значения из `game:panel` (health/w1/w2),
+- **`Panel`** — HUD per-user: схема из `game:panel` (`fields` —
+  health/w1/w2, `activeKey` — ключ активного оружия),
   `updateUser(gameId, param, value, op)` с накоплением `pendingChanges`,
   `processUpdates()` раз в тик снапшота отдаёт только изменения (строки
   `'ключ:значение'`, время раунда `t` — при смене секунды),
-  `getFullPanel`/`getEmptyPanel`, `setActiveWeapon` (`wa`),
-  `hasResources`/`getCurrentValue`. Авторитетные значения health/ammo живут в
+  `getFullPanel`/`getEmptyPanel`, `setActiveWeapon` (пишет `activeKey`
+  схемы, у танков `wa`), `hasResources`/`getCurrentValue`. Авторитетные значения health/ammo живут в
   ядре — панель наполняется проекцией его событий (`GameCoreAdapter`).
 - **`Stat`** — scoreboard: строки (body) и итоги команд (head) по конфигу
   `game:stat`; `addUser`/`removeUser`/`moveUser`/`updateUser`/`updateHead`;

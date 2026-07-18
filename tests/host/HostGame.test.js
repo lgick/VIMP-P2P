@@ -352,7 +352,7 @@ describe.skipIf(!coreAvailable)('HostGame: эстафета Worker\'ов (5.2)',
     expect(p1).toMatchObject({ name: 'P1', socketId: 's1', isReady: true });
     expect(p2).toMatchObject({ name: 'P2', socketId: 's2', isReady: true });
     expect(p1.team).toBe('team1');
-    expect(host._participants.getBots()).toHaveLength(1);
+    expect(host._participants.getScripted()).toHaveLength(1);
 
     // не завершивший хендшейк гость не восстановлен, его строка stat вычищена
     expect(host._participants.get(old.p3)).toBeUndefined();

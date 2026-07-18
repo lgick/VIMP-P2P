@@ -35,7 +35,6 @@ src/
     host.worker.js — Web Worker: WASM-ядро + мета + порт-машина + цикл ~120 Гц
     HostGame.js  — host-фасад: wiring мета-модулей, core-driven тик
     GameCoreAdapter.js — поверхность физики/ботов/упаковки поверх GameCore
-    HostBotManager.js  — тонкий реестр ботов (ИИ — в ядре)
     meta/        — JS-мета Worker'а: core/ (RoundManager, CommandProcessor,
                    VoteCoordinator), modules/ (Panel, Stat, Vote, chat/,
                    TimerManager, RTTManager), player/ (Participant/Human/Bot +
@@ -109,7 +108,7 @@ HostGame (фасад/wiring + core-driven тик)
  ├─ GameCoreAdapter      — ядро: физика, Tank/Bomb/Hitscan, боты, packBody/packFrame
  ├─ Cold path: Panel, Stat, Chat, Vote (JSON, по изменению)
  ├─ TimerManager         — все таймеры  /  RTTManager — пинги и кики
- └─ HostBotManager       — реестр участников-ботов (ИИ — в ядре)
+ └─ TanksBotManager      — scripted-модуль игры (games/tanks; ИИ — в ядре)
 ```
 
 **Граница ядра — симуляция, а не мета**: в ядре физика, танки, оба типа оружия,
@@ -200,7 +199,7 @@ CommandProcessor) остаются движковыми, но **вся их па
 
 - **Источник истины по портам** — `src/config/wsports.js`; по snapshot-ключам и версии бинарного формата — `src/config/opcodes.js`.
 - **Паритет реплики движения**: авторитетное движение (Rapier) и реплика клиентского предикта делят формулы тика (`core/src/motion.rs`); паритет интеграции закреплён cargo-тестами (`client::predictor::parity`) — любая правка движения в ядре или коэффициентов `models.js` требует прогона `npm run core:test`.
-- **Единое числовое пространство id** для людей и ботов; различение — `isBot`/`isNetworked`. Ядро оперирует числовыми id, мета ключует строками — приведение на границе `GameCoreAdapter`.
+- **Единое числовое пространство id** для людей и scripted-участников (ботов); различение — `isScripted`/`isNetworked`. Ядро оперирует числовыми id, мета ключует строками — приведение на границе `GameCoreAdapter`.
 - Все отправки клиенту — только через `SocketManager`.
 
 ---

@@ -65,7 +65,7 @@ const makeFakeCore = (events = []) => ({
 });
 
 const makeParticipants = (bots = new Set()) => ({
-  get: id => ({ isBot: bots.has(id) }),
+  get: id => ({ isScripted: bots.has(id) }),
 });
 
 const noopRouter = () => {};

@@ -1,21 +1,23 @@
-// Тонкий менеджер ботов хоста: реестр участников-ботов поверх ядра.
+// Игровой scripted-модуль танков: тонкий менеджер ботов поверх ядра.
 // ИИ, навигация и пространственная сетка живут в Rust-ядре (add_bot создаёт
-// танк + контроллер), поэтому здесь нет BotController/NavigationSystem/
-// SpatialManager — только регистрация участников-ботов и связка со Stat/Panel.
-export default class HostBotManager {
+// танк + контроллер) — здесь только регистрация участников и связка со
+// Stat/Panel. Контракт scripted-модуля (дергает движок — RoundManager,
+// HostGame, чат-команда /bot): createMap, createBots, removeBots,
+// removeOneBotForPlayer, getBots, getBotCount, getBotCountsPerTeam.
+// Worker-safe: только изоморфные API.
+export default class TanksBotManager {
   /**
-   * @param {ParticipantManager} participants - единый реестр участников.
-   * @param {GameCoreAdapter} game - адаптер ядра (спавн/удаление танка).
-   * @param {Panel} panel
-   * @param {Stat} stat
+   * @param {Object} ctx - контекст движка (в этапе 6 — из createModules):
+   *   participants (единый реестр), coreAdapter (спавн/удаление танка),
+   *   panel, stat, scripted ({ namePrefix, defaultModel } из конфига игры).
    */
-  constructor(participants, game, panel, stat) {
+  constructor({ participants, coreAdapter, panel, stat, scripted }) {
     this._participants = participants;
-    this._game = game;
+    this._coreAdapter = coreAdapter;
     this._panel = panel;
     this._stat = stat;
 
-    this._model = 'm1'; // модель танка для ботов
+    this._model = scripted.defaultModel; // модель танка для ботов
     this._respawns = null; // данные респаунов текущей карты
   }
 
@@ -32,7 +34,7 @@ export default class HostBotManager {
   }
 
   // создаёт заданное количество ботов-участников (танки в ядре — на старте
-  // раунда через RoundManager → game.createPlayer → core.add_bot)
+  // раунда через RoundManager → coreAdapter.createPlayer → core.add_bot)
   createBots(count, teamName = null) {
     if (!this._respawns) {
       return 0;
@@ -67,7 +69,7 @@ export default class HostBotManager {
         continue; // нет свободных мест в команде или команда не найдена
       }
 
-      const gameId = this._participants.createBot({
+      const gameId = this._participants.createScripted({
         team: targetTeam,
         model: this._model,
       });
@@ -89,15 +91,15 @@ export default class HostBotManager {
   // удаляет ботов (всех либо конкретной команды)
   removeBots(teamName = null) {
     const botsToRemove = teamName
-      ? this._participants.getBots().filter(bot => bot.team === teamName)
-      : this._participants.getBots();
+      ? this._participants.getScripted().filter(bot => bot.team === teamName)
+      : this._participants.getScripted();
 
     botsToRemove.forEach(bot => this._removeBotById(bot.gameId));
   }
 
   // удаляет одного бота из команды, чтобы освободить место игроку
   removeOneBotForPlayer(teamName) {
-    for (const bot of this._participants.getBots()) {
+    for (const bot of this._participants.getScripted()) {
       if (bot.team === teamName) {
         this._removeBotById(bot.gameId);
         return true;
@@ -111,13 +113,13 @@ export default class HostBotManager {
   _removeBotById(gameId) {
     const participant = this._participants.get(gameId);
 
-    if (!participant || !participant.isBot) {
+    if (!participant || !participant.isScripted) {
       return;
     }
 
     this._stat.removeUser(gameId, participant.teamId);
     this._panel.removeUser(gameId);
-    this._game.removePlayer(gameId); // → core.remove_bot (танк + ИИ)
+    this._coreAdapter.removePlayer(gameId); // → core.remove_bot (танк + ИИ)
 
     this._participants.remove(gameId);
   }
@@ -125,26 +127,27 @@ export default class HostBotManager {
   getBotById(gameId) {
     const participant = this._participants.get(gameId);
 
-    return participant && participant.isBot ? participant : undefined;
+    return participant && participant.isScripted ? participant : undefined;
   }
 
   getBots() {
-    return this._participants.getBots();
+    return this._participants.getScripted();
   }
 
   getBotCount() {
-    return this._participants.getBots().length;
+    return this._participants.getScripted().length;
   }
 
   getBotCountForTeam(teamName) {
-    return this._participants.getBots().filter(bot => bot.team === teamName)
-      .length;
+    return this._participants
+      .getScripted()
+      .filter(bot => bot.team === teamName).length;
   }
 
   getBotCountsPerTeam() {
     const counts = {};
 
-    for (const bot of this._participants.getBots()) {
+    for (const bot of this._participants.getScripted()) {
       counts[bot.team] = (counts[bot.team] || 0) + 1;
     }
 

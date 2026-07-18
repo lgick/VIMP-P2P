@@ -43,8 +43,8 @@ machine — an automaton over client ports 0–8 (see [network.md](network.md)).
 Main-thread messages:
 
 - `init(room, handoff?)` — assembles the game config (a merge of the engine
-  defaults `src/config/hostDefaults.js` and the game's
-  `@vimp/tanks/config/game.js`) and applies room settings to it
+  defaults `src/config/hostDefaults.js` and `HostPlugin.gameConfig`) and
+  applies room settings to it
   (`applyRoomOverrides`: name/map/limit ≤ `roomDefaults.maxPlayers`/timers/
   friendly fire; maps come
   from `room.maps` if the main thread fetched the master's catalog),
@@ -145,9 +145,9 @@ Implements the physics/bots/packing surface consumed by
 - **lifecycle/physics** → the core's ABI: `createMap` → `load_map` (the map
   is already scaled in JS by `RoundManager.scaleMapData`, so it's loaded
   with `scale: 1` — the core doesn't scale it again); `createPlayer`/
-  `removePlayer` tell bots and humans apart via `participant.isBot`
-  (`add_bot`/`remove_bot` — a tank + AI in the core — versus
-  `spawn_tank`/`remove_tank`); `changePlayerData` → `reset_tank`;
+  `removePlayer` tell scripted participants and humans apart via
+  `participant.isScripted` (`add_bot`/`remove_bot` — a tank + AI in the
+  core — versus `spawn_tank`/`remove_tank`); `changePlayerData` → `reset_tank`;
 - **input** → `apply_input` (seq is confirmed by the core in the frame's
   player block);
 - **event projection**: after `step`, drains `take_events()` and hands each
@@ -167,9 +167,24 @@ Implements the physics/bots/packing surface consumed by
   full player snapshot without draining accumulators — for
   `FIRST_SHOT_DATA`).
 
-`HostBotManager` (`src/host/HostBotManager.js`) is a thin bot manager:
-registering bot participants and linking them to `Stat`/`Panel` (AI,
-navigation, and the spatial grid live in the core).
+`TanksBotManager` (`games/tanks/src/host/TanksBotManager.js`) is the game's
+scripted module: a thin bot manager registering participants and linking
+them to `Stat`/`Panel` (AI, navigation, and the spatial grid live in the
+core). It's built by the `createModules(ctx)` factory
+(`games/tanks/src/host/createModules.js` — the future
+`HostPlugin.createModules`); the engine calls the scripted-module contract:
+`createMap`, `createBots(count, team?)`, `removeBots(team?)`,
+`removeOneBotForPlayer(team)`, `getBots`, `getBotCount`,
+`getBotCountsPerTeam`. Parameters come from the game config's `scripted`
+(`namePrefix`, `defaultModel`).
+
+**The tanks HostPlugin** (`games/tanks/src/host/index.js`, temporary static
+composition until stage 6) — the whole game half of the host as a single
+object: `gameConfig`, `authSchema`, `coreEventRouter`, `chatCommands`
+(`/bot`), `systemMessages` (the `b:*` group), `createModules` (the bots
+scripted module), `buildClientGameConfig()` (the game half of CONFIG_DATA).
+It's consumed by `host.worker.js` (configs/auth) and `HostGame` (the event
+router, commands, codes, modules).
 
 ## Meta modules (`src/host/meta/`)
 
@@ -179,18 +194,21 @@ are dependency-injected and Worker-safe (isomorphic APIs only —
 
 ### ParticipantManager — the participant registry (`meta/player/`)
 
-**The single source of truth for participants** (humans + bots):
+**The single source of truth for participants** (humans + scripted
+participants/bots):
 
 - `Participant` classes (base: `gameId`, `name`, `model`, `team`, `teamId`,
   `status`) → `HumanParticipant` (`socketId`, `isReady`, `currentMap`,
   `isWatching`, `watchedGameId`, `forceCameraReset`, `pendingShake`,
   `lastActionTime`, `lastInputSeq`) and `BotParticipant`;
-- humans vs. bots are told apart with `isBot`/`isNetworked` getters, **not**
-  by id shape: humans and bots share a single numeric id space (the
-  generator picks the lowest free id);
-- API: `createHuman`/`createBot`/`remove`/`get`/`getAll`/`getHumans`/
-  `getBots`/`getNetworkedReady` (ready to be broadcast to), `checkName`
-  (name deduplication), team sizes (`getTeamSize`/`addToTeam`/
+- scripted vs. human is told apart with `isScripted`/`isNetworked` getters
+  (`isBot` is an alias of `isScripted` until the end of stage 5), **not**
+  by id shape: humans and scripted participants share a single numeric id
+  space (the generator picks the lowest free id);
+- API: `createHuman`/`createScripted`/`remove`/`get`/`getAll`/`getHumans`/
+  `getScripted`/`getNetworkedReady` (ready to be broadcast to), `checkName`
+  (name deduplication; a scripted name is the game config's
+  `scripted.namePrefix` + id), team sizes (`getTeamSize`/`addToTeam`/
   `resetTeamSizes`), the active-watch list (`addActive`/`removeActive`/
   `getActiveList`/`replaceWatched`), the `maxPlayers` limit (`totalCount`).
 
@@ -246,12 +264,13 @@ callback + participant list), `reset`. Topic cooldown — `timeBlockedVote`
 
 ### `meta/modules/` modules
 
-- **`Panel`** — per-user HUD: values from `game:panel` (health/w1/w2),
+- **`Panel`** — per-user HUD: the schema from `game:panel` (`fields` —
+  health/w1/w2, `activeKey` — the active weapon's key),
   `updateUser(gameId, param, value, op)` accumulating `pendingChanges`,
   `processUpdates()` emits only changes once per snapshot tick (strings
   `'key:value'`, round time `t` — on every second change),
-  `getFullPanel`/`getEmptyPanel`, `setActiveWeapon` (`wa`),
-  `hasResources`/`getCurrentValue`. Authoritative health/ammo live in the
+  `getFullPanel`/`getEmptyPanel`, `setActiveWeapon` (writes the schema's
+  `activeKey`, `wa` for tanks), `hasResources`/`getCurrentValue`. Authoritative health/ammo live in the
   core — the panel is filled by a projection of its events
   (`GameCoreAdapter`).
 - **`Stat`** — the scoreboard: row (body) and team totals (head) per the

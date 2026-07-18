@@ -30,7 +30,7 @@ export const decodeShot = buffer =>
 export const loadConfig = async () => {
   const config = (await import('../../src/lib/config.js')).default;
 
-  config.set('auth', (await import('../../src/config/auth.js')).default);
+  config.set('auth', (await import('@vimp/tanks/config/auth.js')).default);
   config.set('wsports', (await import('../../src/config/wsports.js')).default);
 
   // merge движок+игра — зеркало applyRoomOverrides из host.worker.js
@@ -39,7 +39,6 @@ export const loadConfig = async () => {
   const tanksGameConfig = (await import('@vimp/tanks/config/game.js')).default;
 
   config.set('game', { ...hostDefaults, ...tanksGameConfig });
-  config.set('client', (await import('../../src/config/client.js')).default);
 
   config.set('game:isDevMode', true);
 

@@ -79,7 +79,7 @@ complaint about itself. Ban logic lives on the master
 
 | Port | Name | Format | Description |
 | :--: | --- | :--: | --- |
-| 0 | `CONFIG_DATA` | JSON | The client config (`src/config/client.js` + `prediction`) |
+| 0 | `CONFIG_DATA` | JSON | The client config (a merge of `src/config/clientDefaults.js` + `games/tanks/src/config/client.js` + `prediction`) |
 | 1 | `AUTH_DATA` | JSON | Auth form data |
 | 2 | `AUTH_RESULT` | JSON | Auth errors (or `null`) |
 | 3 | `MAP_DATA` | JSON | Map data |

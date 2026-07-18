@@ -1,4 +1,6 @@
 import './style.css';
+// игровой CSS (панель/полотна/команды) — в этапе 6 через ClientPlugin.styles
+import '@vimp/tanks/client/tanks.css';
 import 'pixi.js/unsafe-eval';
 import { Application, Ticker } from 'pixi.js';
 import init, { ClientCore } from '../../core/pkg-web/vimp_core.js';
@@ -45,8 +47,12 @@ import BakingProvider from './providers/BakingProvider.js';
 import DependencyProvider from './providers/DependencyProvider.js';
 import { HOT_FLAGS, SNAPSHOT_KEYS_BY_ID } from '../config/opcodes.js';
 import wsports from '../config/wsports.js';
+// временная статическая композиция движок+игра (до этапа 6 —
+// динамической загрузки ClientPlugin после выбора комнаты)
+import tanksAuthConfig from '@vimp/tanks/config/auth.js';
+import clientPlugin from '@vimp/tanks/client/index.js';
 import lobbyConfig from '../config/lobby.js';
-import clientConfig from '../config/client.js';
+import clientDefaults from '../config/clientDefaults.js';
 import parts from './parts/index.js';
 
 // PS (server ports): порты получения данные от сервера
@@ -111,7 +117,7 @@ const techInformer = document.getElementById('tech-informer');
 // массив системных сообщений: дефолт — из бандла, актуализируется CONFIG_DATA
 // хоста. Дефолт обязателен: отказ полной комнаты (roomFull) приходит ДО
 // CONFIG_DATA — без него клиент показал бы «Unknown error»
-let techInformList = clientConfig.techInformList;
+let techInformList = clientDefaults.techInformList;
 
 // код 'loading' — единственный не-терминальный tech-код (см. TECH_CODES)
 const TECH_LOADING_CODE = 2;
@@ -162,10 +168,22 @@ socketMethods[PS_CONFIG_DATA] = async data => {
   const componentDependencies = data.parts.componentDependencies || {};
   soundData = data.parts.sounds || {};
 
-  // создание полотен игры
-  const initPromises = Object.keys(modulesConfig.canvasManager.canvases).map(
+  // создание полотен игры: canvas-элементы генерируются из конфига
+  // канвасов игры (в HTML их нет)
+  const canvasesConfig = modulesConfig.canvasManager.canvases;
+
+  const initPromises = Object.keys(canvasesConfig).map(
     async canvasId => {
-      const canvas = document.getElementById(canvasId);
+      const canvas =
+        document.getElementById(canvasId) ?? document.createElement('canvas');
+
+      if (!canvas.parentNode) {
+        canvas.setAttribute('id', canvasId);
+        canvas.width = canvasesConfig[canvasId].width;
+        canvas.height = canvasesConfig[canvasId].height;
+        document.body.appendChild(canvas);
+      }
+
       const app = new Application();
       const assetProvider = new BakingProvider();
       const dependencyProvider = new DependencyProvider();
@@ -231,15 +249,20 @@ socketMethods[PS_AUTH_DATA] = data => {
     }
   });
 
-  const clientValidator = authData => validateAuth(authData, params);
+  // игровые валидаторы (isValidModel) — из бандла игры: код по проводу
+  // не передаётся (временная статическая композиция до этапа 6)
+  const clientValidator = authData =>
+    validateAuth(authData, params, tanksAuthConfig.validators);
 
   const authModel = new AuthModel(clientValidator);
   const authView = new AuthView(authModel, elems);
   modules.auth = new AuthCtrl(authModel, authView);
 
   authModel.publisher.on('socket', data => {
-    // модель танка пользователя — для реплик движения и выстрелов
-    clientCore?.set_model(data.model);
+    // игровой хук авторизации (модель танка для реплик движения и выстрелов)
+    if (clientCore) {
+      clientPlugin.hooks.onAuth(clientCore, data);
+    }
 
     sending(PC_AUTH_RESPONSE, data);
   });
@@ -357,7 +380,11 @@ socketMethods[PS_FIRST_SHOT_DATA] = data => {
 // panel data
 socketMethods[PS_PANEL_DATA] = data => {
   modules.panel.update(data);
-  clientCore?.sync_panel(JSON.stringify(data));
+
+  // игровой хук: зеркало панели в клиентском ядре (гейты try_fire)
+  if (clientCore) {
+    clientPlugin.hooks.onPanel(clientCore, data);
+  }
 };
 
 // stat data
@@ -644,7 +671,9 @@ function runModules(data) {
   //==========================================//
 
   const panelModel = new PanelModel(panelData.keys);
-  const panelView = new PanelView(panelModel, panelData.elems);
+
+  // PanelView генерирует DOM по схеме игры ({ containerId, elems })
+  const panelView = new PanelView(panelModel, panelData);
 
   modules.panel = new PanelCtrl(panelModel, panelView);
 
@@ -653,7 +682,9 @@ function runModules(data) {
   //==========================================//
 
   const statModel = new StatModel(statData.params);
-  const statView = new StatView(statModel, statData.elems);
+
+  // StatView генерирует шапку и таблицы по схеме игры ({ elems, params })
+  const statView = new StatView(statModel, statData);
 
   modules.stat = new StatCtrl(statModel, statView);
 
@@ -716,17 +747,18 @@ function runModules(data) {
     inputSeq = (inputSeq + 1) >>> 0;
     clientCore?.apply_input(action, name, now);
 
-    // визуальный спавн своего выстрела и локальная смена оружия
-    // (гейты в ядре: предикт активен, свой танк жив)
-    if (action === 'down' && clientCore) {
-      if (name === 'fire') {
-        const spawn = clientCore.try_fire(now);
+    // игровой хук: визуальный спавн своего выстрела и локальная смена
+    // оружия (try_fire/cycle_weapon; гейты в ядре)
+    if (clientCore) {
+      const spawn = clientPlugin.hooks.onLocalAction(
+        clientCore,
+        action,
+        name,
+        now,
+      );
 
-        if (spawn) {
-          applyGameData(JSON.parse(spawn));
-        }
-      } else if (name === 'nextWeapon' || name === 'prevWeapon') {
-        clientCore.cycle_weapon(name === 'prevWeapon');
+      if (spawn) {
+        applyGameData(JSON.parse(spawn));
       }
     }
 

@@ -1,8 +1,6 @@
 // Временная статическая композиция движок→игра (этап 3 плана):
-// в этапе 6 роутер, команды и коды приедут динамическим HostPlugin'ом
-import coreEventRouter from '@vimp/tanks/host/coreEventRouter.js';
-import botCommand from '@vimp/tanks/host/botCommand.js';
-import tanksSystemMessages from '@vimp/tanks/host/systemMessages.js';
+// в этапе 6 HostPlugin приедет динамическим import'ом host-entry игры
+import hostPlugin from '@vimp/tanks/host/index.js';
 import Panel from './meta/modules/Panel.js';
 import Stat from './meta/modules/Stat.js';
 import Chat from './meta/modules/chat/index.js';
@@ -16,7 +14,6 @@ import RoundManager from './meta/core/RoundManager.js';
 import CommandProcessor from './meta/core/CommandProcessor.js';
 import { sanitizeMessage } from '../lib/sanitizers.js';
 import GameCoreAdapter from './GameCoreAdapter.js';
-import HostBotManager from './HostBotManager.js';
 
 // Версия формата handoff-меты эстафеты Worker'ов (Этап 5.2). Несовместимая
 // версия валит init нового Worker'а — главный поток возобновляет старый,
@@ -93,17 +90,18 @@ export default class HostGame {
     this._spectatorTeam = data.spectatorTeam;
     this._spectatorId = this._teams[this._spectatorTeam];
 
-    // единый реестр участников (игроки + боты)
+    // единый реестр участников (игроки + scripted)
     this._participants = new ParticipantManager(
       this._teams,
       this._spectatorTeam,
       this._maxPlayers,
+      data.scripted,
     );
 
     // симуляция — в ядре; адаптер под интерфейс Game.js
     this._game = new GameCoreAdapter(core, {
       participants: this._participants,
-      eventRouter: coreEventRouter,
+      eventRouter: hostPlugin.coreEventRouter,
     });
 
     this._panel = new Panel(data.panel);
@@ -115,12 +113,16 @@ export default class HostGame {
 
     this._snapshotManager = new SnapshotThrottle(data.timers.networkSendRate);
 
-    this._bots = new HostBotManager(
-      this._participants,
-      this._game,
-      this._panel,
-      this._stat,
-    );
+    // игровые host-модули (scripted-модуль ботов)
+    this._bots = hostPlugin.createModules({
+      participants: this._participants,
+      coreAdapter: this._game,
+      panel: this._panel,
+      stat: this._stat,
+      chat: this._chat,
+      socketManager: this._socketManager,
+      scripted: data.scripted,
+    }).bots;
 
     this._RTTManager = new RTTManager(data.rtt, {
       onKickForMissedPings: gameId => this._kickForMissedPings(gameId),
@@ -176,10 +178,12 @@ export default class HostGame {
       isDevMode: this._isDevMode,
     });
 
-    // игровые чат-команды и коды системных сообщений
-    // (в этапе 6 — из HostPlugin.chatCommands/systemMessages)
-    this._commandProcessor.registerCommand(botCommand.name, botCommand.handler);
-    registerCodes(tanksSystemMessages);
+    // игровые чат-команды и коды системных сообщений из HostPlugin
+    for (const command of hostPlugin.chatCommands) {
+      this._commandProcessor.registerCommand(command.name, command.handler);
+    }
+
+    registerCodes(hostPlugin.systemMessages);
 
     // инкрементный номер snapshot-кадра
     this._seq = 0;
@@ -514,7 +518,7 @@ export default class HostGame {
         teamId: user.teamId,
       }));
 
-    const bots = this._participants.getBots().map(bot => ({
+    const bots = this._participants.getScripted().map(bot => ({
       gameId: bot.gameId,
       name: bot.name,
       model: bot.model,
@@ -566,7 +570,7 @@ export default class HostGame {
     }
 
     for (const record of meta.bots) {
-      const bot = this._participants.restoreBot(record);
+      const bot = this._participants.restoreScripted(record);
 
       if (bot) {
         this._panel.addUser(bot.gameId);

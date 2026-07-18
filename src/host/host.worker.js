@@ -8,10 +8,9 @@
 import init, { GameCore } from '../../core/pkg-web/vimp_core.js';
 // временная статическая композиция движок+игра (до этапа 6 —
 // динамической загрузки HostPlugin)
-import tanksGameConfig from '@vimp/tanks/config/game.js';
+import hostPlugin from '@vimp/tanks/host/index.js';
 import hostDefaults from '../config/hostDefaults.js';
-import clientConfig from '../config/client.js';
-import authConfig from '../config/auth.js';
+import clientDefaults from '../config/clientDefaults.js';
 import wsports from '../config/wsports.js';
 import { buildClientConfig } from '../lib/buildClientConfig.js';
 import { buildCoreConfig } from '../lib/coreConfig.js';
@@ -47,7 +46,7 @@ let handoffClients = null;
 // собирает конфиг игры (движковые дефолты + игровая половина) и применяет
 // пользовательские настройки комнаты
 function applyRoomOverrides(room = {}) {
-  const game = structuredClone({ ...hostDefaults, ...tanksGameConfig });
+  const game = structuredClone({ ...hostDefaults, ...hostPlugin.gameConfig });
 
   // Этап 5.1: актуальные карты мастера (фетчит главный поток) вместо бандла
   if (room.maps && Object.keys(room.maps).length) {
@@ -141,7 +140,11 @@ async function onInit(room, handoff = null) {
     ),
   );
 
-  clientCfg = buildClientConfig(game, clientConfig);
+  clientCfg = buildClientConfig(
+    game,
+    clientDefaults,
+    hostPlugin.buildClientGameConfig(),
+  );
   socketManager = new SocketManager(wsports.server, {
     soundCues: game.soundCues,
     initialVote: game.initialVote,
@@ -166,14 +169,24 @@ function buildPortMethods(socketId, state) {
     // 0: config ready
     () => {
       state.enabled[PC_AUTH_RESPONSE] = true;
-      socketManager.sendAuthData(socketId, authConfig);
+
+      // validators — код, по проводу не передаётся (форма клиента берёт
+      // игровые валидаторы из своего бандла)
+      socketManager.sendAuthData(socketId, {
+        elems: hostPlugin.authSchema.elems,
+        params: hostPlugin.authSchema.params,
+      });
       state.enabled[PC_CONFIG_READY] = false;
     },
 
     // 1: auth response
     data => {
       if (data && typeof data === 'object') {
-        const err = validateAuth(data, authConfig.params);
+        const err = validateAuth(
+          data,
+          hostPlugin.authSchema.params,
+          hostPlugin.authSchema.validators,
+        );
 
         if (!err) {
           state.enabled[PC_AUTH_RESPONSE] = false;

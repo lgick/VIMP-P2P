@@ -72,18 +72,30 @@ export default {
   },
 
   panel: {
-    health: {
-      key: 'h',
-      value: 100,
+    // схема полей панели (стартовые значения ресурсов; уходит и в ядро)
+    fields: {
+      health: {
+        key: 'h',
+        value: 100,
+      },
+      w1: {
+        key: 'w1',
+        value: 200,
+      },
+      w2: {
+        key: 'w2',
+        value: 100,
+      },
     },
-    w1: {
-      key: 'w1',
-      value: 200,
-    },
-    w2: {
-      key: 'w2',
-      value: 100,
-    },
+    // ключ активного оружия в кадрах панели
+    activeKey: 'wa',
+  },
+
+  // параметры scripted-участников (ботов): префикс имени Bot<id>,
+  // модель танка по умолчанию
+  scripted: {
+    namePrefix: 'Bot',
+    defaultModel: 'm1',
   },
 
   spectatorTeam: 'spectators', // название команды наблюдателя

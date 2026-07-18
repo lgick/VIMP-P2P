@@ -8,26 +8,22 @@ const NAME_REGEXP = new RegExp('^[a-zA-Z]([\\w\\s#]{0,13})[\\w]{1}$');
 export const isValidName = name =>
   typeof name === 'string' && NAME_REGEXP.test(name);
 
-/**
- * Проверяет, является ли строка валидной моделью.
- * @param {string} model - Модель для проверки.
- * @returns {boolean} - true, если модель валидна, иначе false.
- */
-export const isValidModel = model => model === 'm1';
-
-// правила валидации
+// движковые правила валидации; игровые (например isValidModel)
+// инжектируются третьим аргументом validateAuth (authSchema игры)
 const validationRules = {
   isValidName,
-  isValidModel,
 };
 
 /**
  * Валидирует объект с данными для авторизации.
  * @param {object} data - Объект с данными для проверки.
  * @param {Array} authParams - Массив правил для валидации
+ * @param {Object} [validators] - Игровые валидаторы (имя → функция),
+ *   дополняют движковые validationRules.
  * @returns {Array|undefined} - Массив ошибок или undefined.
  */
-export const validateAuth = (data, authParams) => {
+export const validateAuth = (data, authParams, validators = {}) => {
+  const rules = { ...validationRules, ...validators };
   const errors = [];
 
   for (const { name, options } of authParams) {
@@ -42,7 +38,7 @@ export const validateAuth = (data, authParams) => {
     }
 
     if (options?.validator) {
-      const validatorFn = validationRules[options.validator];
+      const validatorFn = rules[options.validator];
 
       if (validatorFn && !validatorFn(value)) {
         errors.push({ name, error: 'not valid' });

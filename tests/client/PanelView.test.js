@@ -4,19 +4,18 @@ import Publisher from '../../src/lib/Publisher.js';
 // PanelView — синглтон, перезагружаем модуль для изоляции
 let PanelView;
 
-const elems = {
-  time: 'panel-time',
-  health: 'panel-health',
-  weapons: { w1: 'panel-w1', w2: 'panel-w2' },
+// схема панели: контейнер — движок, ячейки генерирует view по схеме игры
+const config = {
+  containerId: 'panel',
+  elems: {
+    time: 'panel-time',
+    health: 'panel-health',
+    weapons: { w1: 'panel-w1', w2: 'panel-w2' },
+  },
 };
 
 const seedDom = () => {
-  document.body.innerHTML = `
-    <div id="panel-time"></div>
-    <div id="panel-health"></div>
-    <div id="panel-w1"></div>
-    <div id="panel-w2"></div>
-  `;
+  document.body.innerHTML = '<div id="panel"></div>';
 };
 
 const makeModel = () => ({ publisher: new Publisher() });
@@ -28,9 +27,23 @@ beforeEach(async () => {
     .default;
 });
 
+describe('PanelView: генерация DOM по схеме', () => {
+  it('строит ячейки в порядке health → оружие → time', () => {
+    new PanelView(makeModel(), config);
+
+    const cells = document.querySelectorAll('#panel table td');
+    expect([...cells].map(c => c.id)).toEqual([
+      'panel-health',
+      'panel-w1',
+      'panel-w2',
+      'panel-time',
+    ]);
+  });
+});
+
 describe('PanelView.initHealthBar', () => {
   it('создаёт 30 блоков здоровья внутри обёртки', () => {
-    new PanelView(makeModel(), elems);
+    new PanelView(makeModel(), config);
 
     const wrapper = document.querySelector('.panel-health-wrapper');
     expect(wrapper).not.toBeNull();
@@ -40,7 +53,7 @@ describe('PanelView.initHealthBar', () => {
 
 describe('PanelView.update', () => {
   it('текстовая панель получает значение', () => {
-    const view = new PanelView(makeModel(), elems);
+    const view = new PanelView(makeModel(), config);
 
     view.update({ name: 'time', value: '02:30' });
 
@@ -49,7 +62,7 @@ describe('PanelView.update', () => {
   });
 
   it('полное здоровье подсвечивает все блоки', () => {
-    const view = new PanelView(makeModel(), elems);
+    const view = new PanelView(makeModel(), config);
 
     view.update({ name: 'health', value: 100 });
 
@@ -61,7 +74,7 @@ describe('PanelView.update', () => {
   });
 
   it('половина здоровья заполняет половину блоков', () => {
-    const view = new PanelView(makeModel(), elems);
+    const view = new PanelView(makeModel(), config);
 
     view.update({ name: 'health', value: 50 });
 
@@ -75,14 +88,14 @@ describe('PanelView.update', () => {
 
 describe('PanelView.hidePanel / setCurrentWeapon', () => {
   it('hidePanel скрывает указанную панель', () => {
-    const view = new PanelView(makeModel(), elems);
+    const view = new PanelView(makeModel(), config);
 
     view.hidePanel('time');
     expect(document.getElementById('panel-time').style.display).toBe('none');
   });
 
   it('setCurrentWeapon помечает активное оружие классом active', () => {
-    const view = new PanelView(makeModel(), elems);
+    const view = new PanelView(makeModel(), config);
 
     view.setCurrentWeapon('w2');
 
@@ -98,7 +111,7 @@ describe('PanelView.hidePanel / setCurrentWeapon', () => {
 describe('PanelView: события модели', () => {
   it('data → update, activeWeapon → setCurrentWeapon', () => {
     const model = makeModel();
-    new PanelView(model, elems);
+    new PanelView(model, config);
 
     model.publisher.emit('data', { name: 'time', value: '01:00' });
     model.publisher.emit('activeWeapon', 'w1');

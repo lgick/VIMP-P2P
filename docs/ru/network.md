@@ -31,7 +31,7 @@
 
 | Порт | Имя | Формат | Описание |
 | :--: | --- | :--: | --- |
-| 0 | `CONFIG_DATA` | JSON | Клиентский конфиг (`src/config/client.js` + `prediction`) |
+| 0 | `CONFIG_DATA` | JSON | Клиентский конфиг (merge `src/config/clientDefaults.js` + `games/tanks/src/config/client.js` + `prediction`) |
 | 1 | `AUTH_DATA` | JSON | Данные формы авторизации |
 | 2 | `AUTH_RESULT` | JSON | Ошибки авторизации (или `null`) |
 | 3 | `MAP_DATA` | JSON | Данные карты |

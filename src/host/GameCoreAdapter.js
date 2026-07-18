@@ -4,15 +4,15 @@
 // проецируются в мету через инъецируемый игровой eventRouter — словарь
 // типов событий принадлежит игре, адаптер его не знает.
 //
-// Различие бот/человек — по participants.get(gameId).isBot: бот создаётся как
-// танк + ИИ-контроллер внутри ядра (add_bot/remove_bot), человек — только
-// танк (spawn_tank/remove_tank).
+// Различие scripted/человек — по participants.get(gameId).isScripted:
+// scripted-участник создаётся как танк + ИИ-контроллер внутри ядра
+// (add_bot/remove_bot), человек — только танк (spawn_tank/remove_tank).
 export default class GameCoreAdapter {
   /**
    * @param {GameCore} core - экземпляр WASM-ядра.
    * @param {Object} deps
    * @param {ParticipantManager} deps.participants - реестр участников
-   *   (различение бот/человек при спавне и удалении).
+   *   (различение scripted/человек при спавне и удалении).
    * @param {Function} deps.eventRouter - игровой роутер событий ядра:
    *   (event, services) => void.
    */
@@ -44,20 +44,20 @@ export default class GameCoreAdapter {
 
   // ***** участники ***** //
 
-  // создаёт танк (Game.createPlayer). Бот → танк + ИИ в ядре
+  // создаёт танк (Game.createPlayer). Scripted → танк + ИИ в ядре
   createPlayer(gameId, model, name, teamId, data) {
     const [x, y, angle] = data;
 
-    if (this._isBot(gameId)) {
+    if (this._isScripted(gameId)) {
       this._core.add_bot(gameId, model, teamId, x, y, angle);
     } else {
       this._core.spawn_tank(gameId, model, teamId, x, y, angle);
     }
   }
 
-  // удаляет танк (Game.removePlayer). Бот → удаляет и ИИ-контроллер
+  // удаляет танк (Game.removePlayer). Scripted → удаляет и ИИ-контроллер
   removePlayer(gameId) {
-    if (this._isBot(gameId)) {
+    if (this._isScripted(gameId)) {
       this._core.remove_bot(gameId);
     } else {
       this._core.remove_tank(gameId);
@@ -173,9 +173,9 @@ export default class GameCoreAdapter {
   }
 
   // бот ли участник (спавн/удаление в ядре различаются)
-  _isBot(gameId) {
+  _isScripted(gameId) {
     const participant = this._participants.get(gameId);
 
-    return Boolean(participant && participant.isBot);
+    return Boolean(participant && participant.isScripted);
   }
 }

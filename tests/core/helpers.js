@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import models from '@vimp/tanks/data/models.js';
 import weapons from '@vimp/tanks/data/weapons.js';
 import tanksGameConfig from '@vimp/tanks/config/game.js';
-import clientConfig from '../../src/config/client.js';
+import clientDefaults from '../../src/config/clientDefaults.js';
 import hostDefaults from '../../src/config/hostDefaults.js';
 import { buildClientCoreConfig } from '../../src/lib/clientCoreConfig.js';
 import { buildCoreConfig } from '../../src/lib/coreConfig.js';
@@ -53,7 +53,7 @@ export const makeClientCore = (overrides = {}) => {
         models,
         weapons,
       },
-      interpolation: clientConfig.interpolation,
+      interpolation: clientDefaults.interpolation,
     },
     { seed: 42, ...overrides },
   );

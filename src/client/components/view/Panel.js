@@ -6,25 +6,21 @@ import { lerp } from '../../../lib/math.js';
 let panelView;
 
 export default class PanelView {
-  constructor(model, elems) {
+  // config — { containerId (движок), elems (схема игры: time/health/weapons) }
+  constructor(model, config) {
     if (panelView) {
       return panelView;
     }
 
     panelView = this;
 
+    const { containerId, elems } = config;
+
     this._panels = {};
-
-    this._panels.time = document.getElementById(elems.time);
-    this._panels.health = document.getElementById(elems.health);
-
     this._weaponList = Object.keys(elems.weapons);
 
-    for (const weaponName of this._weaponList) {
-      this._panels[weaponName] = document.getElementById(
-        elems.weapons[weaponName],
-      );
-    }
+    // DOM панели генерируется по схеме игры (порядок: health → оружие → time)
+    this._buildPanel(document.getElementById(containerId), elems);
 
     this._healthBarWrapper = null; // контейнер
     this._healthBlocks = []; // блоки здоровья
@@ -40,6 +36,29 @@ export default class PanelView {
     this._mPublic.on('activeWeapon', 'setCurrentWeapon', this);
 
     this.initHealthBar();
+  }
+
+  // генерирует таблицу панели по схеме игры (замена хардкода panel.pug)
+  _buildPanel(container, elems) {
+    const table = document.createElement('table');
+    const row = table.insertRow(-1);
+
+    const addCell = (name, id) => {
+      const cell = row.insertCell(-1);
+
+      cell.setAttribute('id', id);
+      this._panels[name] = cell;
+    };
+
+    addCell('health', elems.health);
+
+    for (const weaponName of this._weaponList) {
+      addCell(weaponName, elems.weapons[weaponName]);
+    }
+
+    addCell('time', elems.time);
+
+    container.appendChild(table);
   }
 
   // инициализирует полосу здоровья

@@ -26,7 +26,7 @@ export const buildCoreConfig = (overrides = {}) => ({
   models,
   weapons,
   playerKeys: tanksGameConfig.playerKeys,
-  panel: tanksGameConfig.panel,
+  panel: tanksGameConfig.panel.fields,
   snapshot: {
     version: SNAPSHOT_FORMAT_VERSION,
     port: wsports.server.SHOT_DATA,
