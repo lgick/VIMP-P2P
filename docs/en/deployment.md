@@ -205,4 +205,4 @@ project folder, and stops the container.
 
 ---
 
-[← Previous: Extending the Game](extending.md)
+[← Previous: Extending the Game](extending.md) · [Next: Plugin API →](plugin-api.md)

@@ -20,6 +20,7 @@ and signaling.
 | [configuration.md](configuration.md) | Configuration: `.env` variables, every file under `src/config/`, `src/data/` |
 | [extending.md](extending.md) | Extending the game: new maps, weapons, sounds, client entities |
 | [deployment.md](deployment.md) | Deployment: VPS setup, adding/removing servers, CI/CD |
+| [plugin-api.md](plugin-api.md) | Engine ↔ game plugin contracts (draft): GameManifest, HostPlugin, ClientPlugin, Wasm ABI, snapshot schema, versioning |
 
 ## Where to start
 

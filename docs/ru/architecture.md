@@ -156,6 +156,46 @@ JS-оболочка читает результат рендер-тика пло
 
 Рендеринг — MVC-компоненты + PixiJS-сущности `parts/` на двух полотнах (`vimp`, `radar`), процедурные текстуры запекаются при старте.
 
+## ADR: движок — приложение, игра — динамический плагин
+
+**Статус: принято, миграция в процессе** (этапы и порядок — `PLAN.md`;
+целевые контракты — [plugin-api.md](plugin-api.md)).
+
+**Решение.** Проект разделяется на **движок** — приложение, деплоящееся
+один раз (мастер, P2P-транспорт, Worker-инфраструктура и эстафета,
+мета-*механизмы*, MVC-каркас клиента, рендер/звук-инфраструктура,
+Rust-каркас), — и **игру** — динамический плагин (JS-бандлы client/host,
+WASM-бинарь, ассеты), загружаемый по манифесту с мастера. Композиция: npm
+workspaces `packages/engine` (`@vimp/engine`) + `games/tanks`
+(`@vimp/tanks`); Rust-ядро распиливается на два crate —
+`vimp-engine-core` (rlib, каркас) и `vimp-tanks-core` (cdylib, игра +
+wasm-bindgen-обёртки) — связь через трейты со статической мономорфизацией.
+Мета-модули (Panel/Stat/Chat/Vote/Timer/RTT/Participant/Round/
+CommandProcessor) остаются движковыми, но **вся их параметризация — из
+конфига игры**. Ботов в движке нет — только нейтральное понятие
+«скриптовый участник».
+
+**Обоснование.** На движке появятся другие игры; игра со временем может
+переехать в отдельный репозиторий; один мастер должен обслуживать несколько
+игр. Динамический плагин (а не build-time зависимость) позволяет деплоить
+движок один раз, а играм версионироваться независимо (`codeVersion`
+становится составным, расхождение запускает эстафету Worker'ов).
+
+### Разметка файлов (ENGINE / GAME / MIXED)
+
+Полная разметка текущего дерева. MIXED-файлы подлежат разрезу в ходе
+миграции (что именно вырезается — в скобках).
+
+| Область | ENGINE | GAME | MIXED (что вырезается) |
+| --- | --- | --- | --- |
+| Мастер | весь `src/master/` (`HostRegistry`, `SignalingServer`, `WorkerCatalog`, `MapCatalog` становится per-game; новый `GameCatalog`) | — | `src/master/main.js` — статический импорт `src/data/maps` |
+| Хост | `host.worker.js` (загрузка плагина), `HostGame.js`, `GameCoreAdapter.js` (generic), `meta/player/*` (`isScripted` вместо `isBot`), `meta/core/RoundManager`, `VoteCoordinator`, `meta/modules/*` (Panel, Stat, Vote, механизм chat, TimerManager, RTTManager) | `HostBotManager.js` → `TanksBotManager` (контракт scripted-модуля), команда `/bot`, системные сообщения `b:*`, роутер core-событий | `GameCoreAdapter._drainEvents` (игровой словарь событий), `SocketManager` (звуковые хардкоды `roundStart/victory/…`, `sendFirstVote`), `CommandProcessor` (`/bot`), `chat/systemMessages.js` (группа `b:*`), `Panel.js` (хардкод `'wa'`) |
+| Клиент | `main.js` (bootstrap/диспетчер), `network/*`, MVC-компоненты, `CanvasManager`, `SoundManager`, `InputListener`, `providers/*`, schema-driven view Panel/Stat | `parts/*` (9 классов), `bakers/*` (8 текстур), игровой CSS, клиентские хуки (`set_model`/`sync_panel`/`try_fire`/`cycle_weapon`) | `main.js` (игровые хуки, захардкоженная раскладка танка в `reconstructHot`), `index.html`+`views/includes/{panel,stat}.pug` (игровые DOM-id), `style.css` |
+| Конфиг | `wsports.js`, `opcodes.js` (фрейминг, `HOT_FLAGS`, `ENGINE_API_VERSION`), `master.js`, `lobby.js`, новые `hostDefaults.js`/`clientDefaults.js` | `sounds.js`, `auth.js`, схема snapshot-ключей (`m1/w1/w2/w2e/c1/c2`) | `game.js` (движок: `maxPlayers`, таймеры, rtt, idle-кик / игра: teams, panel, stat, playerKeys, параметры карт), `client.js` (движок: interpolation, controls modes/cmds, elems, techInformList / игра: parts, keySetList, схемы panel/stat, тексты, канвасы), `opcodes.js` (`SNAPSHOT_KEYS` — данные игры) |
+| Данные | *формат* карт и загрузчик | весь `src/data/`: `maps/`, `models.js`, `weapons.js`; `assets/audio-raw` | — |
+| Lib | `Publisher`, `factory`, `math`, `formatters`, `sanitizers`, `security`, `rateLimiter`, `buildClientConfig`/`coreConfig`/`clientCoreConfig` (становятся generic-мерджерами) | — | `validators.js` (`isValidModel` хардкодит `'m1'` → `authSchema` плагина) |
+| Rust-ядро | `physics.rs` (мир, generic BodyTag, math), `rng.rs`, `map.rs`, `bots/pathfinder.rs`+`spatial.rs` (→ `nav/`), фрейминг `snapshot.rs`, `client/{interpolator,predictor,raycast,unpack,hot}`, фикс-шаг/контакты, handoff-каркас | `tank.rs`, `bomb.rs`, `motion.rs` (+parity-тесты), `bots/{controller,navigation}.rs`, игровая логика `game.rs` (→ `sim.rs`), `client/shot.rs`, раскладки блоков, `#[wasm_bindgen]`-обёртки, `tests/sim.rs` | `game.rs` (движковый цикл vs игровые правила), `snapshot.rs` (фрейминг vs раскладки блоков), `events`-маппинг |
+
 ## Ключевые инварианты
 
 - **Источник истины по портам** — `src/config/wsports.js`; по snapshot-ключам и версии бинарного формата — `src/config/opcodes.js`.

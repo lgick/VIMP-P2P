@@ -20,6 +20,7 @@
 | [configuration.md](configuration.md) | Конфигурация: переменные `.env`, все файлы `src/config/`, данные `src/data/` |
 | [extending.md](extending.md) | Расширение: новая карта, оружие, звук, клиентская сущность |
 | [deployment.md](deployment.md) | Развертывание: подготовка VPS, добавление/удаление серверов, CI/CD |
+| [plugin-api.md](plugin-api.md) | Контракты движок ↔ игра-плагин (черновик): GameManifest, HostPlugin, ClientPlugin, Wasm ABI, снапшот-схема, версии |
 
 ## С чего начать
 

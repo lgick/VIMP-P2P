@@ -163,6 +163,46 @@ feeding both into the previous parse pipeline.
 Rendering is built from MVC components + PixiJS entities (`parts/`) on two
 canvases (`vimp`, `radar`); procedural textures are baked at startup.
 
+## ADR: the engine is an application, the game is a dynamic plugin
+
+**Status: accepted, migration in progress** (stages and order — `PLAN.md`;
+target contracts — [plugin-api.md](plugin-api.md)).
+
+**Decision.** The project is split into an **engine** — an application
+deployed once (master, P2P transport, Worker infrastructure and handoff,
+meta *mechanisms*, client MVC framework, render/sound infrastructure, the
+Rust framework crate) — and a **game** — a dynamic plugin (client/host JS
+bundles, a WASM binary, assets) loaded by a manifest from the master.
+Composition: npm workspaces `packages/engine` (`@vimp/engine`) +
+`games/tanks` (`@vimp/tanks`); the Rust core splits into two crates —
+`vimp-engine-core` (rlib, framework) and `vimp-tanks-core` (cdylib, game +
+wasm-bindgen wrappers) — linked by traits with static monomorphization.
+Engine meta modules (Panel/Stat/Chat/Vote/Timer/RTT/Participant/Round/
+CommandProcessor) stay in the engine, but **all their parameterization comes
+from the game config**. The engine has no bots — only the neutral notion of
+a "scripted participant".
+
+**Rationale.** Other games will run on the same engine; the game may later
+move to its own repository; one master should serve several games. A
+dynamic plugin (rather than a build-time dependency) lets the engine deploy
+once while games version independently (`codeVersion` becomes composite,
+a mismatch triggers the Worker handoff).
+
+### File split (ENGINE / GAME / MIXED)
+
+Full markup of today's tree. MIXED files must be cut apart during the
+migration (the split is listed per file).
+
+| Area | ENGINE | GAME | MIXED (what gets cut out) |
+| --- | --- | --- | --- |
+| Master | all of `src/master/` (`HostRegistry`, `SignalingServer`, `WorkerCatalog`, `MapCatalog` becomes per-game; new `GameCatalog`) | — | `src/master/main.js` — the static import of `src/data/maps` |
+| Host | `host.worker.js` (plugin loading), `HostGame.js`, `GameCoreAdapter.js` (generic), `meta/player/*` (`isScripted` replaces `isBot`), `meta/core/RoundManager`, `VoteCoordinator`, `meta/modules/*` (Panel, Stat, Vote, chat mechanism, TimerManager, RTTManager) | `HostBotManager.js` → `TanksBotManager` (scripted-module contract), the `/bot` command, `b:*` system messages, the core-event router | `GameCoreAdapter._drainEvents` (game event vocabulary), `SocketManager` (sound cues `roundStart/victory/…`, `sendFirstVote`), `CommandProcessor` (`/bot`), `chat/systemMessages.js` (the `b:*` group), `Panel.js` (the `'wa'` hardcode) |
+| Client | `main.js` (bootstrap/dispatcher), `network/*`, MVC components, `CanvasManager`, `SoundManager`, `InputListener`, `providers/*`, schema-driven Panel/Stat views | `parts/*` (9 classes), `bakers/*` (8 textures), game CSS, client hooks (`set_model`/`sync_panel`/`try_fire`/`cycle_weapon`) | `main.js` (game hooks, the hardcoded `reconstructHot` tank layout), `index.html`+`views/includes/{panel,stat}.pug` (game DOM ids), `style.css` |
+| Config | `wsports.js`, `opcodes.js` (framing, `HOT_FLAGS`, `ENGINE_API_VERSION`), `master.js`, `lobby.js`, new `hostDefaults.js`/`clientDefaults.js` | `sounds.js`, `auth.js`, the snapshot key schema (`m1/w1/w2/w2e/c1/c2`) | `game.js` (engine: `maxPlayers`, timers, rtt, idle kick / game: teams, panel, stat, playerKeys, map params), `client.js` (engine: interpolation, controls modes/cmds, elems, techInformList / game: parts, keySetList, panel/stat schemas, texts, canvases), `opcodes.js` (`SNAPSHOT_KEYS` is game data) |
+| Data | the map *format* and loader | `src/data/` entirely: `maps/`, `models.js`, `weapons.js`; `assets/audio-raw` | — |
+| Lib | `Publisher`, `factory`, `math`, `formatters`, `sanitizers`, `security`, `rateLimiter`, `buildClientConfig`/`coreConfig`/`clientCoreConfig` (become generic mergers) | — | `validators.js` (`isValidModel` hardcodes `'m1'` → the plugin's `authSchema`) |
+| Rust core | `physics.rs` (world, generic BodyTag, math), `rng.rs`, `map.rs`, `bots/pathfinder.rs`+`spatial.rs` (→ `nav/`), `snapshot.rs` framing, `client/{interpolator,predictor,raycast,unpack,hot}`, fixed-step/contacts, the handoff skeleton | `tank.rs`, `bomb.rs`, `motion.rs` (+parity tests), `bots/{controller,navigation}.rs`, the game logic of `game.rs` (→ `sim.rs`), `client/shot.rs`, block layouts, `#[wasm_bindgen]` wrappers, `tests/sim.rs` | `game.rs` (engine loop vs game rules), `snapshot.rs` (framing vs block layouts), `events` mapping |
+
 ## Key invariants
 
 - **Source of truth for ports** — `src/config/wsports.js`; for snapshot keys and the binary format version — `src/config/opcodes.js`.
