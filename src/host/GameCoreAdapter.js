@@ -1,7 +1,8 @@
 // Адаптер Rust-ядра (GameCore) под интерфейс, который потребляют мета-модули
 // хоста (RoundManager, SocketManager) и host-фасад. За поверхностью Game.js
 // (+ упаковка снапшотов) стоит WASM-ядро; события ядра (take_events)
-// проецируются в те же точки, куда JS-Game писал напрямую: панель и фасад.
+// проецируются в мету через инъецируемый игровой eventRouter — словарь
+// типов событий принадлежит игре, адаптер его не знает.
 //
 // Различие бот/человек — по participants.get(gameId).isBot: бот создаётся как
 // танк + ИИ-контроллер внутри ядра (add_bot/remove_bot), человек — только
@@ -12,10 +13,13 @@ export default class GameCoreAdapter {
    * @param {Object} deps
    * @param {ParticipantManager} deps.participants - реестр участников
    *   (различение бот/человек при спавне и удалении).
+   * @param {Function} deps.eventRouter - игровой роутер событий ядра:
+   *   (event, services) => void.
    */
-  constructor(core, { participants }) {
+  constructor(core, { participants, eventRouter }) {
     this._core = core;
     this._participants = participants;
+    this._eventRouter = eventRouter;
     this._services = {}; // { vimp, panel } — инъекция как у Game.js
   }
 
@@ -108,38 +112,14 @@ export default class GameCoreAdapter {
     this._drainEvents();
   }
 
-  // проецирует события ядра в панель и фасад (как писал JS-Game напрямую).
-  // Ядро оперирует числовыми id (u32), мета (ParticipantManager, Panel, Stat)
-  // ключует строками — id событий приводятся к строкам на этой границе
+  // дренирует события ядра и отдаёт их игровому eventRouter'у вместе с
+  // сервисами меты ({ panel, vimp }) — маппинг типов событий на мету
+  // целиком у игры (games/tanks/src/host/coreEventRouter.js)
   _drainEvents() {
     const events = JSON.parse(this._core.take_events());
-    const { panel, vimp } = this._services;
 
     for (const event of events) {
-      switch (event.type) {
-        case 'health':
-          panel.updateUser(String(event.id), 'health', event.value, 'set');
-          break;
-
-        case 'ammo':
-          panel.updateUser(String(event.id), event.weapon, event.value, 'set');
-          break;
-
-        case 'activeWeapon':
-          panel.setActiveWeapon(String(event.id), event.weapon);
-          break;
-
-        case 'shake':
-          vimp.triggerCameraShake(String(event.id), {
-            intensity: event.intensity,
-            duration: event.duration,
-          });
-          break;
-
-        case 'kill':
-          vimp.reportKill(String(event.victim), String(event.killer));
-          break;
-      }
+      this._eventRouter(event, this._services);
     }
   }
 

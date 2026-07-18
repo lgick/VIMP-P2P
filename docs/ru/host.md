@@ -135,11 +135,15 @@ prediction) собирает `src/lib/buildClientConfig.js`.
   танк + ИИ в ядре — против `spawn_tank`/`remove_tank`); `changePlayerData` →
   `reset_tank`;
 - **ввод** → `apply_input` (seq подтверждается ядром в player-блоке кадра);
-- **проекция событий**: после `step` дренирует `take_events()` — `health`/`ammo`
-  → `panel.updateUser(..., 'set')`, `activeWeapon` → `panel.setActiveWeapon`,
+- **проекция событий**: после `step` дренирует `take_events()` и отдаёт каждое
+  событие инъецируемому игровому `eventRouter`'у
+  (`games/tanks/src/host/coreEventRouter.js`) вместе с сервисами меты
+  (`{ panel, vimp }`) — словарь типов событий принадлежит игре, адаптер его
+  не знает. Роутер танков маппит `health`/`ammo` →
+  `panel.updateUser(..., 'set')`, `activeWeapon` → `panel.setActiveWeapon`,
   `shake` → `HostGame.triggerCameraShake`, `kill` → `HostGame.reportKill`
   (здоровье/боезапас живут в ядре, панель — их проекция). Ядро оперирует
-  числовыми id (u32), мета ключует строками — id событий приводятся к
+  числовыми id (u32), мета ключует строками — id событий роутер приводит к
   строкам на этой границе;
 - **упаковка**: `packBody` → `pack_body`, `packFrame` → `pack_frame` +
   `frame_bytes` (копия из памяти WASM, работает и на web-, и на nodejs-таргете);

@@ -1,3 +1,6 @@
+// Временная статическая композиция движок→игра (этап 3 плана):
+// в этапе 6 роутер приедет динамическим HostPlugin'ом
+import coreEventRouter from '@vimp/tanks/host/coreEventRouter.js';
 import Panel from './meta/modules/Panel.js';
 import Stat from './meta/modules/Stat.js';
 import Chat from './meta/modules/chat/index.js';
@@ -47,7 +50,8 @@ class SnapshotThrottle {
 // Host-фасад: авторитетная часть матча в Worker'е хоста. Симуляция, боты и
 // упаковка снапшотов — в Rust-ядре через GameCoreAdapter, мета (RoundManager,
 // участники, чат, голосования, статистика, панель) — JS-модули ./meta/.
-// Питается событиями ядра (adapter._drainEvents → panel/reportKill/shake).
+// Питается событиями ядра (adapter._drainEvents → игровой coreEventRouter →
+// panel/reportKill/shake).
 export default class HostGame {
   /**
    * @param {Object} data - конфиг игры (config/game.js).
@@ -95,6 +99,7 @@ export default class HostGame {
     // симуляция — в ядре; адаптер под интерфейс Game.js
     this._game = new GameCoreAdapter(core, {
       participants: this._participants,
+      eventRouter: coreEventRouter,
     });
 
     this._panel = new Panel(data.panel);

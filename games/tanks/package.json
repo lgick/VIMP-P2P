@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     "./data/*": "./src/data/*",
-    "./config/*": "./src/config/*"
+    "./config/*": "./src/config/*",
+    "./host/*": "./src/host/*"
   }
 }

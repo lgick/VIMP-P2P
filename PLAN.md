@@ -232,7 +232,7 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 
 | PR | Задача | Ключевые файлы |
 | --- | --- | --- |
-| 3.1 | `GameCoreAdapter._drainEvents`: игровой словарь → инъецируемый `eventRouter` (временный мост до стандартных событий этапа 4a) | `src/host/GameCoreAdapter.js`, новый `games/tanks/src/host/coreEventRouter.js` |
+| 3.1 ✅ | `GameCoreAdapter._drainEvents`: игровой словарь → инъецируемый `eventRouter` (временный мост до стандартных событий этапа 4a) | `src/host/GameCoreAdapter.js`, новый `games/tanks/src/host/coreEventRouter.js` |
 | 3.2 | `SocketManager`: `sendRoundStart/Victory/Defeat/FragSound/GameOverSound` → generic `sendSoundCue(cue)` по `soundCues`; `sendFirstVote` → `initialVote` из конфига | `src/host/meta/SocketManager.js`, `src/host/HostGame.js`, `src/host/meta/core/RoundManager.js` |
 | 3.3 | `CommandProcessor`: движковое ядро (`/name`,`/nr`,`/timeleft`,`/mapname`) + `registerCommand()`; `/bot` со всей логикой и голосованиями → игра | `src/host/meta/core/CommandProcessor.js`, `games/tanks/src/host/botCommand.js` |
 | 3.4 | `systemMessages.js`: движковый реестр (группы s/v/m/c/n) + `registerCodes()`; группа `b:*` → игра | `src/host/meta/modules/chat/systemMessages.js`, `games/tanks/src/host/systemMessages.js` |

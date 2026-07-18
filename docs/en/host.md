@@ -147,12 +147,16 @@ Implements the physics/bots/packing surface consumed by
   `spawn_tank`/`remove_tank`); `changePlayerData` → `reset_tank`;
 - **input** → `apply_input` (seq is confirmed by the core in the frame's
   player block);
-- **event projection**: after `step`, drains `take_events()` — `health`/
-  `ammo` → `panel.updateUser(..., 'set')`, `activeWeapon` →
-  `panel.setActiveWeapon`, `shake` → `HostGame.triggerCameraShake`, `kill` →
-  `HostGame.reportKill` (health/ammo live in the core, the panel is their
-  projection). The core operates on numeric ids (u32), meta keys by string
-  — event ids are converted to strings at this boundary;
+- **event projection**: after `step`, drains `take_events()` and hands each
+  event to the injected game `eventRouter`
+  (`games/tanks/src/host/coreEventRouter.js`) together with the meta services
+  (`{ panel, vimp }`) — the event-type dictionary belongs to the game, the
+  adapter doesn't know it. The tanks router maps `health`/`ammo` →
+  `panel.updateUser(..., 'set')`, `activeWeapon` → `panel.setActiveWeapon`,
+  `shake` → `HostGame.triggerCameraShake`, `kill` → `HostGame.reportKill`
+  (health/ammo live in the core, the panel is their projection). The core
+  operates on numeric ids (u32), meta keys by string — the router converts
+  event ids to strings at this boundary;
 - **packing**: `packBody` → `pack_body`, `packFrame` → `pack_frame` +
   `frame_bytes` (a copy from WASM memory, works on both the web and nodejs
   targets);
