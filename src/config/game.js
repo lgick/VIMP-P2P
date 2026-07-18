@@ -19,6 +19,18 @@ export default {
     friendlyFire: false, // огонь по своей команде
   },
 
+  // маппинг движковых событий на имена звуков игры (SocketManager.sendSoundCue)
+  soundCues: {
+    roundStart: 'roundStart',
+    victory: 'victory',
+    defeat: 'defeat',
+    frag: 'frag',
+    death: 'gameOver',
+  },
+
+  // голосование, отправляемое игроку после первого кадра (выбор команды)
+  initialVote: 'teamChange',
+
   maps, // карты игры
   mapScale: 0.3, // масштаб карт
   currentMap: 'pool mini', // название карты по умолчанию

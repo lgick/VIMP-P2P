@@ -137,7 +137,10 @@ async function onInit(room, handoff = null) {
   );
 
   clientCfg = buildClientConfig(game, clientConfig);
-  socketManager = new SocketManager(wsports.server);
+  socketManager = new SocketManager(wsports.server, {
+    soundCues: game.soundCues,
+    initialVote: game.initialVote,
+  });
   host = new HostGame(game, socketManager, core, {
     hostSocketId: room?.hostSocketId ?? null,
     onMapChange: mapName => self.postMessage({ type: 'map_changed', mapName }),

@@ -62,13 +62,10 @@ const SENDER_METHODS = [
   'sendKeySet',
   'sendPlayerDefaultShot',
   'sendSpectatorDefaultShot',
-  'sendRoundStart',
+  'sendGameInform',
   'sendRoundEnd',
-  'sendVictory',
-  'sendDefeat',
+  'sendSoundCue',
   'sendName',
-  'sendFragSound',
-  'sendGameOverSound',
 ];
 
 // Фейковый SocketManager: вместо отправки в сеть пишет все исходящие кадры.

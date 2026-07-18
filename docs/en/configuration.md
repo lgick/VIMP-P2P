@@ -50,6 +50,8 @@ models, and weapons from `games/tanks/src/data/`.
 | `currentMap` | `'pool mini'` | The default map |
 | `mapsInVote` | `4` | How many maps show up in a vote |
 | `mapSetId` | `'c1'` | The default snapshot key for the map constructor |
+| `soundCues` | `roundStart, victory, defeat, frag, death: 'gameOver'` | Maps engine events to the game's sound names (`SocketManager.sendSoundCue`) |
+| `initialVote` | `'teamChange'` | The vote sent to a player right after the first frame |
 | `spectatorTeam` | `'spectators'` | The spectator team's name |
 | `teams` | `team1: 1, team2: 2, spectators: 3` | Teams and their ids |
 

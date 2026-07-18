@@ -37,6 +37,8 @@
 | `currentMap` | `'pool mini'` | Карта по умолчанию |
 | `mapsInVote` | `4` | Количество карт в голосовании |
 | `mapSetId` | `'c1'` | Дефолтный snapshot-ключ конструктора карты |
+| `soundCues` | `roundStart, victory, defeat, frag, death: 'gameOver'` | Маппинг движковых событий на имена звуков игры (`SocketManager.sendSoundCue`) |
+| `initialVote` | `'teamChange'` | Голосование, отправляемое игроку после первого кадра |
 | `spectatorTeam` | `'spectators'` | Название команды наблюдателей |
 | `teams` | `team1: 1, team2: 2, spectators: 3` | Команды и их id |
 

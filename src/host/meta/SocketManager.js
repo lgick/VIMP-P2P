@@ -15,7 +15,15 @@ const GAME_CODES = {
 };
 
 export default class SocketManager {
-  constructor(ports) {
+  /**
+   * @param {Object} ports - карта портов host→client (wsports.server).
+   * @param {Object} [gameOpts] - игровая параметризация (конфиг игры).
+   * @param {Object} [gameOpts.soundCues] - маппинг движковых событий на
+   *   имена звуков игры: { roundStart, victory, defeat, frag, death }.
+   * @param {string} [gameOpts.initialVote] - имя голосования, отправляемого
+   *   игроку после первого кадра (у танков — выбор команды).
+   */
+  constructor(ports, { soundCues = {}, initialVote = null } = {}) {
     this._PORT_CONFIG_DATA = ports.CONFIG_DATA;
     this._PORT_AUTH_DATA = ports.AUTH_DATA;
     this._PORT_AUTH_RESULT = ports.AUTH_RESULT;
@@ -34,6 +42,9 @@ export default class SocketManager {
     this._PORT_CHAT_DATA = ports.CHAT_DATA;
     this._PORT_VOTE_DATA = ports.VOTE_DATA;
     this._PORT_KEYSET_DATA = ports.KEYSET_DATA;
+
+    this._soundCues = soundCues;
+    this._initialVote = initialVote;
 
     this._game = null;
     this._panel = null;
@@ -280,11 +291,13 @@ export default class SocketManager {
   }
 
   /**
-   * Отправка первого голосования (выбор команды).
+   * Отправка первого голосования (initialVote из конфига игры).
    * @param {string} socketId
    */
   sendFirstVote(socketId) {
-    this.sendVote(socketId, { name: 'teamChange' });
+    if (this._initialVote) {
+      this.sendVote(socketId, { name: this._initialVote });
+    }
   }
 
   /**
@@ -363,12 +376,32 @@ export default class SocketManager {
   }
 
   /**
-   * Отправка информации о начале раунда.
+   * Отправка звукового сигнала движкового события. Маппинг события на имя
+   * звука задаёт игра (soundCues); незамапленный сигнал не отправляется.
    * @param {string} socketId
+   * @param {string} cue - движковое событие (roundStart, victory, defeat,
+   *   frag, death).
    */
-  sendRoundStart(socketId) {
-    this._send(socketId, this._PORT_SOUND_DATA, 'roundStart');
-    this._send(socketId, this._PORT_GAME_INFORM_DATA, GAME_CODES['roundStart']);
+  sendSoundCue(socketId, cue) {
+    const sound = this._soundCues[cue];
+
+    if (sound) {
+      this._send(socketId, this._PORT_SOUND_DATA, sound);
+    }
+  }
+
+  /**
+   * Отправка игрового информера.
+   * @param {string} socketId
+   * @param {string} key - Ключ игрового события (GAME_CODES).
+   * @param {Array|undefined} [arr] - Дополнительные параметры.
+   */
+  sendGameInform(socketId, key, arr) {
+    const data = Array.isArray(arr)
+      ? [...GAME_CODES[key], arr]
+      : GAME_CODES[key];
+
+    this._send(socketId, this._PORT_GAME_INFORM_DATA, data);
   }
 
   /**
@@ -377,31 +410,11 @@ export default class SocketManager {
    * @param {string|number} [winnerTeam] - Победившая команда.
    */
   sendRoundEnd(socketId, winnerTeam) {
-    let informData;
-
     if (winnerTeam) {
-      informData = [...GAME_CODES['winnerTeam'], [winnerTeam]];
+      this.sendGameInform(socketId, 'winnerTeam', [winnerTeam]);
     } else {
-      informData = GAME_CODES['gameOver'];
+      this.sendGameInform(socketId, 'gameOver');
     }
-
-    this._send(socketId, this._PORT_GAME_INFORM_DATA, informData);
-  }
-
-  /**
-   * Отправка звука победы.
-   * @param {string} socketId
-   */
-  sendVictory(socketId) {
-    this._send(socketId, this._PORT_SOUND_DATA, 'victory');
-  }
-
-  /**
-   * Отправка звука поражения.
-   * @param {string} socketId
-   */
-  sendDefeat(socketId) {
-    this._send(socketId, this._PORT_SOUND_DATA, 'defeat');
   }
 
   /**
@@ -414,21 +427,5 @@ export default class SocketManager {
       key: 'localstorageNameReplace',
       value: name,
     });
-  }
-
-  /**
-   * Отправка звука поражения цели.
-   * @param {string} socketId
-   */
-  sendFragSound(socketId) {
-    this._send(socketId, this._PORT_SOUND_DATA, 'frag');
-  }
-
-  /**
-   * Отправка звук уничтожения.
-   * @param {string} socketId
-   */
-  sendGameOverSound(socketId) {
-    this._send(socketId, this._PORT_SOUND_DATA, 'gameOver');
   }
 }

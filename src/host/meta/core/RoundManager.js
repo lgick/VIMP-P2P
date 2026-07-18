@@ -255,7 +255,8 @@ class RoundManager {
         this._setActivePlayer(user, getRespawnData(team));
       }
 
-      this._socketManager.sendRoundStart(socketId);
+      this._socketManager.sendSoundCue(socketId, 'roundStart');
+      this._socketManager.sendGameInform(socketId, 'roundStart');
     }
 
     // создание ботов на карте
@@ -434,7 +435,7 @@ class RoundManager {
 
     if (victimUser.isNetworked) {
       this._socketManager.sendSpectatorDefaultShot(victimUser.socketId);
-      this._socketManager.sendGameOverSound(victimUser.socketId);
+      this._socketManager.sendSoundCue(victimUser.socketId, 'death');
     }
 
     if (killerId) {
@@ -465,7 +466,7 @@ class RoundManager {
         }
 
         if (killerUser.isNetworked) {
-          this._socketManager.sendFragSound(killerUser.socketId);
+          this._socketManager.sendSoundCue(killerUser.socketId, 'frag');
         }
       }
 
@@ -521,9 +522,9 @@ class RoundManager {
         const socketId = user.socketId;
 
         if (user.teamId === victimTeamId) {
-          this._socketManager.sendDefeat(socketId);
+          this._socketManager.sendSoundCue(socketId, 'defeat');
         } else {
-          this._socketManager.sendVictory(socketId);
+          this._socketManager.sendSoundCue(socketId, 'victory');
         }
 
         this._socketManager.sendRoundEnd(socketId, winnerTeam);
@@ -532,7 +533,7 @@ class RoundManager {
       this._participants.getHumans().forEach(user => {
         const socketId = user.socketId;
 
-        this._socketManager.sendDefeat(socketId);
+        this._socketManager.sendSoundCue(socketId, 'defeat');
         this._socketManager.sendRoundEnd(socketId);
       });
     }

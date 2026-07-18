@@ -275,8 +275,12 @@ callback + participant list), `reset`. Topic cooldown — `timeBlockedVote`
 The single send point: JSON `_send(socketId, port, data, reliable)` and
 binary `sendShot(socketId, frameBuffer, reliable)`; typed methods
 (`sendConfig`, `sendMap`, `sendPanel`, `sendStat`, `sendChat`, `sendVote`,
-`sendKeySet`, `sendRoundStart`, `sendTechInform`, …) and `close` with a
-technical code. Composite sends: `sendFirstShot` (first frame + full stat +
+`sendKeySet`, `sendGameInform`, `sendTechInform`, …) and `close` with a
+technical code. Game parametrization comes from the game config:
+`sendSoundCue(socketId, cue)` maps engine events
+(`roundStart`/`victory`/`defeat`/`frag`/`death`) to the game's sound names
+via `soundCues`, and `sendFirstVote` sends the `initialVote` vote (team
+selection in tanks). Composite sends: `sendFirstShot` (first frame + full stat +
 empty panel + key set 0), `sendPlayerDefaultShot`/
 `sendSpectatorDefaultShot`. Transport is abstracted: in the Worker, wire
 sockets sit underneath (`makeWorkerSocket`), and the `reliable` flag
@@ -400,7 +404,7 @@ bundled.
    restored participants whose `connect` never arrived (dropped during the
    pause), resumes timers (the map — with its time remaining,
    `TimerManager.startMapTimer(duration)`), and starts the first round —
-   clients get the usual `sendClear`/respawn/`sendRoundStart`.
+   clients get the usual `sendClear`/respawn/round start (`sendSoundCue`+`sendGameInform`).
 
 **Handoff meta** (`HostGame._collectHandoff`, a versioned format —
 `HANDOFF_VERSION`): human participants with `isReady` (gameId/socketId/

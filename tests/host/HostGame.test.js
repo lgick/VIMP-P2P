@@ -328,7 +328,11 @@ describe.skipIf(!coreAvailable)('HostGame: эстафета Worker\'ов (5.2)',
     expect(host._timerManager._hasTimer('idleCheck')).toBe(true);
 
     // прерванный раунд перезапущен
-    expect(socket.framesOf('sendRoundStart').length).toBeGreaterThan(0);
+    const roundStarts = socket
+      .framesOf('sendGameInform')
+      .filter(f => f.args[0] === 'roundStart');
+
+    expect(roundStarts.length).toBeGreaterThan(0);
   });
 
   it('новый HostGame восстанавливает участников, счёт и seq из меты', async () => {

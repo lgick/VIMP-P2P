@@ -255,8 +255,11 @@ found». (`/ban` до хоста не доходит — клиент перех
 Единственная точка отправки: JSON `_send(socketId, port, data, reliable)` и
 бинарная `sendShot(socketId, frameBuffer, reliable)`; типизированные методы
 (`sendConfig`, `sendMap`, `sendPanel`, `sendStat`, `sendChat`, `sendVote`,
-`sendKeySet`, `sendRoundStart`, `sendTechInform`, …) и `close` с техническим
-кодом. Составные отправки: `sendFirstShot` (первый кадр + полный stat + пустая
+`sendKeySet`, `sendGameInform`, `sendTechInform`, …) и `close` с техническим
+кодом. Игровая параметризация — из конфига игры: `sendSoundCue(socketId, cue)`
+маппит движковые события (`roundStart`/`victory`/`defeat`/`frag`/`death`) на
+имена звуков игры по `soundCues`, `sendFirstVote` шлёт голосование
+`initialVote` (у танков — выбор команды). Составные отправки: `sendFirstShot` (первый кадр + полный stat + пустая
 панель + keySet 0), `sendPlayerDefaultShot`/`sendSpectatorDefaultShot`.
 Транспорт абстрагирован: в Worker'е под ним wire-сокеты `postMessage`
 (`makeWorkerSocket`), флаг `reliable` классифицирует каналы meta/state.
@@ -372,7 +375,7 @@ reconnect) или сигнал `update_available` мастера → `refreshHos
    восстановленных участников, чей `connect` не пришёл (отвалились в паузу),
    возобновляет таймеры (карта — с остатком времени, `TimerManager.
    startMapTimer(duration)`) и стартует первый раунд — клиенты получают
-   штатные `sendClear`/респаун/`sendRoundStart`.
+   штатные `sendClear`/респаун/старт раунда (`sendSoundCue`+`sendGameInform`).
 
 **Handoff-мета** (`HostGame._collectHandoff`, формат версионирован —
 `HANDOFF_VERSION`): участники-люди с `isReady` (gameId/socketId/имя/модель/

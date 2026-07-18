@@ -64,8 +64,7 @@ describe('RoundManager.reportKill', () => {
       panel: { invalidate: vi.fn() },
       socketManager: {
         sendSpectatorDefaultShot: vi.fn(),
-        sendGameOverSound: vi.fn(),
-        sendFragSound: vi.fn(),
+        sendSoundCue: vi.fn(),
       },
       chat: { pushSystem: vi.fn() },
     });
@@ -99,7 +98,7 @@ describe('RoundManager.reportKill', () => {
     rm.reportKill('v', 'k');
 
     expect(rm._stat.updateUser).toHaveBeenCalledWith('k', 2, { score: 1 });
-    expect(rm._socketManager.sendFragSound).toHaveBeenCalledWith('sk');
+    expect(rm._socketManager.sendSoundCue).toHaveBeenCalledWith('sk', 'frag');
     expect(rm._participants.replaceWatched).toHaveBeenCalledWith('v', 'k');
     expect(rm._checkTeamWipe).toHaveBeenCalledWith(1, 2);
   });
@@ -135,7 +134,10 @@ describe('RoundManager.reportKill', () => {
 
     expect(rm._participants.get('v').status).toBe('dead');
     expect(rm._chat.pushSystem).not.toHaveBeenCalled();
-    expect(rm._socketManager.sendFragSound).not.toHaveBeenCalled();
+    expect(rm._socketManager.sendSoundCue).not.toHaveBeenCalledWith(
+      'sk',
+      'frag',
+    );
     expect(rm._checkTeamWipe).toHaveBeenCalledWith(1, null);
   });
 });
@@ -153,8 +155,7 @@ describe('RoundManager._checkTeamWipe', () => {
       stat: { updateHead: vi.fn() },
       teams: { red: 1, blue: 2 },
       socketManager: {
-        sendDefeat: vi.fn(),
-        sendVictory: vi.fn(),
+        sendSoundCue: vi.fn(),
         sendRoundEnd: vi.fn(),
       },
       timerManager: {
@@ -171,8 +172,11 @@ describe('RoundManager._checkTeamWipe', () => {
     expect(rm._isRoundEnding).toBe(true);
     expect(rm._stat.updateHead).toHaveBeenCalledWith(1, 'deaths', 1);
     expect(rm._stat.updateHead).toHaveBeenCalledWith(2, 'score', 1);
-    expect(rm._socketManager.sendDefeat).toHaveBeenCalledWith('sa');
-    expect(rm._socketManager.sendVictory).toHaveBeenCalledWith('sb');
+    expect(rm._socketManager.sendSoundCue).toHaveBeenCalledWith('sa', 'defeat');
+    expect(rm._socketManager.sendSoundCue).toHaveBeenCalledWith(
+      'sb',
+      'victory',
+    );
     expect(rm._socketManager.sendRoundEnd).toHaveBeenCalledWith('sa', 'blue');
     expect(rm._timerManager.startRoundRestartDelay).toHaveBeenCalled();
   });
