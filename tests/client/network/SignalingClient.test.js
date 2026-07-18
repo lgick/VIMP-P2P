@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import SignalingClient from '../../../src/client/network/SignalingClient.js';
+import SignalingClient from '../../../packages/engine/src/client/network/SignalingClient.js';
 
 // фейковый WebSocket с ручным управлением событиями
 class FakeSocket {

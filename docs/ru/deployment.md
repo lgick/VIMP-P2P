@@ -101,7 +101,7 @@
 
 ## 🔒 Security-заголовки и CSP
 
-Гигиена среды: отсекает «уличных» злоумышленников — не хоста-читера: он физически исполняет симуляцию у себя в процессе, и WASM-память доступна ему из JS в обход логики ядра, этого CSP не предотвращает. В проде клиентскую статику и `.wasm` отдаёт **Nginx**, поэтому авторитетная точка Content-Security-Policy — заголовок Nginx в `server`-блоке домена. Строка политики — единый source of truth в [src/config/master.js](../../src/config/master.js) (`security.csp`); мастер ставит её на свои ответы, но HTML/`.wasm` идут через Nginx.
+Гигиена среды: отсекает «уличных» злоумышленников — не хоста-читера: он физически исполняет симуляцию у себя в процессе, и WASM-память доступна ему из JS в обход логики ядра, этого CSP не предотвращает. В проде клиентскую статику и `.wasm` отдаёт **Nginx**, поэтому авторитетная точка Content-Security-Policy — заголовок Nginx в `server`-блоке домена. Строка политики — единый source of truth в [packages/engine/src/config/master.js](../../packages/engine/src/config/master.js) (`security.csp`); мастер ставит её на свои ответы, но HTML/`.wasm` идут через Nginx.
 
 Шаблон `install-system.sh` уже содержит эти заголовки; при ручной настройке добавьте в Nginx `server`-блок (или в общий `snippet`):
 
@@ -114,7 +114,7 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-
 
 Ключевые директивы: `script-src ... 'wasm-unsafe-eval'` (компиляция WASM-ядра в браузере), `worker-src 'self' blob:` (Web Worker хоста), `connect-src 'self' wss: data:` (сигнальный WebSocket мастера; `data:` — PixiJS проверяет поддержку `ImageBitmap` фетчем тестового `data:`-URL; WebRTC data channels CSP не гейтит). В **dev** CSP не применяется — ViteExpress + HMR требуют `'unsafe-inline'` и HMR-WebSocket.
 
-CSP сознательно не даёт `'unsafe-eval'` — PixiJS без него бросает `Current environment does not allow unsafe-eval`, поэтому `src/client/main.js` подключает `pixi.js/unsafe-eval` (до создания `Application`) — это переключает PixiJS на safe-eval путь без ослабления политики.
+CSP сознательно не даёт `'unsafe-eval'` — PixiJS без него бросает `Current environment does not allow unsafe-eval`, поэтому `packages/engine/src/client/main.js` подключает `pixi.js/unsafe-eval` (до создания `Application`) — это переключает PixiJS на safe-eval путь без ослабления политики.
 
 Минификация JS-оболочки — штатная у `vite build`. Усиленная обфускация осознанно вне scope: против хоста-читера она бесполезна.
 

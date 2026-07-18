@@ -259,7 +259,9 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 - Тесты движковых модулей (интерполятор, предиктор, raycast, unpack, snapshot, nav) — в engine-crate на `#[cfg(test)]`-фикстуре `TestGame`; parity и `tests/sim.rs` — в tanks-crate.
 - Готово: обе цели собираются, все тесты зелёные, `cargo test --workspace` в CI.
 
-### Этап 5. Физический переезд JS (L, 2–3 PR; после 3 и 4a)
+### Этап 5. Физический переезд JS (L, 2–3 PR; после 3 и 4a) — ✅ выполнен
+
+Примечание: выполнен до этапа 4 (решение разработчика) — этап 5 не зависит от Rust-генерализации; этап 4a при выполнении будет править файлы уже по путям `packages/engine/`.
 
 - `src/{master,host,client,lib,config}` + `index.html` + `vite.config.js` → `packages/engine/`; корень — только оркестрация (`npm run dev` → `npm -w @vimp/engine run dev`). Игровые остатки (parts/, bakers/, игровой CSS, конфиги) → `games/tanks/src/client/`.
 - Временная статическая композиция — единственный файл `packages/engine/src/gameRegistry.static.js` (импортирует `@vimp/tanks/host` и `@vimp/tanks/client`), помечен к удалению в этапе 6.

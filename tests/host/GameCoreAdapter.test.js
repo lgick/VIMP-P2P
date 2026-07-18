@@ -1,6 +1,6 @@
 /* eslint-disable camelcase -- фейк ядра повторяет snake_case ABI GameCore */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import GameCoreAdapter from '../../src/host/GameCoreAdapter.js';
+import GameCoreAdapter from '../../packages/engine/src/host/GameCoreAdapter.js';
 
 // Юнит-тесты адаптера ядра: маппинг команд на ABI, различение бот/человек,
 // диспетчеризация событий ядра в инъецируемый eventRouter, флаги камеры в

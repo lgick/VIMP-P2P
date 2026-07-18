@@ -9,5 +9,9 @@
     "./config/*": "./src/config/*",
     "./host/*": "./src/host/*",
     "./client/*": "./src/client/*"
+  },
+  "dependencies": {
+    "@vimp/engine": "*",
+    "pixi.js": "^8.14.0"
   }
 }

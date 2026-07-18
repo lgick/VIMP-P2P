@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   buildSystemMessage,
   registerCodes,
-} from '../../src/host/meta/modules/chat/systemMessages.js';
+} from '../../packages/engine/src/host/meta/modules/chat/systemMessages.js';
 import tanksSystemMessages from '@vimp/tanks/host/systemMessages.js';
 
 // Chat — синглтон, перезагружаем модуль для изоляции
@@ -10,7 +10,7 @@ let Chat;
 
 beforeEach(async () => {
   vi.resetModules();
-  Chat = (await import('../../src/host/meta/modules/chat/Chat.js')).default;
+  Chat = (await import('../../packages/engine/src/host/meta/modules/chat/Chat.js')).default;
 });
 
 describe('buildSystemMessage', () => {

@@ -17,7 +17,7 @@ and signaling.
 | [core.md](core.md) | Rust simulation core: `core/` layout, ABI (commands/events/frames), WASM build, tests |
 | [client.md](client.md) | Client modules: MVC components, client core (interpolation/prediction/shot spawning), rendering, sound |
 | [network.md](network.md) | Host↔client sync: WebRTC channels, port protocol, binary snapshot frame (v3), data formats, RTT |
-| [configuration.md](configuration.md) | Configuration: `.env` variables, every file under `src/config/`, `games/tanks/src/data/` |
+| [configuration.md](configuration.md) | Configuration: `.env` variables, every file under `packages/engine/src/config/`, `games/tanks/src/data/` |
 | [extending.md](extending.md) | Extending the game: new maps, weapons, sounds, client entities |
 | [deployment.md](deployment.md) | Deployment: VPS setup, adding/removing servers, CI/CD |
 | [plugin-api.md](plugin-api.md) | Engine ↔ game plugin contracts (draft): GameManifest, HostPlugin, ClientPlugin, Wasm ABI, snapshot schema, versioning |

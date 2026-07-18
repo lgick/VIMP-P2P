@@ -1,8 +1,8 @@
 # Client Modules and Systems
 
 The client is a browser app built on PixiJS (Vite build, Pug templates in
-[src/client/views/](../../src/client/views/)). The entry point is
-[src/client/main.js](../../src/client/main.js).
+[packages/engine/src/client/views/](../../packages/engine/src/client/views/)). The entry point is
+[packages/engine/src/client/main.js](../../packages/engine/src/client/main.js).
 
 ## main.js — bootstrap, dispatcher, and render loop
 
@@ -29,7 +29,7 @@ The client is a browser app built on PixiJS (Vite build, Pug templates in
   `Application`s, the MVC components, `BakingProvider` (texture baking),
   `SoundManager`, and the **client core** (`await init()` for WASM + `new
   ClientCore(...)`, its config is assembled by
-  [src/lib/clientCoreConfig.js](../../src/lib/clientCoreConfig.js) from the
+  [packages/engine/src/lib/clientCoreConfig.js](../../packages/engine/src/lib/clientCoreConfig.js) from the
   `prediction`/`interpolation` sections of CONFIG_DATA); it replies
   `CONFIG_READY`.
 - The first frame (`FIRST_SHOT_DATA`, port 4) is applied immediately
@@ -49,7 +49,7 @@ The client is a browser app built on PixiJS (Vite build, Pug templates in
   reason is delivered by the host's Worker as a `TECH_INFORM_DATA` message
   right before the channel closes (see
   [network.md](network.md#rtt-pingpong-and-kicks)). `techInformList` has a
-  bundle default (`src/config/clientDefaults.js`) — a full-room refusal arrives
+  bundle default (`packages/engine/src/config/clientDefaults.js`) — a full-room refusal arrives
   before `CONFIG_DATA`.
 - **WebRTC unavailable** (`ensureWebRtcAvailable`): if `RTCPeerConnection`
   is unavailable (Firefox with `media.peerconnection.enabled = false`,
@@ -65,7 +65,7 @@ The client is a browser app built on PixiJS (Vite build, Pug templates in
   failure (`error`) tears down the room with a message and returns to the
   lobby.
 
-## Network layer (src/client/network/)
+## Network layer (packages/engine/src/client/network/)
 
 The game transport is WebRTC, not WebSocket (channel details —
 [network.md](network.md#transport-webrtc)):
@@ -83,7 +83,7 @@ The game transport is WebRTC, not WebSocket (channel details —
   stream), `close` (a drop). `RTCPeerConnection` is injected by a factory
   for tests.
 
-The client's role is picked in the lobby (`src/client/main.js`): **joining**
+The client's role is picked in the lobby (`packages/engine/src/client/main.js`): **joining**
 (`connectToHost` → `WebRtcManager`, offerer) or **hosting** (`connectAsHost`
 → a browser host in the same tab). For a host, the game transport is
 **`LoopbackTransport`**: the same interface as `WebRtcManager` (`publisher`
@@ -102,7 +102,7 @@ master (`register_host`/heartbeat), and answers the lobby ping
 (`ping_host`). Remote clients' data flows into the same Worker as the host
 player's loopback. Details — [host.md](host.md).
 
-## MVC components (src/client/components/)
+## MVC components (packages/engine/src/client/components/)
 
 Nine `model/` + `view/` + `controller/` triplets: **Auth**, **Lobby**,
 **CanvasManager**, **Controls**, **Game**, **Chat**, **Panel**, **Stat**,
@@ -124,7 +124,7 @@ Nine `model/` + `view/` + `controller/` triplets: **Auth**, **Lobby**,
   in the model (`pingHost` returns `false` if the server was pinged
   recently, interval `pingInterval`).
 
-Config — [src/config/lobby.js](../../src/config/lobby.js) (bundled into the
+Config — [packages/engine/src/config/lobby.js](../../packages/engine/src/config/lobby.js) (bundled into the
 build, since the lobby happens before connecting to a host). The ping
 measurement is **approximate** (client→master→host, not P2P RTT) and shown
 as such in the UI.
@@ -134,7 +134,7 @@ The Publisher pattern within a triplet:
 - `main.js` or the `view` → calls the `controller`'s methods **directly**;
 - the `controller` → calls the `model`'s methods **directly**;
 - the `model` → the `view` — **through `Publisher`**
-  ([src/lib/Publisher.js](../../src/lib/Publisher.js)): the model publishes
+  ([packages/engine/src/lib/Publisher.js](../../packages/engine/src/lib/Publisher.js)): the model publishes
   an event, the view is subscribed; external subscribers can listen to a
   model too.
 
@@ -210,13 +210,15 @@ Data flow:
   `nextWeapon`/`prevWeapon` — `cycle_weapon`). Sending `"seq:action:name"`
   to the host is unchanged.
 
-**The tanks ClientPlugin** (`games/tanks/src/client/index.js`, temporary
-static composition until stage 6): the core's game methods are called only
-from its hooks — `onAuth` (`set_model` on auth), `onPanel` (`sync_panel`
+**The tanks ClientPlugin** (`games/tanks/src/client/index.js`; loaded by the
+engine via `loadClientPlugin()` from `gameRegistry.static.js` — temporary
+static composition until stage 6) supplies `parts` (entity renderers),
+`bakers` (procedural textures), the game CSS and the hooks. The core's game
+methods are called only from its hooks — `onAuth` (`set_model` on auth), `onPanel` (`sync_panel`
 per panel frame), `onLocalAction` (`try_fire`/`cycle_weapon`); `main.js`
 doesn't know the core's game methods. The game's CSS (panel cells,
 canvases, team colors) is `games/tanks/src/client/tanks.css`; the engine
-UI skeleton is `src/client/style.css`.
+UI skeleton is `packages/engine/src/client/style.css`.
 
 Internally the core implements the following algorithms:
 
@@ -246,7 +248,7 @@ Internally the core implements the following algorithms:
 
 ### parts/ — entities
 
-[src/client/parts/](../../src/client/parts/) — classes rendered on the
+[games/tanks/src/client/parts/](../../games/tanks/src/client/parts/) — classes rendered on the
 PixiJS canvases: `Tank` (one class for both your own tank and others'),
 `TankRadar`, `Map`, `MapRadar`, `Bomb`, `Smoke`, `Tracks` (+`TrackMark`),
 `ParticlePool`. Effects live in `parts/effects/` (`BaseEffect`,
@@ -259,24 +261,24 @@ a part — use the existing ones as a template when creating a new one.
 
 ### Factory
 
-[src/lib/factory.js](../../src/lib/factory.js) — an entity-name → class
+[packages/engine/src/lib/factory.js](../../packages/engine/src/lib/factory.js) — an entity-name → class
 registry. `GameCtrl.parse(name, data)` creates an instance from incoming
 data, calls `update(data)` on an existing one, or removes it (`null`).
 
 ### Providers
 
 - **`BakingProvider`**
-  ([providers/BakingProvider.js](../../src/client/providers/BakingProvider.js))
+  ([providers/BakingProvider.js](../../packages/engine/src/client/providers/BakingProvider.js))
   — one-time procedural texture generation at startup from the
   `bakedAssets` config; baking functions live in
-  [providers/bakers/](../../src/client/providers/bakers/) (no fixed
+  [the game's bakers/](../../games/tanks/src/client/bakers/) (no fixed
   interface, follow the existing ones).
 - **`DependencyProvider`** — injects services (`renderer`, `soundManager`)
   into components via the `componentDependencies` map.
 
 ## SoundManager
 
-[src/client/SoundManager.js](../../src/client/SoundManager.js) (built on
+[packages/engine/src/client/SoundManager.js](../../packages/engine/src/client/SoundManager.js) (built on
 Howler.js). Sounds are described in `games/tanks/src/config/sounds.js`.
 
 - **UI/system** (no position): `playSystemSound(name)` — plays instantly,
@@ -288,7 +290,7 @@ Howler.js). Sounds are described in `games/tanks/src/config/sounds.js`.
 
 ## InputListener
 
-[src/client/InputListener.js](../../src/client/InputListener.js) — low-level
+[packages/engine/src/client/InputListener.js](../../packages/engine/src/client/InputListener.js) — low-level
 keydown/keyup capture for Controls; `modes`/`cmds` take priority over the
 game key set.
 

@@ -66,12 +66,12 @@ the host's Worker and the client (a single asset in the Vite build).
 Two classes are exported: **`GameCore`** (the host's authoritative
 simulation) and **`ClientCore`** (client mode, see below). Init data is
 passed as JSON strings; the `GameCore` config is assembled by
-`src/lib/coreConfig.js` (`buildCoreConfig()`), and maps are exported to JSON
+`packages/engine/src/lib/coreConfig.js` (`buildCoreConfig()`), and maps are exported to JSON
 via the `npm run maps:export` script (a step shared with serving maps
 without a client rebuild).
 
 ```js
-import { buildCoreConfig } from '../src/lib/coreConfig.js';
+import { buildCoreConfig } from '../packages/engine/src/lib/coreConfig.js';
 const { GameCore } = require('../core/pkg-node/vimp_core.js'); // nodejs target
 
 const core = new GameCore(JSON.stringify(buildCoreConfig({ seed: 42 })));
@@ -147,7 +147,7 @@ impossible by construction; the shapes are locked in by round-trip tests
 A second wasm-bindgen class from the same binary; lives in the main thread
 of a client tab (for the host player, a second WASM instance sits next to
 the Worker). Its config is assembled by
-[src/lib/clientCoreConfig.js](../../src/lib/clientCoreConfig.js) from the
+[packages/engine/src/lib/clientCoreConfig.js](../../packages/engine/src/lib/clientCoreConfig.js) from the
 `prediction`/`interpolation` sections of CONFIG_DATA plus the bundled
 `opcodes.js` registry; the `timeStepMs` field fixes the units (ms, unlike
 `CoreConfig.timeStep` in seconds).

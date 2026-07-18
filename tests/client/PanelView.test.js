@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import Publisher from '../../src/lib/Publisher.js';
+import Publisher from '../../packages/engine/src/lib/Publisher.js';
 
 // PanelView — синглтон, перезагружаем модуль для изоляции
 let PanelView;
@@ -23,7 +23,7 @@ const makeModel = () => ({ publisher: new Publisher() });
 beforeEach(async () => {
   vi.resetModules();
   seedDom();
-  PanelView = (await import('../../src/client/components/view/Panel.js'))
+  PanelView = (await import('../../packages/engine/src/client/components/view/Panel.js'))
     .default;
 });
 

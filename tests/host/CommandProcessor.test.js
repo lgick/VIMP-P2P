@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import CommandProcessor from '../../src/host/meta/core/CommandProcessor.js';
+import CommandProcessor from '../../packages/engine/src/host/meta/core/CommandProcessor.js';
 
 // Движковое ядро чат-команд: /name, /nr, /timeleft, /mapname +
 // регистрация игровых команд (registerCommand). Игровая /bot —

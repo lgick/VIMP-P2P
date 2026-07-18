@@ -2,14 +2,14 @@
 
 Игровой протокол между клиентом и хостом использует два формата сообщений:
 
-- **JSON**: `[portId, payload]` — все каналы, кроме снапшота. `portId` — числовой id из [src/config/wsports.js](../../src/config/wsports.js) (источник истины).
+- **JSON**: `[portId, payload]` — все каналы, кроме снапшота. `portId` — числовой id из [packages/engine/src/config/wsports.js](../../packages/engine/src/config/wsports.js) (источник истины).
 - **Бинарный**: кадр игрового снапшота (порт `5`, SHOT_DATA) — `ArrayBuffer`, упакованный ядром (`core/src/snapshot.rs`).
 
-Клиент различает форматы по типу входящих данных: строка → JSON-диспетчер `socketMethods[portId]` ([src/client/main.js](../../src/client/main.js) `handleMessage`), `ArrayBuffer` → `ClientCore.push_frame` (распаковка и буфер интерполяции — в клиентском ядре, см. [core.md](core.md#clientcore--клиентский-режим-ядра)).
+Клиент различает форматы по типу входящих данных: строка → JSON-диспетчер `socketMethods[portId]` ([packages/engine/src/client/main.js](../../packages/engine/src/client/main.js) `handleMessage`), `ArrayBuffer` → `ClientCore.push_frame` (распаковка и буфер интерполяции — в клиентском ядре, см. [core.md](core.md#clientcore--клиентский-режим-ядра)).
 
 ## Транспорт (WebRTC)
 
-Игровой транспорт — прямое P2P-соединение клиента с браузерным хостом (два `RTCDataChannel`), а не WebSocket. Протокол портов и форматы от этого не меняются — только транспорт. Клиентский сетевой слой — [src/client/network/](../../src/client/network/):
+Игровой транспорт — прямое P2P-соединение клиента с браузерным хостом (два `RTCDataChannel`), а не WebSocket. Протокол портов и форматы от этого не меняются — только транспорт. Клиентский сетевой слой — [packages/engine/src/client/network/](../../packages/engine/src/client/network/):
 
 - **`SignalingClient`** — сигнальный WebSocket мастер-сервера ([master.md](master.md)): координация установки P2P (welcome с `iceServers`, обмен SDP-офферами/ответами и ICE-кандидатами, сигнальный ping/pong, жалобы). Игрового трафика по нему нет.
 - **`WebRtcManager`** — транспорт P2P: два канала данных с хостом.
@@ -31,7 +31,7 @@
 
 | Порт | Имя | Формат | Описание |
 | :--: | --- | :--: | --- |
-| 0 | `CONFIG_DATA` | JSON | Клиентский конфиг (merge `src/config/clientDefaults.js` + `games/tanks/src/config/client.js` + `prediction`) |
+| 0 | `CONFIG_DATA` | JSON | Клиентский конфиг (merge `packages/engine/src/config/clientDefaults.js` + `games/tanks/src/config/client.js` + `prediction`) |
 | 1 | `AUTH_DATA` | JSON | Данные формы авторизации |
 | 2 | `AUTH_RESULT` | JSON | Ошибки авторизации (или `null`) |
 | 3 | `MAP_DATA` | JSON | Данные карты |
@@ -64,7 +64,7 @@
 | 7 | `VOTE_DATA` | Ответ голосования `[voteName, value]` или запрос списка (`'maps'`, `'teams'`) |
 | 8 | `PONG` | Ответ на PING (id пинга) |
 
-Хост включает обработку клиентских портов поэтапно (порт-машина в [src/host/host.worker.js](../../src/host/host.worker.js)): до авторизации активен только `CONFIG_READY`, после — `AUTH_RESPONSE`, после создания пользователя — остальные. Сообщение на неактивный порт игнорируется.
+Хост включает обработку клиентских портов поэтапно (порт-машина в [packages/engine/src/host/host.worker.js](../../packages/engine/src/host/host.worker.js)): до авторизации активен только `CONFIG_READY`, после — `AUTH_RESPONSE`, после создания пользователя — остальные. Сообщение на неактивный порт игнорируется.
 
 ## Жизненный цикл соединения
 
@@ -87,7 +87,7 @@
 
 ## Разделение каналов: горячий снапшот и мета
 
-Каждый тик снапшота (`networkSendRate: 4` → 30 пакетов/сек) хост шлёт **всем готовым** пользователям бинарный кадр порта `5`. Мета-данные идут **своими JSON-каналами и только при изменении** (см. `HostGame._onShotTick` в [src/host/HostGame.js](../../src/host/HostGame.js)):
+Каждый тик снапшота (`networkSendRate: 4` → 30 пакетов/сек) хост шлёт **всем готовым** пользователям бинарный кадр порта `5`. Мета-данные идут **своими JSON-каналами и только при изменении** (см. `HostGame._onShotTick` в [packages/engine/src/host/HostGame.js](../../packages/engine/src/host/HostGame.js)):
 
 - **panel (13)** — per-user; массив строк `'ключ:значение'` (`t` — время раунда, `h` — здоровье, `w1`/`w2` — боезапас, `wa` — активное оружие). Полная панель шлётся при входе в игру, пустая (только ключи) — наблюдателю.
 - **stat (14)** — broadcast, дельта изменений (см. формат ниже).
@@ -97,7 +97,7 @@
 
 ## Бинарный snapshot-кадр (порт 5)
 
-Кодек целиком в Rust-ядре: упаковка — `core/src/snapshot.rs` (у хоста), распаковка — `core/src/client/unpack.rs` (у клиента); обе стороны в одном crate — расхождение раскладок исключено по построению. Реестр ключей и версия формата: [src/config/opcodes.js](../../src/config/opcodes.js) (`SNAPSHOT_FORMAT_VERSION = 3`). Big-endian, ручной block-layout без библиотек. При несовпадении версии клиент отбрасывает кадр.
+Кодек целиком в Rust-ядре: упаковка — `core/src/snapshot.rs` (у хоста), распаковка — `core/src/client/unpack.rs` (у клиента); обе стороны в одном crate — расхождение раскладок исключено по построению. Реестр ключей и версия формата: [packages/engine/src/config/opcodes.js](../../packages/engine/src/config/opcodes.js) (`SNAPSHOT_FORMAT_VERSION = 3`). Big-endian, ручной block-layout без библиотек. При несовпадении версии клиент отбрасывает кадр.
 
 Сервер пакует **тело** (broadcast-часть) один раз за тик (`packBody`), затем для каждого пользователя собирает кадр `packFrame` = персональный заголовок + копия тела.
 
@@ -145,7 +145,7 @@
 
 ## RTT (ping/pong) и кики
 
-`TimerManager` каждые `rttPingInterval` (3 c) рассылает `PING` (порт 10) с id; клиент отвечает `PONG` (порт 8). Обе стороны шлют их по **ненадёжному `state`-каналу** (единственный JSON-трафик вне `meta`): замер отражает реальный сетевой путь, а не reliable-поток `meta` с его ретрансмиссиями; потерянный ping покрывается допуском `maxMissedPings`. [RTTManager](../../src/host/meta/modules/RTTManager.js) считает задержку, публикует её в статистику (столбец `latency`) и кикает:
+`TimerManager` каждые `rttPingInterval` (3 c) рассылает `PING` (порт 10) с id; клиент отвечает `PONG` (порт 8). Обе стороны шлют их по **ненадёжному `state`-каналу** (единственный JSON-трафик вне `meta`): замер отражает реальный сетевой путь, а не reliable-поток `meta` с его ретрансмиссиями; потерянный ping покрывается допуском `maxMissedPings`. [RTTManager](../../packages/engine/src/host/meta/modules/RTTManager.js) считает задержку, публикует её в статистику (столбец `latency`) и кикает:
 
 - при сглаженной (EMA) `latency > maxLatency` (1000 мс; порог рассчитан на P2P-хостинг с домашних каналов и спайки при смене карты) — код `4003`;
 - при `maxMissedPings` (5) подряд пропущенных ответах — код `4004`.
@@ -160,7 +160,7 @@
 
 ### Статистика (порт 14)
 
-`statArray = [tBodies, tHead, fullUpdate?]` (формирует [src/host/meta/modules/Stat.js](../../src/host/meta/modules/Stat.js)):
+`statArray = [tBodies, tHead, fullUpdate?]` (формирует [packages/engine/src/host/meta/modules/Stat.js](../../packages/engine/src/host/meta/modules/Stat.js)):
 
 - **`statArray[0]`** — строки таблиц: `[id строки, номер таблицы, массив ячеек | null, номер tbody]`. `null` вместо ячеек — удалить строку; пустая строка в ячейке — очистить значение; `undefined`/пропуск — не менять.
 - **`statArray[1]`** — шапки: `[номер таблицы, массив ячеек, номер строки tHead]`.

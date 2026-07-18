@@ -1,0 +1,15 @@
+// Временная статическая композиция движок+игра (этап 5 плана отделения) —
+// ЕДИНСТВЕННОЕ место в движке, которому разрешено импортировать @vimp/tanks
+// (ESLint no-restricted-imports); удаляется в этапе 6 (динамическая загрузка
+// игры по GameManifest мастера).
+//
+// hostPlugin и данные игры Node/Worker-safe и экспортируются статически;
+// ClientPlugin тянет pixi/CSS (браузерный код) — только динамический импорт,
+// чтобы мастер (Node) и Worker хоста не тащили клиентский бандл игры.
+
+export { default as hostPlugin } from '@vimp/tanks/host/index.js';
+export { default as gameMaps } from '@vimp/tanks/data/maps/index.js';
+export { default as authSchema } from '@vimp/tanks/config/auth.js';
+
+export const loadClientPlugin = async () =>
+  (await import('@vimp/tanks/client/index.js')).default;

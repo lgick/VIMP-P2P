@@ -4,7 +4,7 @@
 > engine/game separation (see the ADR in [architecture.md](architecture.md#adr-the-engine-is-an-application-the-game-is-a-dynamic-plugin)).
 > The code is still a monolith; the contracts are implemented incrementally
 > by the migration plan (`PLAN.md`). The only thing already in the code is
-> the `ENGINE_API_VERSION` constant in `src/config/opcodes.js`.
+> the `ENGINE_API_VERSION` constant in `packages/engine/src/config/opcodes.js`.
 
 The engine is an **application** (deployed once: master, transport, Worker
 infrastructure, meta mechanisms, client MVC framework, Rust framework). A
@@ -13,7 +13,7 @@ assets, loaded by a manifest served by the master. One master serves many
 games in the long run.
 
 Four contracts, all versioned by a single constant `ENGINE_API_VERSION`
-(owned by the engine, `src/config/opcodes.js`). A plugin whose
+(owned by the engine, `packages/engine/src/config/opcodes.js`). A plugin whose
 `engineApi` does not match is rejected at load time with a clear error:
 
 1. **GameManifest** — JSON describing the game build (master → lobby/host/client);
@@ -202,7 +202,7 @@ class, `idPrefix`. The packer (`snapshot.rs`), unpacker (`client/unpack.rs`),
 interpolator and the engine hot buffer become schema interpreters; the game
 crate supplies rows as flat `RowData`. The same schema travels to client JS
 in CONFIG_DATA → a generic `reconstructHot` (replacing the hardcoded
-12-field tank layout in `src/client/main.js`); `SNAPSHOT_KEYS` disappears
+12-field tank layout in `packages/engine/src/client/main.js`); `SNAPSHOT_KEYS` disappears
 from the client bundle (the host always provides the schema — removing the
 hidden "client bundle must match the host" coupling). The player block is
 described by a `playerState` schema (currently `[f32;8]+centering`).

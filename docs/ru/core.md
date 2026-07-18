@@ -65,12 +65,12 @@ npm run core:test         # Rust-тесты ядра (cargo test)
 
 Экспортируются два класса: **`GameCore`** (авторитетная симуляция хоста) и
 **`ClientCore`** (клиентский режим, см. ниже). Данные при инициализации
-передаются JSON-строками; конфиг `GameCore` собирает `src/lib/coreConfig.js`
+передаются JSON-строками; конфиг `GameCore` собирает `packages/engine/src/lib/coreConfig.js`
 (`buildCoreConfig()`), карты экспортируются в JSON скриптом
 `npm run maps:export` (общий шаг с раздачей карт без пересборки клиента).
 
 ```js
-import { buildCoreConfig } from '../src/lib/coreConfig.js';
+import { buildCoreConfig } from '../packages/engine/src/lib/coreConfig.js';
 const { GameCore } = require('../core/pkg-node/vimp_core.js'); // nodejs-таргет
 
 const core = new GameCore(JSON.stringify(buildCoreConfig({ seed: 42 })));
@@ -142,7 +142,7 @@ unpack живут в одном crate, расхождение раскладок
 
 Второй wasm-bindgen класс того же бинаря; живёт в главном потоке вкладки
 клиента (у хоста-игрока — второй инстанс WASM рядом с Worker'ом). Конфиг
-собирает [src/lib/clientCoreConfig.js](../../src/lib/clientCoreConfig.js) из
+собирает [packages/engine/src/lib/clientCoreConfig.js](../../packages/engine/src/lib/clientCoreConfig.js) из
 секций `prediction`/`interpolation` CONFIG_DATA + бандлового реестра
 `opcodes.js`; поле `timeStepMs` фиксирует единицы (мс — в отличие от
 `CoreConfig.timeStep` в секундах).

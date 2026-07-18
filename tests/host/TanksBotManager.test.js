@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import TanksBotManager from '@vimp/tanks/host/TanksBotManager.js';
-import ParticipantManager from '../../src/host/meta/player/ParticipantManager.js';
+import ParticipantManager from '../../packages/engine/src/host/meta/player/ParticipantManager.js';
 
 // Юнит-тесты игрового scripted-модуля: реальный ParticipantManager +
 // фейки coreAdapter/panel/stat (спавн танков в ядре — на старте раунда,

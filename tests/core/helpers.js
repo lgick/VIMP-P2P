@@ -3,10 +3,10 @@ import { createRequire } from 'node:module';
 import models from '@vimp/tanks/data/models.js';
 import weapons from '@vimp/tanks/data/weapons.js';
 import tanksGameConfig from '@vimp/tanks/config/game.js';
-import clientDefaults from '../../src/config/clientDefaults.js';
-import hostDefaults from '../../src/config/hostDefaults.js';
-import { buildClientCoreConfig } from '../../src/lib/clientCoreConfig.js';
-import { buildCoreConfig } from '../../src/lib/coreConfig.js';
+import clientDefaults from '../../packages/engine/src/config/clientDefaults.js';
+import hostDefaults from '../../packages/engine/src/config/hostDefaults.js';
+import { buildClientCoreConfig } from '../../packages/engine/src/lib/clientCoreConfig.js';
+import { buildCoreConfig } from '../../packages/engine/src/lib/coreConfig.js';
 
 // Хелперы JS↔WASM харнесса ядра. Node-таргет ядра собирается командой
 // `npm run core:build` (нужен Rust-тулчейн); без артефакта тесты

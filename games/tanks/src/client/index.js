@@ -1,10 +1,18 @@
-// ClientPlugin танков: игровые хуки клиентского ядра (ClientCore).
-// Пока импортируется статически (этап 3); в этапе 6 станет default export
-// динамически загружаемого client-entry игры (плюс createClientCore/parts/
-// bakers/styles). Движок (main.js) не знает игровых методов ядра —
+// игровой CSS (панель/полотна/команды) — в этапе 6 станет полем styles
+import './tanks.css';
+import parts from './parts/index.js';
+import bakers from './bakers/index.js';
+
+// ClientPlugin танков: рендеры сущностей (parts), процедурные текстуры
+// (bakers) и игровые хуки клиентского ядра (ClientCore). Загружается через
+// gameRegistry.static.js движка (этап 5); в этапе 6 станет default export
+// динамически загружаемого client-entry игры (плюс createClientCore/styles).
+// Движок (main.js) не знает игровых методов ядра —
 // set_model/sync_panel/try_fire/cycle_weapon зовутся только отсюда.
 export default {
   id: 'tanks',
+  parts,
+  bakers,
   hooks: {
     // авторизация: модель танка пользователя — для реплик движения и выстрелов
     onAuth(core, authData) {

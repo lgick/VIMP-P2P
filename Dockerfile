@@ -27,8 +27,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# копирование package.json, чтобы установить зависимости
+# копирование package.json (включая манифесты воркспейсов),
+# чтобы установить зависимости
 COPY package.json package-lock.json ./
+COPY packages/engine/package.json ./packages/engine/
+COPY games/tanks/package.json ./games/tanks/
 
 # установка зависимостей
 RUN npm ci
@@ -53,22 +56,29 @@ FROM node:20-slim AS runner
 
 WORKDIR /app
 
-# зависимости
+# зависимости: манифесты воркспейсов нужны npm ci для симлинков @vimp/*
 COPY package.json package-lock.json* ./
+COPY packages/engine/package.json ./packages/engine/
+COPY games/tanks/package.json ./games/tanks/
 
 RUN npm ci --omit=dev
 
-# фронтенд
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/public ./public
+# фронтенд (vite build движка; public копируется Vite внутрь dist)
+COPY --from=builder /app/packages/engine/dist ./packages/engine/dist
+COPY --from=builder /app/packages/engine/public ./packages/engine/public
 
-# мастер-сервер (лобби + сигналинг WebRTC)
-COPY --from=builder /app/src/config ./src/config
-COPY --from=builder /app/src/data ./src/data
-COPY --from=builder /app/src/lib ./src/lib
-COPY --from=builder /app/src/master ./src/master
+# мастер-сервер движка (лобби + сигналинг WebRTC + каталоги)
+COPY --from=builder /app/packages/engine/src/config ./packages/engine/src/config
+COPY --from=builder /app/packages/engine/src/lib ./packages/engine/src/lib
+COPY --from=builder /app/packages/engine/src/master ./packages/engine/src/master
+COPY --from=builder /app/packages/engine/src/gameRegistry.static.js ./packages/engine/src/gameRegistry.static.js
+
+# данные игры (мастер импортирует карты через gameRegistry → @vimp/tanks)
+COPY --from=builder /app/games/tanks/src ./games/tanks/src
 
 ENV NODE_ENV=production
 
-# запуск мастер-сервера
+# запуск мастер-сервера (cwd — пакет движка: dist/assets для WorkerCatalog)
+WORKDIR /app/packages/engine
+
 CMD ["node", "src/master/main.js"]

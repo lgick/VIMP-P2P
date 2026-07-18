@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import RoundManager from '../../src/host/meta/core/RoundManager.js';
+import RoundManager from '../../packages/engine/src/host/meta/core/RoundManager.js';
 
 // RoundManager — обычный класс с DI. Подставляем фейковые сервисы.
 
@@ -9,7 +9,7 @@ const fakeParticipants = (usersMap = {}, activeList = []) => {
   return {
     get: id => map.get(id),
     getAll: () => [...map.values()],
-    getHumans: () => [...map.values()].filter(p => !p.isBot),
+    getHumans: () => [...map.values()].filter(p => !p.isScripted),
     getActiveList: () => activeList,
     replaceWatched: vi.fn(),
   };

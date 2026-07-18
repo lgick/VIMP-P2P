@@ -21,9 +21,9 @@ export default [
     },
   },
 
-  // конфигурация для файлов в корне проекта (конфиги и т.д.)
+  // конфигурация для конфигов корня и воркспейсов (vite.config.js и т.д.)
   {
-    files: ['*.js', '*.cjs', '*.mjs'], // eslint.config.js, vite.config.js, etc.
+    files: ['*.js', '*.cjs', '*.mjs', 'packages/*/*.js', 'games/*/*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -39,7 +39,7 @@ export default [
   // конфигурация серверного кода Node.js
   {
     files: [
-      'src/master/**/*.js', // мастер-сервер (Node.js)
+      'packages/engine/src/master/**/*.js', // мастер-сервер (Node.js)
     ],
     languageOptions: {
       ecmaVersion: 'latest', // последний ECMAScript
@@ -56,7 +56,9 @@ export default [
   // конфигурация для клиентского кода
   {
     files: [
-      'src/client/**/*.js', // все JS файлы в src/client и его подпапках
+      // клиент движка и клиентская часть игры (parts/bakers)
+      'packages/engine/src/client/**/*.js',
+      'games/*/src/client/**/*.js',
     ],
     languageOptions: {
       ecmaVersion: 'latest',
@@ -72,7 +74,7 @@ export default [
   // конфигурация для кода браузерного хоста (Web Worker: WASM-ядро + мета)
   {
     files: [
-      'src/host/**/*.js', // Worker хоста и его модули
+      'packages/engine/src/host/**/*.js', // Worker хоста и его модули
     ],
     languageOptions: {
       ecmaVersion: 'latest',
@@ -89,8 +91,9 @@ export default [
 
   {
     files: [
-      'src/lib/**/*.js',
-      'src/config/**/*.js',
+      'packages/engine/src/lib/**/*.js',
+      'packages/engine/src/config/**/*.js',
+      'packages/engine/src/gameRegistry.static.js',
       'scripts/*.js',
       'games/*/src/**/*.js', // игровые данные/конфиги (@vimp/tanks)
     ],
@@ -105,6 +108,52 @@ export default [
     },
     rules: {
       'no-console': 'off',
+    },
+  },
+
+  // ESLint-граница движок↔игра (этап 5 плана отделения):
+  // движок не импортирует игру (единственное исключение —
+  // gameRegistry.static.js, временная статическая композиция до этапа 6)
+  {
+    files: ['packages/engine/**/*.js'],
+    ignores: ['packages/engine/src/gameRegistry.static.js'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@vimp/tanks', '@vimp/tanks/*', '@vimp/tanks/**'],
+              message:
+                'Движок не импортирует игру напрямую — только через gameRegistry.static.js (до этапа 6).',
+            },
+            {
+              group: ['**/games/**'],
+              message:
+                'Движок не импортирует файлы games/** — только через gameRegistry.static.js (до этапа 6).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // игра импортирует движок только через публичные entry @vimp/engine
+  {
+    files: ['games/**/*.js'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/packages/engine/**'],
+              message:
+                'Игра импортирует движок только через публичные entry @vimp/engine.',
+            },
+          ],
+        },
+      ],
     },
   },
 
@@ -170,6 +219,8 @@ export default [
     ignores: [
       'node_modules/**',
       'dist/**', // результаты сборки Vite
+      'packages/*/dist/**', // сборка Vite движка
+      'games/*/dist/**', // сборка бандлов игры (этап 6)
       'public/**', // статика, которую не нужно линтить
       'build/**',
       'core/pkg-node/**', // сгенерированный wasm-pack glue (nodejs)

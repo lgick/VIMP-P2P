@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import Publisher from '../../src/lib/Publisher.js';
+import Publisher from '../../packages/engine/src/lib/Publisher.js';
 
 // StatView — синглтон, перезагружаем модуль для изоляции
 let StatView;
@@ -48,7 +48,7 @@ const makeView = (model = makeModel()) => {
 beforeEach(async () => {
   vi.resetModules();
   seedDom();
-  StatView = (await import('../../src/client/components/view/Stat.js')).default;
+  StatView = (await import('../../packages/engine/src/client/components/view/Stat.js')).default;
 });
 
 describe('StatView: генерация DOM по схеме', () => {

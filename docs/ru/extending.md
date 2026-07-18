@@ -27,9 +27,9 @@
 
 1. Определите оружие в [games/tanks/src/data/weapons.js](../../games/tanks/src/data/weapons.js) (тип, урон, кулдаун, расход и т.д.) — эти данные уходят и в ядро (`buildCoreConfig`), и клиенту.
 2. Реализуйте авторитетную часть в Rust-ядре (`core/src/`: `game.rs`, `tank.rs`, при необходимости своя сущность по образцу `bomb.rs`; упаковка блока — `snapshot.rs`) по аналогии с существующим оружием того же типа.
-3. Создайте клиентский рендеринг в `src/client/parts/`.
+3. Создайте клиентский рендеринг в `games/tanks/src/client/parts/`.
 4. Зарегистрируйте сущность в `games/tanks/src/config/client.js`: `parts.gameSets` (snapshot-ключ → классы) и `parts.entitiesOnCanvas` (класс → полотно).
-5. Зарегистрируйте snapshot-ключи оружия (и его эффектов) в `SNAPSHOT_KEYS` в [src/config/opcodes.js](../../src/config/opcodes.js) — незарегистрированный ключ уронит упаковку кадра. Если существующие `kind` не подходят под формат данных — добавьте новую раскладку блока в `core/src/snapshot.rs` и зеркально в клиентский декодер `core/src/client/unpack.rs`, подняв версию формата.
+5. Зарегистрируйте snapshot-ключи оружия (и его эффектов) в `SNAPSHOT_KEYS` в [packages/engine/src/config/opcodes.js](../../packages/engine/src/config/opcodes.js) — незарегистрированный ключ уронит упаковку кадра. Если существующие `kind` не подходят под формат данных — добавьте новую раскладку блока в `core/src/snapshot.rs` и зеркально в клиентский декодер `core/src/client/unpack.rs`, подняв версию формата.
 6. Последним элементом данных события/сущности передавайте **id автора** (как `shooterId` у `w1` и `ownerId` у `w2`) — по нему клиентское ядро (`core/src/client/shot.rs`) подавляет авторитетные дубли клиентского спавна; типы `hitscan`/`explosive` оно поддерживает автоматически по конфигу оружия.
 7. Добавьте боезапас в `games/tanks/src/config/game.js` (`panel`) и ключ панели в `client.js` (`modules.panel`).
 
@@ -41,16 +41,16 @@
 
 ## Новая клиентская сущность (part)
 
-1. Создайте класс в `src/client/parts/` по образцу существующих (`Tank`, `Bomb`, эффекты в `parts/effects/`) и экспортируйте в `parts/index.js` — он попадёт в реестр `Factory`.
+1. Создайте класс в `games/tanks/src/client/parts/` по образцу существующих (`Tank`, `Bomb`, эффекты в `parts/effects/`) и экспортируйте в `parts/index.js` — он попадёт в реестр `Factory`.
 2. Пропишите её в `gameSets`/`entitiesOnCanvas` (`games/tanks/src/config/client.js`).
-3. Если нужна процедурная текстура — добавьте baker в `src/client/providers/bakers/` (ориентируйтесь на существующие) и запись в `bakedAssets`.
+3. Если нужна процедурная текстура — добавьте baker в `games/tanks/src/client/bakers/` (ориентируйтесь на существующие) и запись в `bakedAssets`.
 4. Если нужны сервисы (`renderer`, `soundManager`) — добавьте класс в `componentDependencies`.
 
 Сущности можно наследовать и отображать на разных полотнах: например, для радара создаётся упрощённый класс (как `MapRadar` от `Map`).
 
 ## Тесты
 
-Новый код покрывается тестами в `tests/` (структура зеркалит `src/`). Паттерны — в CLAUDE.md (раздел Testing): синглтоны через `vi.resetModules()` + динамический import; логика ядра — Rust-тесты (`cargo test`) + JS↔WASM харнесс `tests/core/`; интеграция host-фасада — `tests/host/HostGame.test.js` поверх реального `pkg-node`. При изменении модели движения танка обязателен прогон cargo-паритета реплики предикта (`npm run core:test`).
+Новый код покрывается тестами в `tests/` (структура зеркалит `packages/engine/src/` и `games/tanks/src/`). Паттерны — в CLAUDE.md (раздел Testing): синглтоны через `vi.resetModules()` + динамический import; логика ядра — Rust-тесты (`cargo test`) + JS↔WASM харнесс `tests/core/`; интеграция host-фасада — `tests/host/HostGame.test.js` поверх реального `pkg-node`. При изменении модели движения танка обязателен прогон cargo-паритета реплики предикта (`npm run core:test`).
 
 ---
 

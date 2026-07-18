@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import hostDefaults from '../../src/config/hostDefaults.js';
+import hostDefaults from '../../packages/engine/src/config/hostDefaults.js';
 import {
   coreAvailable,
   makeCore,

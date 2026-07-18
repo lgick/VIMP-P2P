@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import Publisher from '../../src/lib/Publisher.js';
+import Publisher from '../../packages/engine/src/lib/Publisher.js';
 
 // AuthView — синглтон, перезагружаем модуль для изоляции
 let AuthView;
@@ -30,7 +30,7 @@ const makeModel = () => ({ publisher: new Publisher() });
 beforeEach(async () => {
   vi.resetModules();
   seedDom();
-  AuthView = (await import('../../src/client/components/view/Auth.js')).default;
+  AuthView = (await import('../../packages/engine/src/client/components/view/Auth.js')).default;
 });
 
 describe('AuthView: показ/скрытие', () => {

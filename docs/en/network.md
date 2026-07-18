@@ -3,13 +3,13 @@
 The game protocol between the client and the host uses two message formats:
 
 - **JSON**: `[portId, payload]` — every channel except the snapshot.
-  `portId` is a numeric id from [src/config/wsports.js](../../src/config/wsports.js) (the source of truth).
+  `portId` is a numeric id from [packages/engine/src/config/wsports.js](../../packages/engine/src/config/wsports.js) (the source of truth).
 - **Binary**: the game snapshot frame (port `5`, SHOT_DATA) — an
   `ArrayBuffer` packed by the core (`core/src/snapshot.rs`).
 
 The client tells the formats apart by incoming data type: a string → the
 JSON dispatcher `socketMethods[portId]`
-([src/client/main.js](../../src/client/main.js) `handleMessage`); an
+([packages/engine/src/client/main.js](../../packages/engine/src/client/main.js) `handleMessage`); an
 `ArrayBuffer` → `ClientCore.push_frame` (decoding and the interpolation
 buffer live in the client core, see
 [core.md](core.md#clientcore--the-cores-client-mode)).
@@ -19,7 +19,7 @@ buffer live in the client core, see
 The game transport is a direct P2P connection between the client and the
 browser host (two `RTCDataChannel`s), not a WebSocket. The port protocol and
 formats themselves are unchanged — only the transport is different. The
-client's network layer — [src/client/network/](../../src/client/network/):
+client's network layer — [packages/engine/src/client/network/](../../packages/engine/src/client/network/):
 
 - **`SignalingClient`** — the master server's signaling WebSocket
   ([master.md](master.md)): coordinates setting up P2P (welcome with
@@ -79,7 +79,7 @@ complaint about itself. Ban logic lives on the master
 
 | Port | Name | Format | Description |
 | :--: | --- | :--: | --- |
-| 0 | `CONFIG_DATA` | JSON | The client config (a merge of `src/config/clientDefaults.js` + `games/tanks/src/config/client.js` + `prediction`) |
+| 0 | `CONFIG_DATA` | JSON | The client config (a merge of `packages/engine/src/config/clientDefaults.js` + `games/tanks/src/config/client.js` + `prediction`) |
 | 1 | `AUTH_DATA` | JSON | Auth form data |
 | 2 | `AUTH_RESULT` | JSON | Auth errors (or `null`) |
 | 3 | `MAP_DATA` | JSON | Map data |
@@ -113,7 +113,7 @@ complaint about itself. Ban logic lives on the master
 | 8 | `PONG` | A reply to PING (the ping id) |
 
 The host enables client ports in stages (the port state machine in
-[src/host/host.worker.js](../../src/host/host.worker.js)): only
+[packages/engine/src/host/host.worker.js](../../packages/engine/src/host/host.worker.js)): only
 `CONFIG_READY` is active before auth, `AUTH_RESPONSE` after, and the rest
 once the user is created. A message on an inactive port is ignored.
 
@@ -150,7 +150,7 @@ Details:
 On every snapshot tick (`networkSendRate: 4` → 30 packets/sec) the host
 sends a binary frame on port `5` to **every user ready to play**. Meta data
 travels **its own JSON channels, only on change** (see
-`HostGame._onShotTick` in [src/host/HostGame.js](../../src/host/HostGame.js)):
+`HostGame._onShotTick` in [packages/engine/src/host/HostGame.js](../../packages/engine/src/host/HostGame.js)):
 
 - **panel (13)** — per-user; an array of `'key:value'` strings (`t` —
   round time, `h` — health, `w1`/`w2` — ammo, `wa` — the active weapon).
@@ -167,7 +167,7 @@ The codec lives entirely in the Rust core: packing —
 `core/src/snapshot.rs` (host side), decoding —
 `core/src/client/unpack.rs` (client side); both sides live in the same
 crate — layout mismatches are impossible by construction. Key registry and
-format version: [src/config/opcodes.js](../../src/config/opcodes.js)
+format version: [packages/engine/src/config/opcodes.js](../../packages/engine/src/config/opcodes.js)
 (`SNAPSHOT_FORMAT_VERSION = 3`). Big-endian, a manual block layout with no
 libraries. On a version mismatch the client drops the frame.
 
@@ -241,7 +241,7 @@ sides send these over the **unreliable `state` channel** (the only JSON
 traffic outside `meta`): the measurement reflects the real network path,
 not the reliable `meta` stream with its retransmissions; a lost ping is
 tolerated by `maxMissedPings`.
-[RTTManager](../../src/host/meta/modules/RTTManager.js) computes latency,
+[RTTManager](../../packages/engine/src/host/meta/modules/RTTManager.js) computes latency,
 publishes it to stats (the `latency` column), and kicks:
 
 - at a smoothed (EMA) `latency > maxLatency` (1000 ms; a threshold sized
@@ -266,7 +266,7 @@ of keys with no values (containers are hidden).
 ### Stats (port 14)
 
 `statArray = [tBodies, tHead, fullUpdate?]` (assembled by
-[src/host/meta/modules/Stat.js](../../src/host/meta/modules/Stat.js)):
+[packages/engine/src/host/meta/modules/Stat.js](../../packages/engine/src/host/meta/modules/Stat.js)):
 
 - **`statArray[0]`** — table rows: `[row id, table number, cell array |
   null, tbody number]`. `null` instead of cells — remove the row; an empty

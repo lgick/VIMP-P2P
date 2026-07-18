@@ -1,12 +1,12 @@
 # Master Server (P2P lobby and signaling)
 
-The master server (`src/master/`) is the central hub of the P2P architecture:
+The master server (`packages/engine/src/master/`) is the central hub of the P2P architecture:
 it holds the registry of active rooms (browser hosts), serves their list over
 REST, and routes WebRTC coordination (SDP offers/answers, ICE candidates)
 between clients and hosts. **It carries no game logic** — only connection
 coordination.
 
-`src/master/main.js` is the **project's entry point** (the legacy
+`packages/engine/src/master/main.js` is the **project's entry point** (the legacy
 authoritative game server has been fully removed).
 
 ## Running
@@ -19,18 +19,18 @@ npm start         # production: plain HTTP behind Nginx, reads .env
 - dev: HTTPS with local certificates from `.certs/`, client static assets served by ViteExpress. Port `3002` (`3001` — Vite HMR).
 - production: plain HTTP behind Nginx; `VIMP_DOMAIN` is required, the port comes from `VIMP_MASTER_PORT`.
 
-Configuration — [src/config/master.js](../../src/config/master.js), described in [configuration.md](configuration.md#srcconfigmasterjs).
+Configuration — [packages/engine/src/config/master.js](../../packages/engine/src/config/master.js), described in [configuration.md](configuration.md#srcconfigmasterjs).
 
 ## Modules
 
 | Module | Responsibility |
 | --- | --- |
-| `src/master/main.js` | entry point: Express + REST, HTTPS/HTTP server, signaling `WebSocketServer`, periodic cleanup of stale rooms |
-| `src/master/HostRegistry.js` | room registry `Map<hostId, HostSession>`: registration (max 1 room per IP), heartbeat/`lastSeen`, reports, selection for `GET /servers` |
-| `src/master/SignalingServer.js` | signaling WebSocket: connection lifecycle, WebRTC message routing, ping rate limiting |
-| `src/master/MapCatalog.js` | map catalog: an in-memory JSON representation of `games/tanks/src/data/maps` plus a content version hash; served to hosts without a rebuild |
-| `src/master/WorkerCatalog.js` | worker bundle catalog: a content version hash of `dist/assets/host.worker-*.js` plus its URL; hosts use it to detect a new code version and swap the Worker via a handoff |
-| `src/lib/rateLimiter.js` | a shared fixed-window rate limiter (event limit per key per interval) |
+| `packages/engine/src/master/main.js` | entry point: Express + REST, HTTPS/HTTP server, signaling `WebSocketServer`, periodic cleanup of stale rooms |
+| `packages/engine/src/master/HostRegistry.js` | room registry `Map<hostId, HostSession>`: registration (max 1 room per IP), heartbeat/`lastSeen`, reports, selection for `GET /servers` |
+| `packages/engine/src/master/SignalingServer.js` | signaling WebSocket: connection lifecycle, WebRTC message routing, ping rate limiting |
+| `packages/engine/src/master/MapCatalog.js` | map catalog: an in-memory JSON representation of `games/tanks/src/data/maps` plus a content version hash; served to hosts without a rebuild |
+| `packages/engine/src/master/WorkerCatalog.js` | worker bundle catalog: a content version hash of `dist/assets/host.worker-*.js` plus its URL; hosts use it to detect a new code version and swap the Worker via a handoff |
+| `packages/engine/src/lib/rateLimiter.js` | a shared fixed-window rate limiter (event limit per key per interval) |
 
 `HostSession`: `hostId` (uuid), `name`, `maxPlayers` (clamped to `host.maxPlayersLimit`, the target room size — 8), `currentPlayers`, `mapName`, `region`, `ip`, `status` (`online`/`banned`), `reportCount` + `reporters` (a `Map` reporter → timestamp: report uniqueness and window), `reportReasons` (report reasons, an audit trail — never exposed, capped), `lastSeen`.
 
@@ -109,7 +109,7 @@ missing `Origin` terminates immediately, a foreign one closes with code
 
 `iceServers` is the ICE configuration for `RTCPeerConnection` (STUN is required; TURN is an optional relay).
 
-The client-side signaling counterpart — [src/client/network/SignalingClient.js](../../src/client/network/SignalingClient.js): connects to this WS, consumes `welcome`/`iceServers`, sends `webrtc_offer`/`ice_candidate`/`ping_host`/`report_host`, and relays incoming messages by `type`. Game traffic, once P2P is established, flows over WebRTC (`WebRtcManager`), bypassing the master — see [client.md](client.md#network-layer-srcclientnetwork) and [network.md](network.md#transport-webrtc).
+The client-side signaling counterpart — [packages/engine/src/client/network/SignalingClient.js](../../packages/engine/src/client/network/SignalingClient.js): connects to this WS, consumes `welcome`/`iceServers`, sends `webrtc_offer`/`ice_candidate`/`ping_host`/`report_host`, and relays incoming messages by `type`. Game traffic, once P2P is established, flows over WebRTC (`WebRtcManager`), bypassing the master — see [client.md](client.md#network-layer-srcclientnetwork) and [network.md](network.md#transport-webrtc).
 
 ### Host messages
 
@@ -147,7 +147,7 @@ modified client can cheat by bypassing the core's logic. Technical defense
 against this is impossible without moving authority back to a trusted server
 (which would defeat the point of P2P), so the only measure is social.
 
-The report is intercepted **on the client** (`src/client/main.js`, the `/ban <reason>` command) and goes **straight to the master** over the signaling WS, bypassing the host: its `CommandProcessor` could otherwise filter out a complaint about itself. A reason is required (gated client-side) and is never shown publicly.
+The report is intercepted **on the client** (`packages/engine/src/client/main.js`, the `/ban <reason>` command) and goes **straight to the master** over the signaling WS, bypassing the host: its `CommandProcessor` could otherwise filter out a complaint about itself. A reason is required (gated client-side) and is never shown publicly.
 
 Ban logic (`HostRegistry`):
 
@@ -174,10 +174,10 @@ restart/room cleanup).
 
 ## Protection
 
-- **Origin allowlist** — the `src/lib/security.js` pattern (`createOriginValidator` with the master's parameters).
+- **Origin allowlist** — the `packages/engine/src/lib/security.js` pattern (`createOriginValidator` with the master's parameters).
 - **1 room per IP** — checked in `HostRegistry.add`; a banned IP is rejected (`isBanned`).
 - **Ping rate limiting** — `RateLimiter` (fixed window, 10 requests/sec per IP by default).
-- **Security headers** (environment hygiene) — the master sets `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `X-Frame-Options: DENY` on every response; `Content-Security-Policy` only in production (it would break Vite HMR in dev). Production static assets and `.wasm` are served with CSP by Nginx — see [deployment.md](deployment.md); the policy string's single source of truth is `src/config/master.js` (`security.csp`).
+- **Security headers** (environment hygiene) — the master sets `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `X-Frame-Options: DENY` on every response; `Content-Security-Policy` only in production (it would break Vite HMR in dev). Production static assets and `.wasm` are served with CSP by Nginx — see [deployment.md](deployment.md); the policy string's single source of truth is `packages/engine/src/config/master.js` (`security.csp`).
 - Input string sanitization (`sanitizeMessage`), clamping numeric fields.
 
 ## Tests

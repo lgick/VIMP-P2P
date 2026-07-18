@@ -132,7 +132,7 @@ CSP doesn't prevent that. In production, client static assets and
 `.wasm` are served by **Nginx**, so the authoritative
 Content-Security-Policy point is the Nginx `server` block for the
 domain. The policy string's single source of truth is
-[src/config/master.js](../../src/config/master.js) (`security.csp`); the
+[packages/engine/src/config/master.js](../../packages/engine/src/config/master.js) (`security.csp`); the
 master applies it to its own responses, but HTML/`.wasm` go through
 Nginx.
 
@@ -157,7 +157,7 @@ WebSocket.
 
 CSP deliberately omits `'unsafe-eval'` — PixiJS throws `Current
 environment does not allow unsafe-eval` without it, so
-`src/client/main.js` imports `pixi.js/unsafe-eval` (before creating the
+`packages/engine/src/client/main.js` imports `pixi.js/unsafe-eval` (before creating the
 `Application`) — this switches PixiJS to a safe-eval path without
 weakening the policy.
 

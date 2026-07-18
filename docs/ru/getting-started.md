@@ -14,6 +14,8 @@ cd VIMP-P2P
 npm install
 ```
 
+Репозиторий — npm workspaces: `packages/engine` (`@vimp/engine`, движок-приложение) и `games/tanks` (`@vimp/tanks`, игра-плагин). Корневые скрипты (`npm run dev`, `npm run build`) проксируют в `@vimp/engine`; граница «движок не импортирует игру» (кроме `gameRegistry.static.js`) закреплена правилом ESLint.
+
 ## HTTPS-сертификаты (один раз)
 
 ```bash
@@ -23,7 +25,7 @@ mkdir .certs && cd .certs
 mkcert -key-file key.pem -cert-file cert.pem localhost 127.0.0.1 ::1
 ```
 
-Пути к сертификатам заданы в `src/config/master.js` (`httpsOptions`). В production сертификаты не нужны — мастер работает по HTTP за Nginx (см. [deployment.md](deployment.md)).
+Пути к сертификатам заданы в `packages/engine/src/config/master.js` (`httpsOptions`). В production сертификаты не нужны — мастер работает по HTTP за Nginx (см. [deployment.md](deployment.md)).
 
 ## Запуск
 
@@ -33,7 +35,7 @@ npm run audio:process
 npm run dev
 ```
 
-Поднимается **мастер-сервер** на `https://localhost:3002` (лобби + сигналинг, [master.md](master.md)); ViteExpress отдаёт клиент рядом с Express-сервером, nodemon следит за `src/master`, `src/lib`, `src/config`, `games/tanks/src`.
+Поднимается **мастер-сервер** на `https://localhost:3002` (лобби + сигналинг, [master.md](master.md)); ViteExpress отдаёт клиент рядом с Express-сервером, nodemon следит за `packages/engine/src/master`, `packages/engine/src/lib`, `packages/engine/src/config`, `games/tanks/src`.
 
 Матч идёт через **браузерный хост** ([host.md](host.md)): в лобби «Создать сервер» поднимает Web Worker с Rust-ядром в текущей вкладке; остальные вкладки/машины заходят в комнату из списка серверов.
 
@@ -83,7 +85,7 @@ npm run core:test             # Rust-тесты
 - `node` — `tests/master`, `tests/host`, `tests/lib`, `tests/config`, `tests/core` (окружение node);
 - `client` — `tests/client` (окружение happy-dom).
 
-Тесты лежат в `tests/` и зеркалят структуру `src/`. Интеграция host-фасада поверх реального ядра — `tests/host/HostGame.test.js`; JS↔WASM харнесс Rust-ядра — в `tests/core/` (пропускается без собранного `core/pkg-node/`, см. [core.md](core.md)); Rust-тесты ядра гоняются отдельно (`npm run core:test`). Правило проекта: **любое изменение кода завершается зелёными `npx eslint .` и `npm test`**; при правке движения в ядре или `models.js` обязателен cargo-паритет реплики предикта (`npm run core:test`).
+Тесты лежат в `tests/` и зеркалят структуру `packages/engine/src/` и `games/tanks/src/` (Vitest-проекты: engine-node, engine-client, tanks, integration). Интеграция host-фасада поверх реального ядра — `tests/host/HostGame.test.js`; JS↔WASM харнесс Rust-ядра — в `tests/core/` (пропускается без собранного `core/pkg-node/`, см. [core.md](core.md)); Rust-тесты ядра гоняются отдельно (`npm run core:test`). Правило проекта: **любое изменение кода завершается зелёными `npx eslint .` и `npm test`**; при правке движения в ядре или `models.js` обязателен cargo-паритет реплики предикта (`npm run core:test`).
 
 CI (`.github/workflows/test.yml`) гоняет eslint, Rust-тесты ядра, сборку nodejs-таргета ядра и Vitest на каждый push/PR.
 

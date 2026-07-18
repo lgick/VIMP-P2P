@@ -14,6 +14,8 @@ cd VIMP-P2P
 npm install
 ```
 
+The repository uses npm workspaces: `packages/engine` (`@vimp/engine`, the engine application) and `games/tanks` (`@vimp/tanks`, the game plugin). Root scripts (`npm run dev`, `npm run build`) proxy into `@vimp/engine`; the "engine does not import the game" boundary (except `gameRegistry.static.js`) is enforced by an ESLint rule.
+
 ## HTTPS certificates (one-time)
 
 ```bash
@@ -23,7 +25,7 @@ mkdir .certs && cd .certs
 mkcert -key-file key.pem -cert-file cert.pem localhost 127.0.0.1 ::1
 ```
 
-Certificate paths are set in `src/config/master.js` (`httpsOptions`). Certificates aren't needed in production — the master runs over plain HTTP behind Nginx (see [deployment.md](deployment.md)).
+Certificate paths are set in `packages/engine/src/config/master.js` (`httpsOptions`). Certificates aren't needed in production — the master runs over plain HTTP behind Nginx (see [deployment.md](deployment.md)).
 
 ## Running
 
@@ -33,7 +35,7 @@ npm run audio:process
 npm run dev
 ```
 
-This starts the **master server** at `https://localhost:3002` (lobby + signaling, [master.md](master.md)); ViteExpress serves the client alongside the Express server, and nodemon watches `src/master`, `src/lib`, `src/config`, `games/tanks/src`.
+This starts the **master server** at `https://localhost:3002` (lobby + signaling, [master.md](master.md)); ViteExpress serves the client alongside the Express server, and nodemon watches `packages/engine/src/master`, `packages/engine/src/lib`, `packages/engine/src/config`, `games/tanks/src`.
 
 Matches run through the **browser host** ([host.md](host.md)): "Create server" in the lobby spins up a Web Worker with the Rust core in the current tab; other tabs/machines join the room from the server list.
 
@@ -84,7 +86,7 @@ Stack: **Vitest** + happy-dom (client tests) + coverage-v8. `vitest.config.js` s
 - `node` — `tests/master`, `tests/host`, `tests/lib`, `tests/config`, `tests/core` (node environment);
 - `client` — `tests/client` (happy-dom environment).
 
-Tests live in `tests/` and mirror the `src/` layout. Host-facade integration on top of the real core — `tests/host/HostGame.test.js`; the JS↔WASM harness for the Rust core — `tests/core/` (skipped without a built `core/pkg-node/`, see [core.md](core.md)); Rust core tests run separately (`npm run core:test`). Project rule: **any code change must end with a green `npx eslint .` and `npm test`**; editing motion in the core or `models.js` requires the cargo predictor-replica parity run (`npm run core:test`).
+Tests live in `tests/` and mirror the `packages/engine/src/` and `games/tanks/src/` layout (Vitest projects: engine-node, engine-client, tanks, integration). Host-facade integration on top of the real core — `tests/host/HostGame.test.js`; the JS↔WASM harness for the Rust core — `tests/core/` (skipped without a built `core/pkg-node/`, see [core.md](core.md)); Rust core tests run separately (`npm run core:test`). Project rule: **any code change must end with a green `npx eslint .` and `npm test`**; editing motion in the core or `models.js` requires the cargo predictor-replica parity run (`npm run core:test`).
 
 CI (`.github/workflows/test.yml`) runs eslint, the Rust core tests, the nodejs core-target build, and Vitest on every push/PR.
 

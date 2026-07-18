@@ -10,7 +10,7 @@ const fakeParticipants = (usersMap = {}) => {
 
   return {
     get: id => map.get(id),
-    getHumans: () => [...map.values()].filter(p => !p.isBot),
+    getHumans: () => [...map.values()].filter(p => !p.isScripted),
   };
 };
 

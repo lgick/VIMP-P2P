@@ -1,8 +1,8 @@
 # Мастер-сервер (лобби и сигналинг P2P)
 
-Мастер-сервер (`src/master/`) — центральный узел P2P-архитектуры: хранит реестр активных комнат (браузерных хостов), отдаёт их список по REST и маршрутизирует WebRTC-координацию (SDP-офферы/ответы, ICE-кандидаты) между клиентами и хостами. **Игровой логики в нём нет** — только координация соединений.
+Мастер-сервер (`packages/engine/src/master/`) — центральный узел P2P-архитектуры: хранит реестр активных комнат (браузерных хостов), отдаёт их список по REST и маршрутизирует WebRTC-координацию (SDP-офферы/ответы, ICE-кандидаты) между клиентами и хостами. **Игровой логики в нём нет** — только координация соединений.
 
-`src/master/main.js` — **точка входа проекта** (легаси авторитетный игровой сервер полностью демонтирован).
+`packages/engine/src/master/main.js` — **точка входа проекта** (легаси авторитетный игровой сервер полностью демонтирован).
 
 ## Запуск
 
@@ -14,18 +14,18 @@ npm start         # production: HTTP за Nginx, читает .env
 - dev: HTTPS с локальными сертификатами из `.certs/`, клиентскую статику раздаёт ViteExpress. Порт `3002` (`3001` — Vite HMR).
 - production: обычный HTTP за Nginx; обязательна `VIMP_DOMAIN`, порт задаёт `VIMP_MASTER_PORT`.
 
-Конфигурация — [src/config/master.js](../../src/config/master.js), описание — в [configuration.md](configuration.md#srcconfigmasterjs).
+Конфигурация — [packages/engine/src/config/master.js](../../packages/engine/src/config/master.js), описание — в [configuration.md](configuration.md#srcconfigmasterjs).
 
 ## Модули
 
 | Модуль | Ответственность |
 | --- | --- |
-| `src/master/main.js` | точка входа: Express + REST, HTTPS/HTTP-сервер, сигнальный `WebSocketServer`, периодическая уборка протухших комнат |
-| `src/master/HostRegistry.js` | реестр комнат `Map<hostId, HostSession>`: регистрация (не более 1 комнаты с IP), heartbeat/`lastSeen`, жалобы, выборка для `GET /servers` |
-| `src/master/SignalingServer.js` | сигнальный WebSocket: жизненный цикл соединений, маршрутизация WebRTC-сообщений, rate limiting пингов |
-| `src/master/MapCatalog.js` | каталог карт: JSON-представление `games/tanks/src/data/maps` в памяти + версия-хеш содержимого; раздача хостам без пересборки |
-| `src/master/WorkerCatalog.js` | каталог worker-бандла: версия-хеш содержимого `dist/assets/host.worker-*.js` + его URL; по нему хосты обнаруживают новую версию кода и меняют Worker эстафетой |
-| `src/lib/rateLimiter.js` | общий rate limiter с фиксированным окном (лимит событий на ключ за интервал) |
+| `packages/engine/src/master/main.js` | точка входа: Express + REST, HTTPS/HTTP-сервер, сигнальный `WebSocketServer`, периодическая уборка протухших комнат |
+| `packages/engine/src/master/HostRegistry.js` | реестр комнат `Map<hostId, HostSession>`: регистрация (не более 1 комнаты с IP), heartbeat/`lastSeen`, жалобы, выборка для `GET /servers` |
+| `packages/engine/src/master/SignalingServer.js` | сигнальный WebSocket: жизненный цикл соединений, маршрутизация WebRTC-сообщений, rate limiting пингов |
+| `packages/engine/src/master/MapCatalog.js` | каталог карт: JSON-представление `games/tanks/src/data/maps` в памяти + версия-хеш содержимого; раздача хостам без пересборки |
+| `packages/engine/src/master/WorkerCatalog.js` | каталог worker-бандла: версия-хеш содержимого `dist/assets/host.worker-*.js` + его URL; по нему хосты обнаруживают новую версию кода и меняют Worker эстафетой |
+| `packages/engine/src/lib/rateLimiter.js` | общий rate limiter с фиксированным окном (лимит событий на ключ за интервал) |
 
 `HostSession`: `hostId` (uuid), `name`, `maxPlayers` (clamp к `host.maxPlayersLimit`, целевой размер комнаты — 8), `currentPlayers`, `mapName`, `region`, `ip`, `status` (`online`/`banned`), `reportCount` + `reporters` (`Map` репортёр → timestamp: уникальность жалоб и окно давности), `reportReasons` (причины жалоб, аудит — наружу не отдаются, capped), `lastSeen`.
 
@@ -99,7 +99,7 @@ IP хоста и служебные поля наружу не отдаются.
 
 `iceServers` — ICE-конфигурация для `RTCPeerConnection` (STUN обязателен; TURN — опциональный релей).
 
-Клиентская сторона сигналинга — [src/client/network/SignalingClient.js](../../src/client/network/SignalingClient.js): подключается к этому WS, потребляет `welcome`/`iceServers`, шлёт `webrtc_offer`/`ice_candidate`/`ping_host`/`report_host` и ретранслирует входящие сообщения по `type`. Игровой трафик после установки P2P идёт по WebRTC (`WebRtcManager`), минуя мастер — см. [client.md](client.md#сетевой-слой-srcclientnetwork) и [network.md](network.md#транспорт-webrtc).
+Клиентская сторона сигналинга — [packages/engine/src/client/network/SignalingClient.js](../../packages/engine/src/client/network/SignalingClient.js): подключается к этому WS, потребляет `welcome`/`iceServers`, шлёт `webrtc_offer`/`ice_candidate`/`ping_host`/`report_host` и ретранслирует входящие сообщения по `type`. Игровой трафик после установки P2P идёт по WebRTC (`WebRtcManager`), минуя мастер — см. [client.md](client.md#сетевой-слой-srcclientnetwork) и [network.md](network.md#транспорт-webrtc).
 
 ### Сообщения хоста
 
@@ -137,7 +137,7 @@ IP хоста и служебные поля наружу не отдаются.
 невозможна без переноса авторитетности обратно на доверенный сервер (что
 противоречит цели P2P), поэтому единственная мера — социальная.
 
-Жалоба перехватывается **на клиенте** (`src/client/main.js`, команда `/ban <причина>`) и уходит **напрямую мастеру** по сигнальному WS, минуя хоста: его `CommandProcessor` мог бы отфильтровать жалобу на самого себя. Причина обязательна (гейт на стороне клиента), публично не отображается.
+Жалоба перехватывается **на клиенте** (`packages/engine/src/client/main.js`, команда `/ban <причина>`) и уходит **напрямую мастеру** по сигнальному WS, минуя хоста: его `CommandProcessor` мог бы отфильтровать жалобу на самого себя. Причина обязательна (гейт на стороне клиента), публично не отображается.
 
 Логика бана (`HostRegistry`):
 
@@ -153,10 +153,10 @@ IP хоста и служебные поля наружу не отдаются.
 
 ## Защита
 
-- **Origin-allowlist** — паттерн `src/lib/security.js` (`createOriginValidator` с параметрами мастера).
+- **Origin-allowlist** — паттерн `packages/engine/src/lib/security.js` (`createOriginValidator` с параметрами мастера).
 - **1 комната на IP** — проверка в `HostRegistry.add`; забаненный IP отклоняется (`isBanned`).
 - **Rate limiting пингов** — `RateLimiter` (фиксированное окно, по умолчанию 10 запросов/с с IP).
-- **Security-заголовки** (гигиена среды) — мастер ставит `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `X-Frame-Options: DENY` на все ответы; `Content-Security-Policy` — только в проде (в dev сломала бы Vite HMR). Прод-статику и `.wasm` с CSP отдаёт Nginx — см. [deployment.md](deployment.md); строка политики — единый source of truth в `src/config/master.js` (`security.csp`).
+- **Security-заголовки** (гигиена среды) — мастер ставит `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `X-Frame-Options: DENY` на все ответы; `Content-Security-Policy` — только в проде (в dev сломала бы Vite HMR). Прод-статику и `.wasm` с CSP отдаёт Nginx — см. [deployment.md](deployment.md); строка политики — единый source of truth в `packages/engine/src/config/master.js` (`security.csp`).
 - Санитизация входных строк (`sanitizeMessage`), clamp числовых полей.
 
 ## Тесты

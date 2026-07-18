@@ -21,7 +21,7 @@ authoritative on the room host ([host.md](host.md)).
 
 ## Stats (Tab)
 
-Scoring rules ([RoundManager.reportKill](../../src/host/meta/core/RoundManager.js)):
+Scoring rules ([RoundManager.reportKill](../../packages/engine/src/host/meta/core/RoundManager.js)):
 
 1. The eliminated player gets a loss (`deaths +1`) and a `dead` status until the round ends.
 2. The player who eliminated an opponent gets a frag (`score +1`).
@@ -34,7 +34,7 @@ Stat changes are broadcast the moment they happen; table sorting happens on the 
 
 ## Votes (`m` key)
 
-The collective decision-making system ([Vote](../../src/host/meta/modules/Vote.js) + [VoteCoordinator](../../src/host/meta/core/VoteCoordinator.js)):
+The collective decision-making system ([Vote](../../packages/engine/src/host/meta/modules/Vote.js) + [VoteCoordinator](../../packages/engine/src/host/meta/core/VoteCoordinator.js)):
 
 - **Menu** — a window with "Switch team" and "Suggest map" entries.
 - **Triggered by a player or by the system** — a player suggesting a map (if that player is the only one in the game, the map changes immediately, no vote), a vote for bots, an automatic map pick on timer.
@@ -48,7 +48,7 @@ Exchange format — [network.md](network.md#vote-port-16).
 
 ## Chat (`c` key) and commands
 
-Plain text is a message to the team/everyone (length capped by the host, 60 characters). Messages starting with `/` are commands ([CommandProcessor](../../src/host/meta/core/CommandProcessor.js)):
+Plain text is a message to the team/everyone (length capped by the host, 60 characters). Messages starting with `/` are commands ([CommandProcessor](../../packages/engine/src/host/meta/core/CommandProcessor.js)):
 
 | Command | Action |
 | --- | --- |

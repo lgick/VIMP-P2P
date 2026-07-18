@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import HostRegistry from '../../src/master/HostRegistry.js';
-import SignalingServer from '../../src/master/SignalingServer.js';
-import RateLimiter from '../../src/lib/rateLimiter.js';
+import HostRegistry from '../../packages/engine/src/master/HostRegistry.js';
+import SignalingServer from '../../packages/engine/src/master/SignalingServer.js';
+import RateLimiter from '../../packages/engine/src/lib/rateLimiter.js';
 
 // фейковый ws: собирает отправленные сообщения, позволяет эмитить события
 class FakeWs {

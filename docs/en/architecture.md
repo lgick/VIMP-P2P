@@ -28,42 +28,52 @@ game logic: lobby, WebRTC signaling, map catalog, social moderation.
 ## Repository layout
 
 ```
-src/
-  master/        — master server (entry point): room registry, REST,
+packages/engine/ — @vimp/engine: the engine application (npm workspace)
+  index.html / vite.config.js — the engine's Vite root
+  public/        — static assets (sounds, favicon)
+  src/
+    gameRegistry.static.js — the ONLY engine file allowed to import
+                   @vimp/tanks (temporary static composition, until stage 6)
+    master/      — master server (entry point): room registry, REST,
                    signaling, map catalog (docs/master.md)
-  host/          — browser host (docs/host.md)
-    host.worker.js — Web Worker: WASM core + meta + port state machine + ~120 Hz loop
-    HostGame.js  — host facade: wires meta modules, drives the core tick
-    GameCoreAdapter.js — physics/bots/packing surface over GameCore
-    meta/        — JS meta running in the Worker: core/ (RoundManager, CommandProcessor,
+    host/        — browser host (docs/host.md)
+      host.worker.js — Web Worker: WASM core + meta + port state machine + ~120 Hz loop
+      HostGame.js — host facade: wires meta modules, drives the core tick
+      GameCoreAdapter.js — physics/bots/packing surface over GameCore
+      meta/      — JS meta running in the Worker: core/ (RoundManager, CommandProcessor,
                    VoteCoordinator), modules/ (Panel, Stat, Vote, chat/,
                    TimerManager, RTTManager), player/ (Participant/Human/Bot +
                    ParticipantManager), SocketManager
-  client/        — browser client
-    main.js      — port dispatcher, lobby/role selection, module init, render loop
-    network/     — SignalingClient, WebRtcManager (offerer), HostController,
+    client/      — browser client
+      main.js    — port dispatcher, lobby/role selection, module init, render loop
+      network/   — SignalingClient, WebRtcManager (offerer), HostController,
                    LoopbackTransport, HostConnectionManager (answerer)
-    components/  — MVC triplets (Auth, Lobby, CanvasManager, Controls, Game,
+      components/ — MVC triplets (Auth, Lobby, CanvasManager, Controls, Game,
                    Chat, Panel, Stat, Vote)
-    parts/       — PixiJS entities and effects
-    providers/   — BakingProvider (textures), DependencyProvider
-    SoundManager.js / InputListener.js
-  config/        — shared config (game, client, auth, sounds, wsports, opcodes,
-                   lobby, master)
-  data/          — static data: maps/, models.js, weapons.js
-  lib/           — shared utilities: Publisher, factory, math, validators,
+      providers/ — BakingProvider (bakers come from the game's ClientPlugin),
+                   DependencyProvider
+      SoundManager.js / InputListener.js
+    config/      — engine config (hostDefaults, clientDefaults, wsports,
+                   opcodes, lobby, master)
+    lib/         — shared utilities: Publisher, factory, math, validators,
                    sanitizers, security, config, clientCoreConfig, …
+games/tanks/     — @vimp/tanks: the game (npm workspace)
+  src/host/      — HostPlugin: core-event router, TanksBotManager, /bot,
+                   b:* system messages
+  src/client/    — ClientPlugin: parts/ (PixiJS entities and effects),
+                   bakers/ (procedural textures), hooks, game CSS
+  src/config/    — game config halves (game.js, client.js, auth.js, sounds.js)
+  src/data/      — static data: maps/, models.js, weapons.js
 core/            — Rust simulation core → WASM: physics, tanks, weapons, bots,
                    the snapshot codec, and client-side math — interpolation,
                    prediction, shot spawning (a client submodule, docs/core.md)
-tests/           — Vitest (tests/host — host and meta; tests/core — JS↔WASM
-                   core harness; tests/master, tests/client, tests/lib)
-public/          — static assets (sounds)
+tests/           — Vitest projects: engine-node, engine-client, tanks,
+                   integration (tests/host/HostGame.test.js + tests/core)
 scripts/         — helper scripts (audio processing, map export to JSON)
 .github/         — CI/CD (test.yml, deploy.yml) and deployment scripts
 ```
 
-`src/config/`, `games/tanks/src/data/`, and `src/lib/` form a **shared layer**: imported
+`packages/engine/src/config/`, `games/tanks/src/data/`, and `packages/engine/src/lib/` form a **shared layer**: imported
 by the master (Node.js), the host Worker, and the client (Vite bundle). This
 guarantees the snapshot codec, math, validators, and model parameters stay
 identical on every side.
@@ -94,7 +104,7 @@ Host tab
     ├─ GameCore (WASM, core/)    — physics, weapons, bots
     ├─ GameCoreAdapter           — physics/bots/packing surface over the core
     └─ HostGame facade + meta     — RoundManager, ParticipantManager, Chat, Vote,
-                                    Stat, Panel, TimerManager… (src/host/meta/)
+                                    Stat, Panel, TimerManager… (packages/engine/src/host/meta/)
 ```
 
 **`HostGame`** is the facade: it wires the modules, drives the connection
@@ -194,7 +204,7 @@ migration (the split is listed per file).
 
 | Area | ENGINE | GAME | MIXED (what gets cut out) |
 | --- | --- | --- | --- |
-| Master | all of `src/master/` (`HostRegistry`, `SignalingServer`, `WorkerCatalog`, `MapCatalog` becomes per-game; new `GameCatalog`) | — | `src/master/main.js` — the static import of `games/tanks/src/data/maps` |
+| Master | all of `packages/engine/src/master/` (`HostRegistry`, `SignalingServer`, `WorkerCatalog`, `MapCatalog` becomes per-game; new `GameCatalog`) | — | `packages/engine/src/master/main.js` — the static import of `games/tanks/src/data/maps` |
 | Host | `host.worker.js` (plugin loading), `HostGame.js`, `GameCoreAdapter.js` (generic), `meta/player/*` (`isScripted` replaces `isBot`), `meta/core/RoundManager`, `VoteCoordinator`, `meta/modules/*` (Panel, Stat, Vote, chat mechanism, TimerManager, RTTManager) | `HostBotManager.js` → `TanksBotManager` (scripted-module contract), the `/bot` command, `b:*` system messages, the core-event router | `GameCoreAdapter._drainEvents` (game event vocabulary), `SocketManager` (sound cues `roundStart/victory/…`, `sendFirstVote`), `CommandProcessor` (`/bot`), `chat/systemMessages.js` (the `b:*` group), `Panel.js` (the `'wa'` hardcode) |
 | Client | `main.js` (bootstrap/dispatcher), `network/*`, MVC components, `CanvasManager`, `SoundManager`, `InputListener`, `providers/*`, schema-driven Panel/Stat views | `parts/*` (9 classes), `bakers/*` (8 textures), game CSS, client hooks (`set_model`/`sync_panel`/`try_fire`/`cycle_weapon`) | `main.js` (game hooks, the hardcoded `reconstructHot` tank layout), `index.html`+`views/includes/{panel,stat}.pug` (game DOM ids), `style.css` |
 | Config | `wsports.js`, `opcodes.js` (framing, `HOT_FLAGS`, `ENGINE_API_VERSION`), `master.js`, `lobby.js`, new `hostDefaults.js`/`clientDefaults.js` | `sounds.js`, `auth.js`, the snapshot key schema (`m1/w1/w2/w2e/c1/c2`) | `game.js` (engine: `maxPlayers`, timers, rtt, idle kick / game: teams, panel, stat, playerKeys, map params), `client.js` (engine: interpolation, controls modes/cmds, elems, techInformList / game: parts, keySetList, panel/stat schemas, texts, canvases), `opcodes.js` (`SNAPSHOT_KEYS` is game data) |
@@ -204,7 +214,7 @@ migration (the split is listed per file).
 
 ## Key invariants
 
-- **Source of truth for ports** — `src/config/wsports.js`; for snapshot keys and the binary format version — `src/config/opcodes.js`.
+- **Source of truth for ports** — `packages/engine/src/config/wsports.js`; for snapshot keys and the binary format version — `packages/engine/src/config/opcodes.js`.
 - **Motion replica parity**: authoritative motion (Rapier) and the client prediction replica share the tick formulas (`core/src/motion.rs`); integration parity is locked in by cargo tests (`client::predictor::parity`) — any edit to motion in the core or the `models.js` coefficients requires running `npm run core:test`.
 - **A single numeric id space** for humans and scripted participants (bots); distinguished via `isScripted`/`isNetworked`. The core operates on numeric ids, meta keys by string — the conversion happens at the `GameCoreAdapter` boundary.
 - Every send to a client goes only through `SocketManager`.

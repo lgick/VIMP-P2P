@@ -1,0 +1,30 @@
+{
+  "name": "@vimp/engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VIMP Engine — движок-приложение (мастер, P2P-транспорт, Worker-хост, мета, MVC-каркас клиента)",
+  "type": "module",
+  "main": "src/master/main.js",
+  "exports": {
+    "./lib/*": "./src/lib/*",
+    "./config/*": "./src/config/*"
+  },
+  "scripts": {
+    "dev": "NODE_ENV=development nodemon src/master/main.js -w src/master -w src/lib -w src/config -w ../../games/tanks/src",
+    "start": "NODE_ENV=production node --env-file ../../.env src/master/main.js",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "howler": "^2.2.4",
+    "pixi.js": "^8.14.0",
+    "uuid": "^13.0.0",
+    "vite-express": "^0.21.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10",
+    "vite": "^7.1.11",
+    "vite-plugin-pug": "^0.4.1"
+  }
+}

@@ -12,7 +12,7 @@ const make = (maxPlayers = 8) =>
 
 beforeEach(async () => {
   ParticipantManager = (
-    await import('../../src/host/meta/player/ParticipantManager.js')
+    await import('../../packages/engine/src/host/meta/player/ParticipantManager.js')
   ).default;
 });
 
@@ -28,7 +28,7 @@ describe('ParticipantManager: создание людей', () => {
     expect(p.team).toBe('spectators');
     expect(p.teamId).toBe(3);
     expect(p.isNetworked).toBe(true);
-    expect(p.isBot).toBe(false);
+    expect(p.isScripted).toBe(false);
     expect(pm.getTeamSize('spectators')).toBe(1);
   });
 
@@ -55,7 +55,6 @@ describe('ParticipantManager: создание scripted-участников', (
     expect(p.team).toBe('team1');
     expect(p.teamId).toBe(1);
     expect(p.isScripted).toBe(true);
-    expect(p.isBot).toBe(true); // алиас isScripted (до конца этапа 5)
     expect(p.isNetworked).toBe(false);
     expect(pm.getTeamSize('team1')).toBe(1);
   });

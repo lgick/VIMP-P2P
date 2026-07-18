@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import SocketManager from '../../src/host/meta/SocketManager.js';
+import SocketManager from '../../packages/engine/src/host/meta/SocketManager.js';
 
 const ports = {
   CONFIG_DATA: 0,

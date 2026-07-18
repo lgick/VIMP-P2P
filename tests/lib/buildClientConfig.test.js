@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildClientConfig } from '../../src/lib/buildClientConfig.js';
+import { buildClientConfig } from '../../packages/engine/src/lib/buildClientConfig.js';
 
 // минимальные конфиги: движковые дефолты + игровая половина + game-конфиг
 const makeDefaults = () => ({

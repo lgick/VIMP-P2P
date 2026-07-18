@@ -4,14 +4,14 @@ The project's configuration splits into three layers:
 
 1. **Environment variables** (`.env`) — parameters for a master server
    instance (domain, port). Only apply in production.
-2. **`src/config/`** — shared config used by the master (Node.js), the
+2. **`packages/engine/src/config/`** — shared config used by the master (Node.js), the
    browser host's Worker, and the client (Vite bundle).
 3. **`games/tanks/src/data/`** — static game data: maps, models, weapons.
 
 The master collects its config into a single store,
-`src/lib/config.js` (accessed via colon-separated paths), inside
-[src/master/main.js](../../src/master/main.js); the host Worker
-([src/host/host.worker.js](../../src/host/host.worker.js)) assembles the
+`packages/engine/src/lib/config.js` (accessed via colon-separated paths), inside
+[packages/engine/src/master/main.js](../../packages/engine/src/master/main.js); the host Worker
+([packages/engine/src/host/host.worker.js](../../packages/engine/src/host/host.worker.js)) assembles the
 game config as a merge of the engine defaults (`hostDefaults`) and the
 game half from the `HostPlugin` (`@vimp/tanks/host/index.js`:
 `gameConfig`, `authSchema`, `buildClientGameConfig()`), layering the
@@ -20,9 +20,9 @@ from the host on connect (port `0`).
 
 ## Environment variables (.env)
 
-Read in [src/master/main.js](../../src/master/main.js) when
+Read in [packages/engine/src/master/main.js](../../packages/engine/src/master/main.js) when
 `NODE_ENV=production` (`npm start` uses `node --env-file .env`). Ignored in
-development — values from `src/config/master.js` apply instead.
+development — values from `packages/engine/src/config/master.js` apply instead.
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
@@ -32,12 +32,12 @@ development — values from `src/config/master.js` apply instead.
 
 Game parameters (map, player limit, timers, friendly fire) aren't set
 through environment variables: the room's creator picks them in the lobby,
-and defaults live in `src/config/hostDefaults.js` (engine) and
+and defaults live in `packages/engine/src/config/hostDefaults.js` (engine) and
 `games/tanks/src/config/game.js` (game).
 
-## src/config/hostDefaults.js — engine host defaults
+## packages/engine/src/config/hostDefaults.js — engine host defaults
 
-Source: [src/config/hostDefaults.js](../../src/config/hostDefaults.js).
+Source: [packages/engine/src/config/hostDefaults.js](../../packages/engine/src/config/hostDefaults.js).
 The engine half of the host config: limits, timers, kick policies, and the
 spectator keyset (spectating is an engine mechanism). The host Worker
 merges it with the tanks game config and layers the room's settings on
@@ -81,8 +81,9 @@ merge.
 ## games/tanks/src/config/game.js — the game config (tanks)
 
 Source: [games/tanks/src/config/game.js](../../games/tanks/src/config/game.js).
-The game half of the host config (imported by the Worker as
-`@vimp/tanks/config/game.js` — temporary static composition until stage 6).
+The game half of the host config (reaches the Worker as the HostPlugin's
+`gameConfig` field via the engine's `gameRegistry.static.js` — temporary
+static composition until stage 6).
 Imports maps, models, and weapons from `games/tanks/src/data/`.
 
 ### Core parameters
@@ -137,7 +138,7 @@ weapon).
 ### Keys (`spectatorKeys`, `playerKeys`)
 
 `spectatorKeys` — a spectator's commands (`nextPlayer`/`prevPlayer`); the
-set is engine-owned and lives in `src/config/hostDefaults.js`.
+set is engine-owned and lives in `packages/engine/src/config/hostDefaults.js`.
 
 `playerKeys` — a player's commands (game config). Each key has a bitmask `key` (`1 <<
 n`, used by the predictor and the core in the input history) and an
@@ -154,13 +155,13 @@ The keyCode → command mapping is set on the client (`client.js` →
 ## The client config: clientDefaults.js + games/tanks client.js
 
 The client's CONFIG_DATA is assembled from two halves: the engine
-defaults — [src/config/clientDefaults.js](../../src/config/clientDefaults.js)
+defaults — [packages/engine/src/config/clientDefaults.js](../../packages/engine/src/config/clientDefaults.js)
 (interpolation, control modes/service keys, the engine modules' DOM
 structures, `techInformList`) and the game half —
 [games/tanks/src/config/client.js](../../games/tanks/src/config/client.js)
 (`parts.*`, canvases, the player keyset, panel/stat schemas,
 chat/vote/gameInform texts, `initIdList`). The deep merge is done by
-[src/lib/buildClientConfig.js](../../src/lib/buildClientConfig.js) in the
+[packages/engine/src/lib/buildClientConfig.js](../../packages/engine/src/lib/buildClientConfig.js) in the
 host's Worker; before sending it appends:
 
 - `modules.vote.params.time` = `game:timers:voteTime`;
@@ -273,10 +274,10 @@ game-owned:
   startup (`vimp`, `radar`, `panel`, `chat`); the initialization
   mechanism is engine-owned (`main.js`).
 
-## src/config/master.js
+## packages/engine/src/config/master.js
 
 The master server's config (see [master.md](master.md)); read by
-`src/master/main.js` (and `vite.config.js` — `httpsOptions` for dev HMR):
+`packages/engine/src/master/main.js` (and `vite.config.js` — `httpsOptions` for dev HMR):
 
 - `protocol`, `domain`, `port` — the address; the default port is `3002`
   (`3001` — Vite HMR). In production the domain is overridden by
@@ -305,7 +306,7 @@ The master server's config (see [master.md](master.md)); read by
   (it would break Vite HMR in dev);
 - `iceServers` — ICE config for clients and hosts (STUN; TURN optional).
 
-## src/config/lobby.js
+## packages/engine/src/config/lobby.js
 
 The client lobby's config (see
 [client.md](client.md#mvc-components-srcclientcomponents)). Unlike
@@ -342,7 +343,7 @@ DOM element ids (`elems`), form parameters (`params`), and the game's
 validators (`validators`). Each parameter: `name`, a default value,
 `validator` (a function name), and a `storage` key for localStorage. The
 engine validator is `isValidName`
-([src/lib/validators.js](../../src/lib/validators.js)); game validators
+([packages/engine/src/lib/validators.js](../../packages/engine/src/lib/validators.js)); game validators
 (e.g. `isValidModel` — the model exists in `models.js`) are injected into
 `validateAuth` as the third argument. Validation runs on the client (with
 validators from the game bundle) and is repeated by the host (Worker);
@@ -357,7 +358,7 @@ in `public/sounds/`), `priority` (higher wins when voices compete),
 `volume`, optionally `loop: true`. `codecList: ['webm', 'mp3']` — files
 must exist in both formats. More on playback — [client.md](client.md#soundmanager).
 
-## src/config/wsports.js and src/config/opcodes.js
+## packages/engine/src/config/wsports.js and packages/engine/src/config/opcodes.js
 
 - **`wsports.js`** — the numeric port registry for the game protocol
   (the source of truth). Full tables — [network.md](network.md#ports).

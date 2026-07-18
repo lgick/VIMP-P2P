@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import Publisher from '../../src/lib/Publisher.js';
+import Publisher from '../../packages/engine/src/lib/Publisher.js';
 
 // LobbyView — синглтон, перезагружаем модуль для изоляции
 let LobbyView;
@@ -62,7 +62,7 @@ let observerFactory;
 beforeEach(async () => {
   vi.resetModules();
   seedDom();
-  LobbyView = (await import('../../src/client/components/view/Lobby.js'))
+  LobbyView = (await import('../../packages/engine/src/client/components/view/Lobby.js'))
     .default;
   observer = null;
   observerFactory = cb => {

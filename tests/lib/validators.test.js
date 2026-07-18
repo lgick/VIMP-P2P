@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import tanksAuthConfig from '@vimp/tanks/config/auth.js';
-import { isValidName, validateAuth } from '../../src/lib/validators.js';
+import { isValidName, validateAuth } from '../../packages/engine/src/lib/validators.js';
 
 describe('isValidName', () => {
   it('принимает корректные имена', () => {

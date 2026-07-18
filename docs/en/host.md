@@ -6,8 +6,8 @@ in a Web Worker, while the `RTCPeerConnection` router runs in the main
 thread. This is the canonical "server side" of the game: the legacy
 authoritative WS server (`src/server/`) has been fully removed.
 
-Host code lives in `src/host/` (Worker + core + meta modules under
-`src/host/meta/`) and `src/client/network/` (the main-thread router +
+Host code lives in `packages/engine/src/host/` (Worker + core + meta modules under
+`packages/engine/src/host/meta/`) and `packages/engine/src/client/network/` (the main-thread router +
 transports).
 
 ## Host tab topology
@@ -15,16 +15,16 @@ transports).
 ```
 Host tab
 ├─ Main thread (client + router)
-│   ├─ client (src/client/main.js): render, prediction, sound — a regular client
+│   ├─ client (packages/engine/src/client/main.js): render, prediction, sound — a regular client
 │   ├─ HostController: spawns the Worker, routes packets Worker ↔ clients
 │   ├─ LoopbackTransport: host-player transport (a WebRtcManager-shaped
 │   │  interface over postMessage)
 │   └─ HostConnectionManager: WebRTC answerer for remote clients
 │      (register_host, meta/state, backpressure)
-└─ Web Worker (src/host/host.worker.js): authoritative simulation
+└─ Web Worker (packages/engine/src/host/host.worker.js): authoritative simulation
     ├─ GameCore (WASM, core/pkg-web)
     ├─ GameCoreAdapter: physics/bots/packing surface over the core
-    └─ HostGame facade + meta src/host/meta/ (RoundManager, Participant-
+    └─ HostGame facade + meta packages/engine/src/host/meta/ (RoundManager, Participant-
        Manager, Chat, Vote, Stat, Panel, TimerManager, RTTManager,
        CommandProcessor, VoteCoordinator, SocketManager) + ~120 Hz loop
 ```
@@ -35,7 +35,7 @@ timers aren't throttled by the browser in a background tab, unlike the main
 thread). The main thread is a dumb pipe: it forwards wire frames between the
 DataChannel/loopback and the Worker.
 
-## Web Worker (`src/host/host.worker.js`)
+## Web Worker (`packages/engine/src/host/host.worker.js`)
 
 Loads the WASM core (`init()` + `GameCore` from `core/pkg-web`), builds
 `HostGame` with the room's settings, and holds a per-client port state
@@ -43,7 +43,7 @@ machine — an automaton over client ports 0–8 (see [network.md](network.md)).
 Main-thread messages:
 
 - `init(room, handoff?)` — assembles the game config (a merge of the engine
-  defaults `src/config/hostDefaults.js` and `HostPlugin.gameConfig`) and
+  defaults `packages/engine/src/config/hostDefaults.js` and `HostPlugin.gameConfig`) and
   applies room settings to it
   (`applyRoomOverrides`: name/map/limit ≤ `roomDefaults.maxPlayers`/timers/
   friendly fire; maps come
@@ -91,7 +91,7 @@ The ~120 Hz game loop starts on its own (`HostGame` constructor →
 `RoundManager.createMap` → `TimerManager.startGameTimers`); frames only go
 out to participants ready to play.
 
-## HostGame (`src/host/HostGame.js`)
+## HostGame (`packages/engine/src/host/HostGame.js`)
 
 The host facade — module wiring + the participant lifecycle:
 
@@ -99,7 +99,7 @@ The host facade — module wiring + the participant lifecycle:
   `GameCoreAdapter`;
 - meta (`RoundManager`, `ParticipantManager`, `Chat`, `Vote`, `Stat`, `Panel`,
   `TimerManager`, `RTTManager`, `CommandProcessor`, `VoteCoordinator`,
-  `SocketManager`) lives in `src/host/meta/` modules (see "Meta modules"
+  `SocketManager`) lives in `packages/engine/src/host/meta/` modules (see "Meta modules"
   below), with dependencies passed through constructors (DI);
 - the hot `_onShotTick` is core-driven: `adapter.updateData(dt)` (a core step
   + event drain), send throttling (`SnapshotThrottle` — a frame every
@@ -135,9 +135,9 @@ The host facade — module wiring + the participant lifecycle:
   of a cold start) — see "Worker handoff" below.
 
 The client-facing `CONFIG_DATA` (port 0: base config + vote time + prediction
-data) is assembled by `src/lib/buildClientConfig.js`.
+data) is assembled by `packages/engine/src/lib/buildClientConfig.js`.
 
-## GameCoreAdapter (`src/host/GameCoreAdapter.js`)
+## GameCoreAdapter (`packages/engine/src/host/GameCoreAdapter.js`)
 
 Implements the physics/bots/packing surface consumed by
 `RoundManager`/`SocketManager`/`HostGame`, backed by `GameCore`:
@@ -178,15 +178,16 @@ core). It's built by the `createModules(ctx)` factory
 `getBotCountsPerTeam`. Parameters come from the game config's `scripted`
 (`namePrefix`, `defaultModel`).
 
-**The tanks HostPlugin** (`games/tanks/src/host/index.js`, temporary static
-composition until stage 6) — the whole game half of the host as a single
+**The tanks HostPlugin** (`games/tanks/src/host/index.js`; imported by the
+engine only through `gameRegistry.static.js` — temporary static composition
+until stage 6) — the whole game half of the host as a single
 object: `gameConfig`, `authSchema`, `coreEventRouter`, `chatCommands`
 (`/bot`), `systemMessages` (the `b:*` group), `createModules` (the bots
 scripted module), `buildClientGameConfig()` (the game half of CONFIG_DATA).
 It's consumed by `host.worker.js` (configs/auth) and `HostGame` (the event
 router, commands, codes, modules).
 
-## Meta modules (`src/host/meta/`)
+## Meta modules (`packages/engine/src/host/meta/`)
 
 The Worker's JS meta layer: game logic on top of the core's events. Modules
 are dependency-injected and Worker-safe (isomorphic APIs only —
@@ -201,9 +202,8 @@ participants/bots):
   `status`) → `HumanParticipant` (`socketId`, `isReady`, `currentMap`,
   `isWatching`, `watchedGameId`, `forceCameraReset`, `pendingShake`,
   `lastActionTime`, `lastInputSeq`) and `BotParticipant`;
-- scripted vs. human is told apart with `isScripted`/`isNetworked` getters
-  (`isBot` is an alias of `isScripted` until the end of stage 5), **not**
-  by id shape: humans and scripted participants share a single numeric id
+- scripted vs. human is told apart with `isScripted`/`isNetworked` getters,
+  **not** by id shape: humans and scripted participants share a single numeric id
   space (the generator picks the lowest free id);
 - API: `createHuman`/`createScripted`/`remove`/`get`/`getAll`/`getHumans`/
   `getScripted`/`getNetworkedReady` (ready to be broadcast to), `checkName`
@@ -314,7 +314,7 @@ empty panel + key set 0), `sendPlayerDefaultShot`/
 sockets sit underneath (`makeWorkerSocket`), and the `reliable` flag
 classifies the meta/state channels.
 
-## Main thread: router and transports (`src/client/network/`)
+## Main thread: router and transports (`packages/engine/src/client/network/`)
 
 - **`HostController`** — spawns the Worker (from `workerUrl` in the master's
   manifest; without it, a bundled `new Worker(new URL('host.worker.js'),
@@ -453,12 +453,12 @@ the handshake again on the client).
 nothing. Concurrent swaps are prevented (a guard in `main.js` and in
 `HostController`).
 
-In the lobby (`src/client/main.js`):
+In the lobby (`packages/engine/src/client/main.js`):
 
 - **joining** — a server card → `connectToHost(hostId)` → `WebRtcManager`
   (offerer);
 - **creating a server** — the button/name field in the lobby
-  (`#lobby-host`/`#lobby-name`, `src/config/lobby.js`) → `connectAsHost(room)`
+  (`#lobby-host`/`#lobby-name`, `packages/engine/src/config/lobby.js`) → `connectAsHost(room)`
   → `HostController` + Worker + `LoopbackTransport` (the host player) +
   `HostConnectionManager` (remote clients) + registering with the master.
 

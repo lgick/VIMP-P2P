@@ -48,12 +48,12 @@ Steps:
    `game.rs`, `tank.rs`, and, if needed, its own entity modeled on
    `bomb.rs`; block packing — `snapshot.rs`), following the existing
    weapon of the same type.
-3. Create the client-side rendering in `src/client/parts/`.
+3. Create the client-side rendering in `games/tanks/src/client/parts/`.
 4. Register the entity in `games/tanks/src/config/client.js`: `parts.gameSets`
    (snapshot key → classes) and `parts.entitiesOnCanvas` (class →
    canvas).
 5. Register the weapon's snapshot keys (and its effects) in
-   `SNAPSHOT_KEYS` in [src/config/opcodes.js](../../src/config/opcodes.js)
+   `SNAPSHOT_KEYS` in [packages/engine/src/config/opcodes.js](../../packages/engine/src/config/opcodes.js)
    — an unregistered key breaks frame packing. If the existing `kind`
    values don't fit the data shape, add a new block layout to
    `core/src/snapshot.rs` and mirror it in the client decoder
@@ -79,12 +79,12 @@ Steps:
 
 ## New client entity (part)
 
-1. Create a class in `src/client/parts/` following the existing ones
+1. Create a class in `games/tanks/src/client/parts/` following the existing ones
    (`Tank`, `Bomb`, effects in `parts/effects/`) and export it from
    `parts/index.js` — it lands in the `Factory` registry.
 2. Add it to `gameSets`/`entitiesOnCanvas` (`games/tanks/src/config/client.js`).
 3. If it needs a procedural texture, add a baker in
-   `src/client/providers/bakers/` (follow the existing ones) and an
+   `games/tanks/src/client/bakers/` (follow the existing ones) and an
    entry in `bakedAssets`.
 4. If it needs services (`renderer`, `soundManager`), add the class to
    `componentDependencies`.
@@ -95,7 +95,7 @@ a simplified radar class is created for the radar (like `MapRadar` from
 
 ## Tests
 
-New code is covered by tests in `tests/` (the layout mirrors `src/`).
+New code is covered by tests in `tests/` (the layout mirrors `packages/engine/src/` and `games/tanks/src/`).
 Patterns — CLAUDE.md's Testing section: singletons through
 `vi.resetModules()` + a dynamic import; core logic — Rust tests
 (`cargo test`) + the JS↔WASM harness in `tests/core/`; host-facade

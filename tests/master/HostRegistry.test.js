@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import HostRegistry from '../../src/master/HostRegistry.js';
+import HostRegistry from '../../packages/engine/src/master/HostRegistry.js';
 
 // порог отключения регионального фильтра занижен для компактных тестов
 const OPTIONS = {

@@ -19,7 +19,7 @@
 
 ## Статистика (Tab)
 
-Правила начисления ([RoundManager.reportKill](../../src/host/meta/core/RoundManager.js)):
+Правила начисления ([RoundManager.reportKill](../../packages/engine/src/host/meta/core/RoundManager.js)):
 
 1. Уничтоженный игрок получает поражение (`deaths +1`) и статус `dead` до конца раунда.
 2. Уничтоживший соперника получает фраг (`score +1`).
@@ -32,7 +32,7 @@
 
 ## Голосования (клавиша `m`)
 
-Система коллективных решений ([Vote](../../src/host/meta/modules/Vote.js) + [VoteCoordinator](../../src/host/meta/core/VoteCoordinator.js)):
+Система коллективных решений ([Vote](../../packages/engine/src/host/meta/modules/Vote.js) + [VoteCoordinator](../../packages/engine/src/host/meta/core/VoteCoordinator.js)):
 
 - **Меню** — окно с пунктами «Switch team» и «Suggest map».
 - **Запуск игроком или системой** — предложение карты игроком (если игрок в игре один — карта меняется сразу, без голосования), голосование за ботов, автоматический выбор карты по таймеру.
@@ -46,7 +46,7 @@
 
 ## Чат (клавиша `c`) и команды
 
-Обычный текст — сообщение команде/всем (длина ограничена хостом, 60 символов). Сообщения, начинающиеся с `/`, — команды ([CommandProcessor](../../src/host/meta/core/CommandProcessor.js)):
+Обычный текст — сообщение команде/всем (длина ограничена хостом, 60 символов). Сообщения, начинающиеся с `/`, — команды ([CommandProcessor](../../packages/engine/src/host/meta/core/CommandProcessor.js)):
 
 | Команда | Действие |
 | --- | --- |
