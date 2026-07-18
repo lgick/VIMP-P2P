@@ -33,7 +33,7 @@ npm run audio:process
 npm run dev
 ```
 
-Поднимается **мастер-сервер** на `https://localhost:3002` (лобби + сигналинг, [master.md](master.md)); ViteExpress отдаёт клиент рядом с Express-сервером, nodemon следит за `src/master`, `src/lib`, `src/config`, `src/data`.
+Поднимается **мастер-сервер** на `https://localhost:3002` (лобби + сигналинг, [master.md](master.md)); ViteExpress отдаёт клиент рядом с Express-сервером, nodemon следит за `src/master`, `src/lib`, `src/config`, `games/tanks/src`.
 
 Матч идёт через **браузерный хост** ([host.md](host.md)): в лобби «Создать сервер» поднимает Web Worker с Rust-ядром в текущей вкладке; остальные вкладки/машины заходят в комнату из списка серверов.
 
@@ -45,7 +45,7 @@ npm run build          # прод-сборка (WASM-ядро + обработк
 npm run build:app      # сборка без ядра (аудио + Vite; ядро уже собрано)
 npm run core:build     # сборка Rust-ядра в WASM (web + nodejs; нужен Rust-тулчейн)
 npm run core:test      # Rust-тесты ядра (cargo test)
-npm run maps:export    # экспорт карт в JSON (src/data/maps/json/) для ядра
+npm run maps:export    # экспорт карт в JSON (games/tanks/src/data/maps/json/) для ядра
 npx eslint .           # линтер
 npm test               # тесты (Vitest), одиночный прогон
 npm run test:watch     # тесты в watch-режиме

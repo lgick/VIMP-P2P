@@ -132,7 +132,7 @@ Publisher-паттерн связей внутри тройки:
 
 ## SoundManager
 
-[src/client/SoundManager.js](../../src/client/SoundManager.js) (на Howler.js). Звуки описаны в `src/config/sounds.js`.
+[src/client/SoundManager.js](../../src/client/SoundManager.js) (на Howler.js). Звуки описаны в `games/tanks/src/config/sounds.js`.
 
 - **UI/системные** (без позиции): `playSystemSound(name)` — немедленно, в обход приоритетов (используется и для звуков порта 6).
 - **Пространственные** (позиция в мире): `registerSound(name, { position })` → `processAudibility()` → `updateActiveSounds()` — менеджер сам решает, что слышно, соблюдая лимит голосов (`WORLD_VOICE_LIMIT = 30`) и приоритеты из конфига.

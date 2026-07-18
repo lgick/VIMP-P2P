@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import poolMini from '../../src/data/maps/pool_mini.js';
+import poolMini from '@vimp/tanks/data/maps/pool_mini.js';
 import {
   coreAvailable,
   makeCore,

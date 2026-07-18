@@ -7,8 +7,8 @@ test`, with the new code covered by tests.
 
 ## New map
 
-1. Create `src/data/maps/<name>.js` following the existing ones (e.g.
-   [pool_mini.js](../../src/data/maps/pool_mini.js)). Format:
+1. Create `games/tanks/src/data/maps/<name>.js` following the existing ones (e.g.
+   [pool_mini.js](../../games/tanks/src/data/maps/pool_mini.js)). Format:
    - `setId` — the map constructor's snapshot key (`c1`/`c2`);
    - `scale` — the map's scale;
    - `spriteSheet` — the tile image and frames `[x, y, w, h]`;
@@ -22,7 +22,7 @@ test`, with the new code covered by tests.
    - `respawns` — respawn points by team: arrays `[x, y, angle]`;
    - `map` — the tile matrix.
 2. Register the map in
-   [src/data/maps/index.js](../../src/data/maps/index.js) — the object's
+   [games/tanks/src/data/maps/index.js](../../games/tanks/src/data/maps/index.js) — the object's
    key becomes its name in votes and room settings. The master's map
    catalog reads the same data (a master restart refreshes what it
    serves).
@@ -41,7 +41,7 @@ There are two architecturally different types (see [core.md](core.md)):
 Steps:
 
 1. Define the weapon in
-   [src/data/weapons.js](../../src/data/weapons.js) (type, damage,
+   [games/tanks/src/data/weapons.js](../../games/tanks/src/data/weapons.js) (type, damage,
    cooldown, cost, etc.) — this data flows both into the core
    (`buildCoreConfig`) and to the client.
 2. Implement the authoritative side in the Rust core (`core/src/`:
@@ -68,7 +68,7 @@ Steps:
 
 ## New sound
 
-1. Add an entry in [src/config/sounds.js](../../src/config/sounds.js):
+1. Add an entry in [games/tanks/src/config/sounds.js](../../games/tanks/src/config/sounds.js):
    `file`, `priority`, `volume`, optionally `loop`.
 2. Place the audio file in `public/sounds/` in both **`.webm` and
    `.mp3`** formats (the codec list — `codecList`).

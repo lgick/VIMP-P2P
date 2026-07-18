@@ -17,7 +17,7 @@
 | [core.md](core.md) | Rust-ядро симуляции: структура `core/`, ABI (команды/события/кадры), сборка WASM, тесты |
 | [client.md](client.md) | Клиентские модули: MVC-компоненты, клиентское ядро (интерполяция/prediction/спавн снарядов), рендеринг, звук |
 | [network.md](network.md) | Синхронизация хост‑клиент: WebRTC-каналы, протокол портов, бинарный snapshot-кадр (v3), форматы данных, RTT |
-| [configuration.md](configuration.md) | Конфигурация: переменные `.env`, все файлы `src/config/`, данные `src/data/` |
+| [configuration.md](configuration.md) | Конфигурация: переменные `.env`, все файлы `src/config/`, данные `games/tanks/src/data/` |
 | [extending.md](extending.md) | Расширение: новая карта, оружие, звук, клиентская сущность |
 | [deployment.md](deployment.md) | Развертывание: подготовка VPS, добавление/удаление серверов, CI/CD |
 | [plugin-api.md](plugin-api.md) | Контракты движок ↔ игра-плагин (черновик): GameManifest, HostPlugin, ClientPlugin, Wasm ABI, снапшот-схема, версии |

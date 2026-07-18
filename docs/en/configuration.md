@@ -6,7 +6,7 @@ The project's configuration splits into three layers:
    instance (domain, port). Only apply in production.
 2. **`src/config/`** — shared config used by the master (Node.js), the
    browser host's Worker, and the client (Vite bundle).
-3. **`src/data/`** — static game data: maps, models, weapons.
+3. **`games/tanks/src/data/`** — static game data: maps, models, weapons.
 
 The master collects its config into a single store,
 `src/lib/config.js` (accessed via colon-separated paths), inside
@@ -35,7 +35,7 @@ and defaults live in `src/config/game.js`.
 ## src/config/game.js — server-side game parameters
 
 Source: [src/config/game.js](../../src/config/game.js). Imports maps,
-models, and weapons from `src/data/`.
+models, and weapons from `games/tanks/src/data/`.
 
 ### Core parameters
 
@@ -291,7 +291,7 @@ Each parameter: `name`, a default value, `validator` (a function from
 `isValidModel`), and a `storage` key for localStorage. Validation runs on
 the client and is repeated by the host (Worker).
 
-## src/config/sounds.js
+## games/tanks/src/config/sounds.js
 
 The sound catalog. Each sound: `file` (the filename without an extension
 in `public/sounds/`), `priority` (higher wins when voices compete),
@@ -308,12 +308,12 @@ must exist in both formats. More on playback — [client.md](client.md#soundmana
   drives the block's byte layout). An unregistered key breaks frame
   packing. Details — [network.md](network.md#binary-snapshot-frame-port-5).
 
-## src/data/ — game data
+## games/tanks/src/data/ — game data
 
 ### models.js
 
 The only model — the `m1` tank
-([src/data/models.js](../../src/data/models.js)): the `Tank` constructor,
+([games/tanks/src/data/models.js](../../games/tanks/src/data/models.js)): the `Tank` constructor,
 starting weapon `w1`, size (`size: 2`, dimensions `size×4 : size×3`),
 motion parameters (acceleration/braking, `maxForwardSpeed: 260`,
 `maxReverseSpeed: −130`, turn torque, damping, lateral grip), physics
@@ -330,7 +330,7 @@ rotation/centering rates).
 ### weapons.js
 
 Two architecturally different weapon types
-([src/data/weapons.js](../../src/data/weapons.js)):
+([games/tanks/src/data/weapons.js](../../games/tanks/src/data/weapons.js)):
 
 | | `w1` (bullet) | `w2` (bomb) |
 | --- | --- | --- |
@@ -346,7 +346,7 @@ Two architecturally different weapon types
 Three maps: `pool mini` (small), `canopy`, `garden`. Each describes tile
 layers (`layers`, `tiles`), respawn points (`respawns`), static
 (`physicsStatic`) and dynamic (`physicsDynamic`) physics. Registration —
-[src/data/maps/index.js](../../src/data/maps/index.js). How to add a map
+[games/tanks/src/data/maps/index.js](../../games/tanks/src/data/maps/index.js). How to add a map
 — see [extending.md](extending.md#new-map).
 
 ---

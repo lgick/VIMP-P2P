@@ -23,7 +23,7 @@ npm start         # production: HTTP за Nginx, читает .env
 | `src/master/main.js` | точка входа: Express + REST, HTTPS/HTTP-сервер, сигнальный `WebSocketServer`, периодическая уборка протухших комнат |
 | `src/master/HostRegistry.js` | реестр комнат `Map<hostId, HostSession>`: регистрация (не более 1 комнаты с IP), heartbeat/`lastSeen`, жалобы, выборка для `GET /servers` |
 | `src/master/SignalingServer.js` | сигнальный WebSocket: жизненный цикл соединений, маршрутизация WebRTC-сообщений, rate limiting пингов |
-| `src/master/MapCatalog.js` | каталог карт: JSON-представление `src/data/maps` в памяти + версия-хеш содержимого; раздача хостам без пересборки |
+| `src/master/MapCatalog.js` | каталог карт: JSON-представление `games/tanks/src/data/maps` в памяти + версия-хеш содержимого; раздача хостам без пересборки |
 | `src/master/WorkerCatalog.js` | каталог worker-бандла: версия-хеш содержимого `dist/assets/host.worker-*.js` + его URL; по нему хосты обнаруживают новую версию кода и меняют Worker эстафетой |
 | `src/lib/rateLimiter.js` | общий rate limiter с фиксированным окном (лимит событий на ключ за интервал) |
 
@@ -68,9 +68,9 @@ IP хоста и служебные поля наружу не отдаются.
 
 - `GET /maps/manifest.json` → `{ "version": "<хеш содержимого>", "maps": ["canopy", …] }` —
   `version` меняется только вместе с самими картами;
-- `GET /maps/:name` → JSON карты (формат `src/data/maps/*.js`); неизвестное имя — `404 { "error": "unknownMap" }`.
+- `GET /maps/:name` → JSON карты (формат `games/tanks/src/data/maps/*.js`); неизвестное имя — `404 { "error": "unknownMap" }`.
 
-Карты держатся в памяти (`MapCatalog` импортирует `src/data/maps/index.js` при
+Карты держатся в памяти (`MapCatalog` импортирует `games/tanks/src/data/maps/index.js` при
 старте) — файловых артефактов и отдельного шага экспорта не требуется. Как хост
 потребляет каталог — см. [host.md](host.md#динамические-карты).
 

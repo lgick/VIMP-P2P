@@ -17,4 +17,4 @@ core/pkg-node/
 core/pkg-web/
 
 # сгенерированные JSON-карты (npm run maps:export)
-src/data/maps/json/
+games/tanks/src/data/maps/json/

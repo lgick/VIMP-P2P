@@ -4,7 +4,7 @@
 
 1. **Переменные окружения** (`.env`) — параметры инстанса мастер-сервера (домен, порт). Применяются только в production.
 2. **`src/config/`** — общие конфиги, используемые мастером (Node.js), Worker'ом браузерного хоста и клиентом (Vite-бандл).
-3. **`src/data/`** — статические игровые данные: карты, модели, оружие.
+3. **`games/tanks/src/data/`** — статические игровые данные: карты, модели, оружие.
 
 Мастер собирает свой конфиг в единое хранилище `src/lib/config.js` (доступ по пути с двоеточием) в [src/master/main.js](../../src/master/main.js); Worker хоста импортирует `game`/`client`/`auth`/`wsports` напрямую ([src/host/host.worker.js](../../src/host/host.worker.js)) и применяет поверх них настройки комнаты. Клиент получает свой конфиг (`client`) от хоста при подключении (порт `0`).
 
@@ -22,7 +22,7 @@
 
 ## src/config/game.js — серверные игровые параметры
 
-Источник: [src/config/game.js](../../src/config/game.js). Импортирует карты, модели и оружие из `src/data/`.
+Источник: [src/config/game.js](../../src/config/game.js). Импортирует карты, модели и оружие из `games/tanks/src/data/`.
 
 ### Основные параметры
 
@@ -194,7 +194,7 @@
 
 Форма авторизации: id DOM-элементов (`elems`) и параметры формы (`params`). Каждый параметр: `name`, значение по умолчанию, `validator` (функция из [src/lib/validators.js](../../src/lib/validators.js): `isValidName`, `isValidModel`) и ключ `storage` для localStorage. Валидация выполняется и на клиенте, и повторно хостом (Worker).
 
-## src/config/sounds.js
+## games/tanks/src/config/sounds.js
 
 Каталог звуков. Каждый звук: `file` (имя файла без расширения в `public/sounds/`), `priority` (выше — важнее при конкуренции за голоса), `volume`, опционально `loop: true`. `codecList: ['webm', 'mp3']` — файлы должны существовать в обоих форматах. Подробнее о системе воспроизведения — в [client.md](client.md#soundmanager).
 
@@ -203,17 +203,17 @@
 - **`wsports.js`** — реестр числовых портов игрового протокола (источник истины). Полные таблицы — в [network.md](network.md#порты).
 - **`opcodes.js`** — версия бинарного snapshot-формата (`SNAPSHOT_FORMAT_VERSION = 3`) и реестр ключей `SNAPSHOT_KEYS` (`m1`, `w1`, `w2`, `w2e`, `c1`, `c2` → числовой id + `kind`, задающий байтовую раскладку блока). Незарегистрированный ключ уронит упаковку кадра. Подробности — в [network.md](network.md#бинарный-snapshot-кадр-порт-5).
 
-## src/data/ — игровые данные
+## games/tanks/src/data/ — игровые данные
 
 ### models.js
 
-Единственная модель — танк `m1` ([src/data/models.js](../../src/data/models.js)): конструктор `Tank`, стартовое оружие `w1`, размер (`size: 2`, габариты `size×4 : size×3`), параметры движения (ускорение/торможение, `maxForwardSpeed: 260`, `maxReverseSpeed: −130`, поворотный момент, демпфирование, боковое сцепление), физика (`density`, `friction`, `restitution`), «манера вождения» (пороги и скорости газа/поворота) и башня (`maxGunAngle: 1.4` рад, скорости поворота/центрирования).
+Единственная модель — танк `m1` ([games/tanks/src/data/models.js](../../games/tanks/src/data/models.js)): конструктор `Tank`, стартовое оружие `w1`, размер (`size: 2`, габариты `size×4 : size×3`), параметры движения (ускорение/торможение, `maxForwardSpeed: 260`, `maxReverseSpeed: −130`, поворотный момент, демпфирование, боковое сцепление), физика (`density`, `friction`, `restitution`), «манера вождения» (пороги и скорости газа/поворота) и башня (`maxGunAngle: 1.4` рад, скорости поворота/центрирования).
 
 > ⚠️ Коэффициенты `models.js` используются и авторитетным путём ядра, и репликой клиентского предикта (`core/src/client/predictor.rs`, формулы общие — `core/src/motion.rs`). Их изменение проверяется cargo-паритетом: `npm run core:test`.
 
 ### weapons.js
 
-Два архитектурно разных типа оружия ([src/data/weapons.js](../../src/data/weapons.js)):
+Два архитектурно разных типа оружия ([games/tanks/src/data/weapons.js](../../games/tanks/src/data/weapons.js)):
 
 | | `w1` (пуля) | `w2` (бомба) |
 | --- | --- | --- |
@@ -226,7 +226,7 @@
 
 ### maps/
 
-Три карты: `pool mini` (малая), `canopy`, `garden`. Каждая описывает слои тайлов (`layers`, `tiles`), точки респауна (`respawns`), статическую (`physicsStatic`) и динамическую (`physicsDynamic`) физику. Регистрация — в [src/data/maps/index.js](../../src/data/maps/index.js). Как добавить карту — см. [extending.md](extending.md#новая-карта).
+Три карты: `pool mini` (малая), `canopy`, `garden`. Каждая описывает слои тайлов (`layers`, `tiles`), точки респауна (`respawns`), статическую (`physicsStatic`) и динамическую (`physicsDynamic`) физику. Регистрация — в [games/tanks/src/data/maps/index.js](../../games/tanks/src/data/maps/index.js). Как добавить карту — см. [extending.md](extending.md#новая-карта).
 
 ---
 

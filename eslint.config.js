@@ -88,7 +88,12 @@ export default [
   },
 
   {
-    files: ['src/lib/**/*.js', 'src/config/**/*.js', 'scripts/*.js'],
+    files: [
+      'src/lib/**/*.js',
+      'src/config/**/*.js',
+      'scripts/*.js',
+      'games/*/src/**/*.js', // игровые данные/конфиги (@vimp/tanks)
+    ],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -170,7 +175,7 @@ export default [
       'core/pkg-node/**', // сгенерированный wasm-pack glue (nodejs)
       'core/pkg-web/**', // сгенерированный wasm-pack glue (web)
       'core/target/**', // артефакты cargo
-      'src/data/maps/json/**', // сгенерированные JSON-карты (maps:export)
+      'games/*/src/data/maps/json/**', // сгенерированные JSON-карты (maps:export)
       '**/.*', // игнорировать все файлы/директории, начинающиеся с '.'
       '**/_*', // игнорировать все файлы/директории, начинающиеся с '_'
     ],

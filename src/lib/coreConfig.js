@@ -2,10 +2,10 @@ import {
   SNAPSHOT_FORMAT_VERSION,
   SNAPSHOT_KEYS,
 } from '../config/opcodes.js';
+import models from '@vimp/tanks/data/models.js';
+import weapons from '@vimp/tanks/data/weapons.js';
 import gameConfig from '../config/game.js';
 import wsports from '../config/wsports.js';
-import models from '../data/models.js';
-import weapons from '../data/weapons.js';
 
 // Сборка JSON-конфига Rust-ядра (core/): куски game.js + данные баланса +
 // реестр снапшот-ключей. Единственная точка соответствия JS-конфигов и

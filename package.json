@@ -15,8 +15,12 @@
   },
   "type": "module",
   "main": "src/master/main.js",
+  "workspaces": [
+    "packages/engine",
+    "games/tanks"
+  ],
   "scripts": {
-    "dev": "NODE_ENV=development nodemon src/master/main.js -w src/master -w src/lib -w src/config -w src/data",
+    "dev": "NODE_ENV=development nodemon src/master/main.js -w src/master -w src/lib -w src/config -w games/tanks/src",
     "start": "NODE_ENV=production node --env-file .env src/master/main.js",
     "test": "vitest run",
     "test:watch": "vitest",

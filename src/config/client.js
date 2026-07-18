@@ -1,4 +1,4 @@
-import sounds from './sounds.js';
+import sounds from '@vimp/tanks/config/sounds.js';
 
 export default {
   // ***** parts ***** //

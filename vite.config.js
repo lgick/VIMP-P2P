@@ -32,5 +32,11 @@ export default defineConfig({
   server: {
     https: httpsConfig,
     hmr: isDev ? { protocol: 'wss', port: 3001 } : false,
+    fs: {
+      // корень репозитория: Vite dev должен читать workspace-симлинк
+      // node_modules/@vimp/tanks и файлы games/ вне будущего Vite-root
+      // packages/engine (план отделения движка, этап 2)
+      allow: [path.resolve(import.meta.dirname)],
+    },
   },
 });

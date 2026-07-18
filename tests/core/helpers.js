@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import models from '@vimp/tanks/data/models.js';
+import weapons from '@vimp/tanks/data/weapons.js';
 import clientConfig from '../../src/config/client.js';
 import gameConfig from '../../src/config/game.js';
-import models from '../../src/data/models.js';
-import weapons from '../../src/data/weapons.js';
 import { buildClientCoreConfig } from '../../src/lib/clientCoreConfig.js';
 import { buildCoreConfig } from '../../src/lib/coreConfig.js';
 

@@ -64,7 +64,7 @@ scripts/         — helper scripts (audio processing, map export to JSON)
 .github/         — CI/CD (test.yml, deploy.yml) and deployment scripts
 ```
 
-`src/config/`, `src/data/`, and `src/lib/` form a **shared layer**: imported
+`src/config/`, `games/tanks/src/data/`, and `src/lib/` form a **shared layer**: imported
 by the master (Node.js), the host Worker, and the client (Vite bundle). This
 guarantees the snapshot codec, math, validators, and model parameters stay
 identical on every side.
@@ -195,11 +195,11 @@ migration (the split is listed per file).
 
 | Area | ENGINE | GAME | MIXED (what gets cut out) |
 | --- | --- | --- | --- |
-| Master | all of `src/master/` (`HostRegistry`, `SignalingServer`, `WorkerCatalog`, `MapCatalog` becomes per-game; new `GameCatalog`) | — | `src/master/main.js` — the static import of `src/data/maps` |
+| Master | all of `src/master/` (`HostRegistry`, `SignalingServer`, `WorkerCatalog`, `MapCatalog` becomes per-game; new `GameCatalog`) | — | `src/master/main.js` — the static import of `games/tanks/src/data/maps` |
 | Host | `host.worker.js` (plugin loading), `HostGame.js`, `GameCoreAdapter.js` (generic), `meta/player/*` (`isScripted` replaces `isBot`), `meta/core/RoundManager`, `VoteCoordinator`, `meta/modules/*` (Panel, Stat, Vote, chat mechanism, TimerManager, RTTManager) | `HostBotManager.js` → `TanksBotManager` (scripted-module contract), the `/bot` command, `b:*` system messages, the core-event router | `GameCoreAdapter._drainEvents` (game event vocabulary), `SocketManager` (sound cues `roundStart/victory/…`, `sendFirstVote`), `CommandProcessor` (`/bot`), `chat/systemMessages.js` (the `b:*` group), `Panel.js` (the `'wa'` hardcode) |
 | Client | `main.js` (bootstrap/dispatcher), `network/*`, MVC components, `CanvasManager`, `SoundManager`, `InputListener`, `providers/*`, schema-driven Panel/Stat views | `parts/*` (9 classes), `bakers/*` (8 textures), game CSS, client hooks (`set_model`/`sync_panel`/`try_fire`/`cycle_weapon`) | `main.js` (game hooks, the hardcoded `reconstructHot` tank layout), `index.html`+`views/includes/{panel,stat}.pug` (game DOM ids), `style.css` |
 | Config | `wsports.js`, `opcodes.js` (framing, `HOT_FLAGS`, `ENGINE_API_VERSION`), `master.js`, `lobby.js`, new `hostDefaults.js`/`clientDefaults.js` | `sounds.js`, `auth.js`, the snapshot key schema (`m1/w1/w2/w2e/c1/c2`) | `game.js` (engine: `maxPlayers`, timers, rtt, idle kick / game: teams, panel, stat, playerKeys, map params), `client.js` (engine: interpolation, controls modes/cmds, elems, techInformList / game: parts, keySetList, panel/stat schemas, texts, canvases), `opcodes.js` (`SNAPSHOT_KEYS` is game data) |
-| Data | the map *format* and loader | `src/data/` entirely: `maps/`, `models.js`, `weapons.js`; `assets/audio-raw` | — |
+| Data | the map *format* and loader | `games/tanks/src/data/` entirely: `maps/`, `models.js`, `weapons.js`; `assets/audio-raw` | — |
 | Lib | `Publisher`, `factory`, `math`, `formatters`, `sanitizers`, `security`, `rateLimiter`, `buildClientConfig`/`coreConfig`/`clientCoreConfig` (become generic mergers) | — | `validators.js` (`isValidModel` hardcodes `'m1'` → the plugin's `authSchema`) |
 | Rust core | `physics.rs` (world, generic BodyTag, math), `rng.rs`, `map.rs`, `bots/pathfinder.rs`+`spatial.rs` (→ `nav/`), `snapshot.rs` framing, `client/{interpolator,predictor,raycast,unpack,hot}`, fixed-step/contacts, the handoff skeleton | `tank.rs`, `bomb.rs`, `motion.rs` (+parity tests), `bots/{controller,navigation}.rs`, the game logic of `game.rs` (→ `sim.rs`), `client/shot.rs`, block layouts, `#[wasm_bindgen]` wrappers, `tests/sim.rs` | `game.rs` (engine loop vs game rules), `snapshot.rs` (framing vs block layouts), `events` mapping |
 

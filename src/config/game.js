@@ -1,6 +1,6 @@
-import maps from '../data/maps/index.js';
-import models from '../data/models.js';
-import weapons from '../data/weapons.js';
+import maps from '@vimp/tanks/data/maps/index.js';
+import models from '@vimp/tanks/data/models.js';
+import weapons from '@vimp/tanks/data/weapons.js';
 
 export default {
   isDevMode: false, // флаг режима разработки

@@ -1,0 +1,11 @@
+{
+  "name": "@vimp/tanks",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VIMP Tanks — игра-плагин для движка VIMP",
+  "type": "module",
+  "exports": {
+    "./data/*": "./src/data/*",
+    "./config/*": "./src/config/*"
+  }
+}

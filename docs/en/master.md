@@ -28,7 +28,7 @@ Configuration — [src/config/master.js](../../src/config/master.js), described 
 | `src/master/main.js` | entry point: Express + REST, HTTPS/HTTP server, signaling `WebSocketServer`, periodic cleanup of stale rooms |
 | `src/master/HostRegistry.js` | room registry `Map<hostId, HostSession>`: registration (max 1 room per IP), heartbeat/`lastSeen`, reports, selection for `GET /servers` |
 | `src/master/SignalingServer.js` | signaling WebSocket: connection lifecycle, WebRTC message routing, ping rate limiting |
-| `src/master/MapCatalog.js` | map catalog: an in-memory JSON representation of `src/data/maps` plus a content version hash; served to hosts without a rebuild |
+| `src/master/MapCatalog.js` | map catalog: an in-memory JSON representation of `games/tanks/src/data/maps` plus a content version hash; served to hosts without a rebuild |
 | `src/master/WorkerCatalog.js` | worker bundle catalog: a content version hash of `dist/assets/host.worker-*.js` plus its URL; hosts use it to detect a new code version and swap the Worker via a handoff |
 | `src/lib/rateLimiter.js` | a shared fixed-window rate limiter (event limit per key per interval) |
 
@@ -74,9 +74,9 @@ rebuild):
 
 - `GET /maps/manifest.json` → `{ "version": "<content hash>", "maps": ["canopy", …] }` —
   `version` only changes along with the maps themselves;
-- `GET /maps/:name` → the map's JSON (`src/data/maps/*.js` format); an unknown name → `404 { "error": "unknownMap" }`.
+- `GET /maps/:name` → the map's JSON (`games/tanks/src/data/maps/*.js` format); an unknown name → `404 { "error": "unknownMap" }`.
 
-Maps are kept in memory (`MapCatalog` imports `src/data/maps/index.js` at
+Maps are kept in memory (`MapCatalog` imports `games/tanks/src/data/maps/index.js` at
 startup) — no file artifacts or a separate export step are needed. How a
 host consumes the catalog — see [host.md](host.md#dynamic-maps).
 

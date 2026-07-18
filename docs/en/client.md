@@ -259,7 +259,7 @@ data, calls `update(data)` on an existing one, or removes it (`null`).
 ## SoundManager
 
 [src/client/SoundManager.js](../../src/client/SoundManager.js) (built on
-Howler.js). Sounds are described in `src/config/sounds.js`.
+Howler.js). Sounds are described in `games/tanks/src/config/sounds.js`.
 
 - **UI/system** (no position): `playSystemSound(name)` — plays instantly,
   bypassing priorities (also used for port 6 sounds).

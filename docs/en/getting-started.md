@@ -33,7 +33,7 @@ npm run audio:process
 npm run dev
 ```
 
-This starts the **master server** at `https://localhost:3002` (lobby + signaling, [master.md](master.md)); ViteExpress serves the client alongside the Express server, and nodemon watches `src/master`, `src/lib`, `src/config`, `src/data`.
+This starts the **master server** at `https://localhost:3002` (lobby + signaling, [master.md](master.md)); ViteExpress serves the client alongside the Express server, and nodemon watches `src/master`, `src/lib`, `src/config`, `games/tanks/src`.
 
 Matches run through the **browser host** ([host.md](host.md)): "Create server" in the lobby spins up a Web Worker with the Rust core in the current tab; other tabs/machines join the room from the server list.
 
@@ -45,7 +45,7 @@ npm run build           # production build (WASM core + audio processing + Vite 
 npm run build:app       # build without the core (audio + Vite; core already built)
 npm run core:build      # build the Rust core to WASM (web + nodejs; needs the Rust toolchain)
 npm run core:test       # Rust core tests (cargo test)
-npm run maps:export     # export maps to JSON (src/data/maps/json/) for the core
+npm run maps:export     # export maps to JSON (games/tanks/src/data/maps/json/) for the core
 npx eslint .             # linter
 npm test                 # tests (Vitest), single run
 npm run test:watch       # tests in watch mode

@@ -4,7 +4,7 @@
 
 ## Новая карта
 
-1. Создайте `src/data/maps/<имя>.js` по образцу существующих (например [pool_mini.js](../../src/data/maps/pool_mini.js)). Формат:
+1. Создайте `games/tanks/src/data/maps/<имя>.js` по образцу существующих (например [pool_mini.js](../../games/tanks/src/data/maps/pool_mini.js)). Формат:
    - `setId` — snapshot-ключ конструктора карты (`c1`/`c2`);
    - `scale` — масштаб карты;
    - `spriteSheet` — изображение тайлов и кадры `[x, y, w, h]`;
@@ -14,7 +14,7 @@
    - `step` — размер тайла;
    - `respawns` — точки возрождения по командам: массивы `[x, y, угол]`;
    - `map` — матрица тайлов.
-2. Зарегистрируйте карту в [src/data/maps/index.js](../../src/data/maps/index.js) — ключ объекта станет названием в голосованиях и в настройках комнаты. Каталог карт мастера читает те же данные (обновите его выдачу перезапуском мастера).
+2. Зарегистрируйте карту в [games/tanks/src/data/maps/index.js](../../games/tanks/src/data/maps/index.js) — ключ объекта станет названием в голосованиях и в настройках комнаты. Каталог карт мастера читает те же данные (обновите его выдачу перезапуском мастера).
 
 ## Новое оружие
 
@@ -25,7 +25,7 @@
 
 Шаги:
 
-1. Определите оружие в [src/data/weapons.js](../../src/data/weapons.js) (тип, урон, кулдаун, расход и т.д.) — эти данные уходят и в ядро (`buildCoreConfig`), и клиенту.
+1. Определите оружие в [games/tanks/src/data/weapons.js](../../games/tanks/src/data/weapons.js) (тип, урон, кулдаун, расход и т.д.) — эти данные уходят и в ядро (`buildCoreConfig`), и клиенту.
 2. Реализуйте авторитетную часть в Rust-ядре (`core/src/`: `game.rs`, `tank.rs`, при необходимости своя сущность по образцу `bomb.rs`; упаковка блока — `snapshot.rs`) по аналогии с существующим оружием того же типа.
 3. Создайте клиентский рендеринг в `src/client/parts/`.
 4. Зарегистрируйте сущность в `src/config/client.js`: `parts.gameSets` (snapshot-ключ → классы) и `parts.entitiesOnCanvas` (класс → полотно).
@@ -35,7 +35,7 @@
 
 ## Новый звук
 
-1. Добавьте запись в [src/config/sounds.js](../../src/config/sounds.js): `file`, `priority`, `volume`, опционально `loop`.
+1. Добавьте запись в [games/tanks/src/config/sounds.js](../../games/tanks/src/config/sounds.js): `file`, `priority`, `volume`, опционально `loop`.
 2. Положите аудиофайл в `public/sounds/` в форматах **`.webm` и `.mp3`** (список кодеков — `codecList`).
 3. Воспроизведение: UI/системные — `soundManager.playSystemSound(name)`; пространственные — `registerSound(name, { position })` (лимит голосов и приоритеты соблюдает `SoundManager`, см. [client.md](client.md#soundmanager)).
 
