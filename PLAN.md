@@ -211,14 +211,14 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 
 Сквозные правила каждого этапа: `npx eslint .` + `npm test` + `npm run core:test` зелёные; `npm run dev` живой (две вкладки играют); тесты правятся в том же PR, что и код; **docs/{en,ru} актуализируются в том же изменении** (правило CLAUDE.md). Размеры: S≈день, M≈2–4 дня, L≈неделя, XL≈2+ недели.
 
-### Этап 1. Фиксация контрактов (S, 1 PR)
+### Этап 1. Фиксация контрактов (S, 1 PR) — ✅ выполнен
 
 - `docs/{en,ru}/plugin-api.md` — черновик контрактов из раздела 3 (GameManifest, HostPlugin, ClientPlugin, Wasm ABI, снапшот-схема, версии).
 - В `docs/{en,ru}/architecture.md` — ADR: «движок — приложение, игра — динамический плагин»; таблица распила файлов (полная разметка ENGINE/GAME/MIXED из аудита).
 - `ENGINE_API_VERSION` в `src/config/opcodes.js` (номинально).
 - Готово: документы есть, код не менялся.
 
-### Этап 2. Каркас монорепо + листовые данные (M, 1–2 PR)
+### Этап 2. Каркас монорепо + листовые данные (M, 1–2 PR) — ✅ выполнен
 
 - Корневой `package.json` → `workspaces: ["packages/engine", "games/tanks"]`; создать `games/tanks/package.json` (`@vimp/tanks`, exports `./data/*`, `./config/*`). Движковый код пока остаётся в `src/` корня.
 - Перенести: `src/data/{models.js,weapons.js,maps/}` → `games/tanks/src/data/`; `src/config/sounds.js` и `src/assets/audio-raw` → `games/tanks/`.
