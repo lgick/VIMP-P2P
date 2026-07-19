@@ -216,6 +216,10 @@ participants/bots):
   `resetTeamSizes`), the active-watch list (`addActive`/`removeActive`/
   `getActiveList`/`replaceWatched`), the `maxPlayers` limit (`totalCount`).
 
+Bots and players already share this registry and a single numeric id space,
+but behavior (networked input vs. the core's AI) is still handled by separate
+code paths — fully unifying the two into one abstraction is a future task.
+
 ### `meta/core/` managers
 
 **RoundManager** — rounds, teams, maps. Owns state: `currentMap`,
@@ -518,8 +522,12 @@ hand once (`npm run core:build`).
 
 ## Manual run checklist
 
-Vitest doesn't reproduce real WebRTC reordering, so an end-to-end match check
-is manual, in the browser:
+The P2P migration is complete: client-side math (interpolation, prediction,
+projectile spawning, frame unpacking) now lives entirely in the Rust core
+(`core/src/client/`); legacy JS equivalents and the JS-parity tests were
+removed. What's left is this manual two-tab smoke test — Vitest doesn't
+reproduce real WebRTC reordering, so an end-to-end match check is manual, in
+the browser:
 
 ```bash
 npm run core:build     # web target of the core for the Worker (once)
