@@ -2,18 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Language Rule
-
-**СТРОГОЕ ПРАВИЛО**: Все ответы, пояснения, комментарии к коду и любые сообщения в ходе работы писать ИСКЛЮЧИТЕЛЬНО на русском языке. Это правило имеет наивысший приоритет и не имеет исключений.
-
-## Работа по плану
-
-**СТРОГОЕ ПРАВИЛО**: если задача выполняется по плану (например, `PLAN.md`), по завершении этапа фиксировать это в самом файле плана (пометка «✅ выполнен» у заголовка этапа). По плану всегда должно быть видно, на каком этапе находится работа.
-
-## Коммиты
-
-**СТРОГОЕ ПРАВИЛО**: не делать `git commit` самостоятельно. Коммиты делает разработчик. Изменения оставлять в рабочем дереве (staged или unstaged) — фиксацию в историю выполняет только пользователь.
-
 ## Project Overview
 
 VIMP P2P — a multiplayer 2D real-time online tank game on a P2P architecture. The authoritative match runs in a Web Worker in the room creator's browser tab (Rust simulation core compiled to WASM); clients render via PixiJS and connect over WebRTC. A lightweight Node.js master server provides the lobby, WebRTC signaling and map catalog. Легаси авторитетный WS-сервер полностью демонтирован.
