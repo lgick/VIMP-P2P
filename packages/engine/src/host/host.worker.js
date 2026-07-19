@@ -1,14 +1,13 @@
 // Web Worker браузерного хоста. Крутит авторитетную часть матча:
-// WASM-ядро симуляции (core/pkg-web) + JS-мету (HostGame поверх мета-модулей
-// ./meta/) + игровой цикл ~120 Гц (таймеры Worker'а не троттлятся в
-// фоновой вкладке). RTCPeerConnection живут в главном потоке — сюда приходят
-// уже разобранные пакеты клиентов, обратно уходят wire-кадры (JSON-строки и
-// бинарные ArrayBuffer'ы через Transferable).
+// WASM-ядро симуляции (games/tanks/core/pkg-web) + JS-мету (HostGame поверх
+// мета-модулей ./meta/) + игровой цикл ~120 Гц (таймеры Worker'а не
+// троттлятся в фоновой вкладке). RTCPeerConnection живут в главном потоке —
+// сюда приходят уже разобранные пакеты клиентов, обратно уходят wire-кадры
+// (JSON-строки и бинарные ArrayBuffer'ы через Transferable).
 
-import init, { GameCore } from '../../../../core/pkg-web/vimp_core.js';
 // временная статическая композиция движок+игра (до этапа 6 —
-// динамической загрузки HostPlugin)
-import { hostPlugin } from '../gameRegistry.static.js';
+// динамической загрузки HostPlugin/entries.wasm)
+import { hostPlugin, initGameCore as init, GameCore } from '../gameRegistry.static.js';
 import hostDefaults from '../config/hostDefaults.js';
 import clientDefaults from '../config/clientDefaults.js';
 import wsports from '../config/wsports.js';

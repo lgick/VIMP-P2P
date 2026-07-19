@@ -9,7 +9,7 @@ import { defineConfig } from 'vitest/config';
 //   - tanks:         игровые модули @vimp/tanks (host-плагин, ClientPlugin)
 //   - integration:   интеграция поверх реального ядра танков
 //                    (tests/host/HostGame.test.js + JS↔WASM харнесс tests/core;
-//                    пропускается, если core/pkg-node не собран —
+//                    пропускается, если games/tanks/core/pkg-node не собран —
 //                    см. npm run core:build)
 export default defineConfig({
   test: {

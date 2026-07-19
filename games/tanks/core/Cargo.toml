@@ -1,0 +1,17 @@
+[package]
+name = "vimp-tanks-core"
+version = "0.1.0"
+edition = "2024"
+description = "VIMP Tanks — игровая симуляция (танки/оружие/боты) + wasm-bindgen ABI (GameCore/ClientCore) поверх vimp-engine-core."
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+vimp-engine-core = { path = "../../../packages/engine/core" }
+indexmap = { workspace = true }
+rapier2d = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wasm-bindgen = { workspace = true }

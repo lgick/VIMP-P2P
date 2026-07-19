@@ -1,7 +1,7 @@
 import './style.css';
 import 'pixi.js/unsafe-eval';
 import { Application, Ticker } from 'pixi.js';
-import init, { ClientCore } from '../../../../core/pkg-web/vimp_core.js';
+import { loadClientCore } from '../gameRegistry.static.js';
 import InputListener from './InputListener.js';
 import AuthModel from './components/model/Auth.js';
 import AuthView from './components/view/Auth.js';
@@ -149,8 +149,9 @@ socketMethods[PS_CONFIG_DATA] = async data => {
   // клиентское ядро: интерполяция + предикт + спавн выстрелов; конфиг
   // собирается из interpolation/prediction CONFIG_DATA (хост шлёт их
   // через buildClientConfig в Worker'е)
-  wasm = await init();
-  clientCore = new ClientCore(JSON.stringify(buildClientCoreConfig(data)));
+  const glue = await loadClientCore();
+  wasm = await glue.default();
+  clientCore = new glue.ClientCore(JSON.stringify(buildClientCoreConfig(data)));
 
   // инициализация сущностей игры
   for (const entity of Object.keys(entitiesOnCanvas)) {

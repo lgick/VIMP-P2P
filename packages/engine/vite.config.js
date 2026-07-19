@@ -34,7 +34,7 @@ export default defineConfig({
     hmr: isDev ? { protocol: 'wss', port: 3001 } : false,
     fs: {
       // корень репозитория: Vite dev (root — packages/engine) должен читать
-      // workspace-симлинки node_modules/@vimp/*, файлы games/ и core/pkg-web
+      // workspace-симлинки node_modules/@vimp/*, файлы games/ и games/*/core/pkg-web
       allow: [path.resolve(import.meta.dirname, '..', '..')],
     },
   },

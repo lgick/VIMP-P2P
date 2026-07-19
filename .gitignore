@@ -11,10 +11,10 @@ logs
 npm-debug.log*
 .certs/
 
-# Rust-ядро (core/): артефакты сборки
-core/target/
-core/pkg-node/
-core/pkg-web/
+# Rust-ядро: артефакты сборки (workspace target/ + wasm-pack output)
+target/
+games/tanks/core/pkg-node/
+games/tanks/core/pkg-web/
 
 # сгенерированные JSON-карты (npm run maps:export)
 games/tanks/src/data/maps/json/

@@ -12,14 +12,17 @@ import { buildCoreConfig } from '../../packages/engine/src/lib/coreConfig.js';
 // `npm run core:build` (нужен Rust-тулчейн); без артефакта тесты
 // пропускаются, чтобы `npm test` оставался зелёным без Rust.
 
-const pkgUrl = new URL('../../core/pkg-node/vimp_core.js', import.meta.url);
+const pkgUrl = new URL(
+  '../../games/tanks/core/pkg-node/vimp_tanks_core.js',
+  import.meta.url,
+);
 
 export const coreAvailable = existsSync(pkgUrl);
 
 const loadPkg = () => {
   const require = createRequire(import.meta.url);
 
-  return require('../../core/pkg-node/vimp_core.js');
+  return require('../../games/tanks/core/pkg-node/vimp_tanks_core.js');
 };
 
 /**

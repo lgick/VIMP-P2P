@@ -146,7 +146,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
 
       const [startX, , endX, , bodyX, , wasHit, shooterId] = tracers[0];
 
-      expect(wasHit).toBe(true);
+      expect(wasHit).toBe(1); // u8 по wire-формату
       expect(shooterId).toBe(1);
       expect(startX).toBeGreaterThan(bodyX); // дуло впереди корпуса
       expect(endX).toBeGreaterThan(startX);

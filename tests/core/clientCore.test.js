@@ -17,7 +17,7 @@ import {
 const TIME_STEP_MS = hostDefaults.timers.timeStep;
 const DT = TIME_STEP_MS / 1000;
 
-// флаги hot-буфера (зеркало core/src/client/mod.rs)
+// флаги hot-буфера (зеркало games/tanks/core/src/client/mod.rs)
 const HAS_GAME = 1;
 const HAS_CAMERA = 2;
 const HAS_PREDICTED = 4;
@@ -124,7 +124,7 @@ describe.skipIf(!coreAvailable)('ClientCore (клиентское ядро)', ()
       const tracer = decoded.snapshot.w1[0];
 
       expect(tracer).toHaveLength(8);
-      expect(typeof tracer[6]).toBe('boolean');
+      expect(tracer[6]).toBe(0); // wasHit (u8 по wire-формату, промах)
       expect(tracer[7]).toBe(1); // shooterId
     });
   });

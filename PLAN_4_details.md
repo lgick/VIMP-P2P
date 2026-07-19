@@ -137,3 +137,95 @@
 ссылается на до-Этап-5 пути — `src/host/GameCoreAdapter.js:114-144` (стр. 166),
 `src/client/main.js:505-551` (стр. 178), «зеркально `GameCoreAdapter`» (стр. 251). Читать
 их как `packages/engine/src/...` с актуальными номерами строк из таблицы выше.
+
+---
+
+## 5. Этап 4b — физический распил на два crate (актуализация)
+
+Раздел 1 (таблица файлов) и §3 этого документа описывают монолитный `core/`
+до распила; после 4b те же модули лежат в `packages/engine/core/src/` или
+`games/tanks/core/src/` по разметке §3.1 (движок ← physics/rng/map/
+pathfinder/spatial/snapshot-framing/interpolator/predictor(generic)/raycast/
+unpack-framing + фикс-шаг; игра ← tank/bomb/motion/controller/navigation/
+shot) — с двумя уточнёнными отступлениями, зафиксированными по факту
+кода (не по табличной разметке из §3.6 PLAN.md). Изначально при 4b
+предполагалось ещё два отступления (`BodyTag` не разделён,
+`snapshot.rs`/`Block` остаётся «игровым» набором вариантов) — при ревизии
+плана выяснилось, что оба уже фактически реализованы в коде того же
+коммита и отступлениями не являются:
+
+- `BodyTag` **разделён**: движок (`packages/engine/core/src/physics.rs`)
+  владеет только зарезервированным `MAP_OBJECT_TAG`/`encode_map_object`/
+  `is_map_object`; весь enum `BodyTag` (`Player`/`Shot`) — в игровом
+  `games/tanks/core/src/body_tag.rs`, с тестом round-trip против движковой
+  кодировки.
+- `snapshot.rs`/`Block` уже generic по форме: варианты (`Indexed8`/
+  `Indexed32`/`List16`/`IndexedNoNull8`) названы по байтовой форме, а не по
+  игровым сущностям (`Tanks`/`Bombs`/…), содержимое — `Vec<FieldValue>` по
+  схеме. Полностью типизированный `RowData` не понадобился — эта форма уже
+  закрывает потребности и движка, и игры без игровой семантики в самом
+  типе.
+
+Актуальные отступления:
+
+1. **`bots/navigation.rs` → `nav/navigation.rs` (движок), а не игра**,
+   вопреки табличной разметке PLAN.md §3.6 (`игра ← ... navigation`): файл
+   уже не имел игровых зависимостей (`pathfinder`/`rng` только), а
+   `EngineSim`/`SimCtx` хранят `Option<NavigationSystem>` как собственное
+   поле движка — перенос в игру потребовал бы generic-параметра нав-типа в
+   движковом каркасе. `bots/controller.rs` (`BotBrain`) остался в игре.
+2. **`ClientState`/`Predictor`/`ShotPredictor`/`motion.rs` — целиком в
+   game-crate**, GameClientDef-трейт (мотив §3.6 PLAN.md — `motion_step`/
+   `render_from_state`) не реализован: `predictor.rs` уже вызывал
+   `crate::motion` (формулы движения танка) напрямую до распила, т.е. не
+   был generic на практике несмотря на расположение в `client/`. Движок
+   экспортирует только действительно generic клиентские примитивы
+   (`Interpolator`, `raycast`, `unpack`, схему снапшота); вторая игра
+   напишет свой `ClientState` по образцу `TanksSim`/`GameSim`. Остаётся
+   нереализованным — форма трейта не может быть надёжно спроектирована без
+   второго реального клиента для проверки.
+
+Движковые макросы `export_game_core_abi!`/`export_client_core_abi!`
+(§3.4 PLAN.md, снятие ~45-метод-boilerplate) на момент 4b не были
+реализованы — `games/tanks/core/src/lib.rs` переписан вручную построчным
+зеркалом старого `core/src/lib.rs`. При ревизии плана выяснилось, что
+`export_game_core_abi!` для `GameCore` можно извлечь уже сейчас, и это
+сделано (`packages/engine/core/src/abi.rs`): 25 из 26 методов были
+механическими 1:1-делегациями в уже generic `EngineSim<G>`/
+`SnapshotPacker`, чья сигнатура зафиксирована трейтом `GameSim<G>`
+(`sim.rs`) независимо от количества игр в дереве — это не проектирование
+под гипотетическую вторую игру, а извлечение уже существующего
+соответствия; `games/tanks/core/src/lib.rs` теперь содержит только
+рукописный `new` и вызов `vimp_engine_core::export_game_core_abi!(GameCore);`.
+Заодно приведены в порядок имена трейта `GameSim<G>`: `tank_alive`/
+`tank_position_rounded` → `is_alive`/`actor_position` (соответствуют именам
+в wasm ABI `is_alive`/`position_of`, ранее расходились). `export_client_core_abi!`
+для `ClientCore` остаётся заблокирован тем же, чем п.2 (`ClientState`
+целиком в игровом crate, нет
+движкового аналога `EngineSim<G>` для клиента) — сделать сейчас без
+угадывания формы трейта нельзя.
+
+`CoreConfig`/`ClientConfig` разделены на движковую/игровую половины
+(`EngineConfig`/`EngineClientConfig` vs `TanksConfig`/`TanksClientConfig`) —
+пункт, отложенный в 4a.1 (§3 этого документа, «`CoreConfig` не разделён...
+актуален... к физическому распилу 4b»). Игровой конфиг передаётся один раз
+в `GameSim::new(cfg: &G::Config, engine_cfg: &EngineConfig)`; `TanksSim`
+хранит свою копию (`models`/`weapons`/`panel`/`friendly_fire`/
+`player_keys`), поэтому остальные методы трейта `GameSim` больше не
+принимают `cfg`-параметр вовсе (был у `spawn_actor`/`apply_input`/
+`reset_all_vitals`/`refresh_cached`/`build_snapshot_blocks`/
+`remove_players_and_shots` — исчез). Wire-формат конструкторов `GameCore`/
+`ClientCore::new` стал `{engine: {...}, game: {...}}` (`RootConfig`/
+`RootClientConfig` в `games/tanks/core/src/config.rs`); JS-сборщики
+(`packages/engine/src/lib/coreConfig.js`/`clientCoreConfig.js`) строят
+плоский объект и раскладывают поля по обеим половинам — старые вызовы с
+плоскими `overrides` не изменились.
+
+Проверено: `cargo test --workspace` — 95/95 (50 engine + 33 tanks-lib + 12
+integration, то же число тестов, что до распила — перенос файлов и
+переработка сигнатур не потеряли и не задублировали тестов); `npm test` —
+664/664 (интеграционный `tests/core/` и `tests/host/HostGame.test.js`
+корректно находят пересобранный `games/tanks/core/pkg-node/`, не
+скипаются); `npx eslint .` — чисто; `npm run build` (`core:build:web` +
+Vite) — собирается, `vimp_tanks_core_bg.wasm` подхватывается как единый
+ассет.

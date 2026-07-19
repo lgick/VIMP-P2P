@@ -10,7 +10,7 @@ import {
 // реального Rust-ядра (pkg-node) — сквозное покрытие core-driven пути
 // (GameCoreAdapter → panel/reportKill, pack_body/pack_frame; бинарные
 // кадры декодирует клиентское ядро — ClientCore.decode_frame, срез 2.6).
-// Пропускается, если core/pkg-node не собран (см. npm run core:build).
+// Пропускается, если games/tanks/core/pkg-node не собран (см. npm run core:build).
 //
 // Все игровые модули — синглтоны, поэтому тест-файлы обязаны изолироваться
 // через vi.resetModules() в beforeEach и импортировать всё ДИНАМИЧЕСКИ

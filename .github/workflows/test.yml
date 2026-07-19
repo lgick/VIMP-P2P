@@ -18,7 +18,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Setup Rust (ядро core/)
+      - name: Setup Rust (cargo workspace: packages/engine/core + games/tanks/core)
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -29,8 +29,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            core/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('core/Cargo.lock') }}
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
 
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh

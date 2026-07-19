@@ -11,30 +11,49 @@ import wsports from '../config/wsports.js';
 // клиент получает параметры по порту 0.
 
 /**
- * Собирает объект конфигурации клиентского ядра.
+ * Собирает объект конфигурации клиентского ядра — форма {engine, game}
+ * (PLAN.md §3.4): движковая половина (timeStepMs/snapshot/interpolation) +
+ * игровая (models/weapons/playerKeys/seed трассеров).
  * @param {Object} options
  * @param {Object} options.prediction - Секция prediction CONFIG_DATA
  *   (timeStep в мс, playerKeys, models, weapons).
  * @param {Object} options.interpolation - Секция interpolation CONFIG_DATA
  *   (delay, maxFrameAge в мс).
- * @param {Object} [overrides] - Переопределения (например, seed
- *   для воспроизводимых прогонов).
+ * @param {Object} [overrides] - Переопределения плоским объектом (например,
+ *   seed для воспроизводимых прогонов) — распределяются автоматически.
  * @returns {Object} Конфиг для `new ClientCore(JSON.stringify(config))`.
  */
 export const buildClientCoreConfig = (
   { prediction, interpolation },
   overrides = {},
-) => ({
-  // имя поля фиксирует единицы: prediction.timeStep приходит в мс
-  timeStepMs: prediction.timeStep,
-  playerKeys: prediction.playerKeys,
-  models: prediction.models,
-  weapons: prediction.weapons,
-  snapshot: {
-    version: SNAPSHOT_FORMAT_VERSION,
-    port: wsports.server.SHOT_DATA,
-    keys: SNAPSHOT_KEYS,
-  },
-  interpolation,
-  ...overrides,
-});
+) => {
+  const flat = {
+    // имя поля фиксирует единицы: prediction.timeStep приходит в мс
+    timeStepMs: prediction.timeStep,
+    playerKeys: prediction.playerKeys,
+    models: prediction.models,
+    weapons: prediction.weapons,
+    snapshot: {
+      version: SNAPSHOT_FORMAT_VERSION,
+      port: wsports.server.SHOT_DATA,
+      keys: SNAPSHOT_KEYS,
+    },
+    interpolation,
+    seed: undefined,
+    ...overrides,
+  };
+
+  return {
+    engine: {
+      timeStepMs: flat.timeStepMs,
+      snapshot: flat.snapshot,
+      interpolation: flat.interpolation,
+    },
+    game: {
+      playerKeys: flat.playerKeys,
+      models: flat.models,
+      weapons: flat.weapons,
+      seed: flat.seed,
+    },
+  };
+};

@@ -1,10 +1,15 @@
-# Rust Simulation Core (core/)
+# Rust Simulation Core (packages/engine/core + games/tanks/core)
 
-A single simulation core: physics, tanks, weapons, bots, and binary snapshot
-packing are written in Rust and compiled to WASM. The core runs on the
-browser host (`GameCore`, [host.md](host.md)) **and on every client**
-(`ClientCore` — client-side math: interpolation, prediction, visual shot
-spawning, frame decoding).
+A cargo workspace of two crates: physics, the fixed-step tick, snapshot
+framing, interpolation/predict/raycast primitives, and nav utilities are
+generic engine code (`vimp-engine-core`, rlib, **no wasm-bindgen**); tanks,
+weapons, bots, and the wasm-bindgen ABI (`GameCore`/`ClientCore`) live in the
+game crate (`vimp-tanks-core`, cdylib+rlib), which depends on the engine
+crate. The engine crate can't import anything game-specific — a second game
+would add its own crate next to `games/tanks/core`, reusing
+`vimp-engine-core` unchanged. The core runs on the browser host (`GameCore`,
+[host.md](host.md)) **and on every client** (`ClientCore` — client-side
+math: interpolation, prediction, visual shot spawning, frame decoding).
 
 **The core's boundary is simulation, not meta**: chat, votes, stats, the
 panel, round orchestration, the participant registry, and auth stay in JS.
@@ -13,38 +18,63 @@ Meta drives the core with commands and feeds on its events.
 ## Layout
 
 ```
-core/
-├── Cargo.toml            # rapier2d (enhanced-determinism, serde), wasm-bindgen
+Cargo.toml                        # workspace: packages/engine/core, games/tanks/core
+packages/engine/core/             # vimp-engine-core — rlib, no wasm-bindgen
+├── Cargo.toml                    # rapier2d (enhanced-determinism, serde) — no wasm-bindgen
 ├── src/
-│   ├── lib.rs            # the public ABI (wasm-bindgen): GameCore + ClientCore
-│   ├── game.rs            # GameState — tick, damage, detonation, hitscan
-│   ├── tank.rs            # Tank — movement, turret,
-│   │                      #   health/ammo/cooldowns — in the core, not the panel
-│   ├── motion.rs          # shared mass-free motion formulas: one code path for
-│   │                      #   the authoritative side (Rapier impulses) and the predictor replica
-│   ├── bomb.rs             # Bomb — the projectile body (detonation lives in game.rs)
-│   ├── map.rs              # GameMap — map scaling
-│   ├── snapshot.rs         # SnapshotPacker — packs the v3 binary frame
-│   ├── events.rs           # CoreEvent — events for JS meta
-│   ├── config.rs           # serde structs for init configs (CoreConfig + ClientConfig)
-│   ├── physics.rs          # BodyTag (body user_data), rounding, angles
-│   ├── rng.rs              # deterministic PRNG (SplitMix64)
-│   ├── bots/                # bot AI
-│   │   ├── controller.rs   # BotBrain — bot AI (input is generated inside the core)
-│   │   ├── navigation.rs   # nav grid + graph (NavigationSystem)
-│   │   ├── pathfinder.rs   # A*
-│   │   └── spatial.rs      # spatial grid for target search
-│   └── client/              # the core's client mode
-│       ├── mod.rs           # ClientState — the sample() pipeline, the hot buffer
-│       ├── unpack.rs        # the v3 frame decoder + JSON forms
-│       ├── interpolator.rs  # the snapshot buffer, seq, lerp
-│       ├── predictor.rs     # the motion replica built on motion.rs
-│       ├── shot.rs          # gates, dedup, the raycast world
-│       └── raycast.rs       # DDA over tiles + an OBB slab test
+│   ├── lib.rs                    # pub mod declarations only
+│   ├── sim.rs                    # GameDef/GameSim/SimCtx — the engine↔game trait boundary
+│   ├── game.rs                   # EngineSim<G> — tick, contacts, destroy queue, handoff
+│   ├── abi.rs                    # export_game_core_abi!/export_client_core_abi! — the
+│   │                              #   wasm-bindgen boilerplate macros (see ABI sections below)
+│   ├── map.rs                    # GameMap — static/dynamic bodies, map scaling
+│   ├── snapshot.rs                # SnapshotPacker + Block — packs the v3 binary frame;
+│   │                              #   Block is generic by shape (Indexed8/Indexed32/
+│   │                              #   List16/IndexedNoNull8), not by game entity — the
+│   │                              #   engine doesn't know "tank" or "bomb", only row shape
+│   ├── events.rs                  # CoreEvent — the standard event dictionary for JS meta
+│   ├── config.rs                  # EngineConfig/EngineClientConfig + snapshot schema types
+│   │                              #   (BlockKind is a row-shape enum, not a game-entity enum)
+│   ├── physics.rs                 # map-object body tag (encode_map_object/is_map_object),
+│   │                              #   rounding, angles — game body tags (player/shot) live
+│   │                              #   in games/tanks/core/src/body_tag.rs
+│   ├── rng.rs                     # deterministic PRNG (SplitMix64)
+│   ├── nav/                       # generic bot-adjacent utilities (no "bot" naming)
+│   │   ├── navigation.rs         # nav grid + graph + line-of-sight (NavigationSystem)
+│   │   ├── pathfinder.rs         # A*
+│   │   └── spatial.rs            # spatial grid for target search
+│   └── client/                    # generic client-side primitives + orchestration
+│       ├── game.rs                # GameClientDef trait + generic ClientState<G> — the
+│       │                          #   sample() pipeline, the hot buffer, frame queue;
+│       │                          #   the game supplies prediction/shot-spawn via the trait
+│       ├── unpack.rs              # the v3 frame decoder + JSON forms
+│       ├── interpolator.rs        # the snapshot buffer, seq, lerp (schema-driven)
+│       └── raycast.rs             # DDA over tiles + an OBB slab test
+└── (no wasm ABI here — see games/tanks/core/src/lib.rs)
+
+games/tanks/core/                 # vimp-tanks-core — cdylib+rlib, depends on vimp-engine-core
+├── Cargo.toml                    # + wasm-bindgen, path-dep on ../../../packages/engine/core
+├── src/
+│   ├── lib.rs                    # the public ABI (wasm-bindgen): GameCore + ClientCore
+│   ├── body_tag.rs                # BodyTag (Player/Shot body user_data) — game-only;
+│   │                              #   reserves tag byte 1 for the engine's map-object tag
+│   ├── tanks.rs                   # TanksSim (impl GameSim), TanksGame, GameState alias
+│   ├── tank.rs                    # Tank — movement, turret, health/ammo/cooldowns
+│   ├── motion.rs                  # shared mass-free motion formulas: one code path for
+│   │                              #   the authoritative side (Rapier impulses) and the predictor replica
+│   ├── bomb.rs                    # Bomb — the projectile body (detonation lives in tanks.rs)
+│   ├── config.rs                  # ModelConfig/WeaponConfig/TanksConfig/TanksClientConfig
+│   ├── bots/
+│   │   └── controller.rs         # BotBrain — bot AI (input is generated inside the core)
+│   └── client/                    # the core's client mode: TanksClient (impl GameClientDef)
+│       ├── mod.rs                 # TanksClient — wires Predictor/ShotPredictor into the
+│       │                          #   engine's generic ClientState<TanksClient>
+│       ├── predictor.rs           # the motion replica built on motion.rs
+│       └── shot.rs                # gates, dedup, the raycast world
 ├── tests/
-│   └── sim.rs             # integration simulation scenarios (cargo test)
-├── pkg-web/               # the browser/Worker build (generated, not in git)
-└── pkg-node/              # the Node.js/Vitest build (generated, not in git)
+│   └── sim.rs                     # integration simulation scenarios (cargo test)
+├── pkg-web/                       # the browser/Worker build (generated, not in git)
+└── pkg-node/                      # the Node.js/Vitest build (generated, not in git)
 ```
 
 ## Build
@@ -53,9 +83,9 @@ Requires the Rust toolchain (see [getting-started.md](getting-started.md#rust-to
 
 ```bash
 npm run core:build        # both targets (web + nodejs)
-npm run core:build:web    # browser/Worker → core/pkg-web/
-npm run core:build:node   # Node.js (tests) → core/pkg-node/
-npm run core:test         # Rust core tests (cargo test)
+npm run core:build:web    # browser/Worker → games/tanks/core/pkg-web/
+npm run core:build:node   # Node.js (tests) → games/tanks/core/pkg-node/
+npm run core:test         # cargo test --workspace (both crates)
 ```
 
 `npm run build` includes `core:build:web`: the WASM binary is needed by both
@@ -65,14 +95,25 @@ the host's Worker and the client (a single asset in the Vite build).
 
 Two classes are exported: **`GameCore`** (the host's authoritative
 simulation) and **`ClientCore`** (client mode, see below). Init data is
-passed as JSON strings; the `GameCore` config is assembled by
-`packages/engine/src/lib/coreConfig.js` (`buildCoreConfig()`), and maps are exported to JSON
-via the `npm run maps:export` script (a step shared with serving maps
-without a client rebuild).
+passed as JSON strings, shaped `{engine: {...}, game: {...}}` — the engine
+half (`vimp_engine_core::config::EngineConfig`) is generic, the game half
+(`TanksConfig`) is parsed by the game crate. The `GameCore` config is
+assembled by `packages/engine/src/lib/coreConfig.js` (`buildCoreConfig()`),
+and maps are exported to JSON via the `npm run maps:export` script (a step
+shared with serving maps without a client rebuild).
+
+The wasm-bindgen boilerplate for both classes (mechanical 1:1 delegations
+into the generic `EngineSim<G>`/`ClientState<G>`) is generated by two
+macros in `packages/engine/core/src/abi.rs` — `export_game_core_abi!` and
+`export_client_core_abi!` — the single source of truth for the required
+method set, so the game crate can't silently drift from it. The game crate
+calls each macro next to its own additional methods (`try_fire`,
+`set_model`, `sync_panel`, `spawn_actor`'s custom args); `new` (config
+parsing) and non-`#[wasm_bindgen]` test accessors stay hand-written.
 
 ```js
 import { buildCoreConfig } from '../packages/engine/src/lib/coreConfig.js';
-const { GameCore } = require('../core/pkg-node/vimp_core.js'); // nodejs target
+const { GameCore } = require('../games/tanks/core/pkg-node/vimp_tanks_core.js'); // nodejs target
 
 const core = new GameCore(JSON.stringify(buildCoreConfig({ seed: 42 })));
 core.load_map(JSON.stringify(mapData)); // scaling happens inside the core
@@ -101,7 +142,7 @@ core.load_map(JSON.stringify(mapData)); // scaling happens inside the core
 ### Events (`take_events()`)
 
 A JSON array; the buffer clears on read. The standard engine dictionary
-(Wasm Host ABI, `core/src/events.rs`) — `GameCoreAdapter._drainEvents`
+(Wasm Host ABI, `packages/engine/core/src/events.rs`) — `GameCoreAdapter._drainEvents`
 routes it into meta by itself, with no game-side mediator: `panelSet`/
 `panelActive` → Panel (`field` is the game's panel-schema key, not tied to
 a specific weapon), `death` → RoundManager.reportKill, `shake` → per-user
@@ -138,7 +179,7 @@ projection of these events.
 - `frame_bytes()` — a copy of the frame (the nodejs target doesn't expose
   its memory).
 
-Frames are decoded by the client core (`core/src/client/unpack.rs`) — the
+Frames are decoded by the client core (`games/tanks/vimp-engine-core's client/unpack.rs`) — the
 packer and unpacker live in the same crate, so a layout mismatch is
 impossible by construction; the shapes are locked in by round-trip tests
 (`#[cfg(test)]` in `unpack.rs` plus `tests/core/core.test.js` and
@@ -153,7 +194,19 @@ impossible by construction; the shapes are locked in by round-trip tests
 
 A second wasm-bindgen class from the same binary; lives in the main thread
 of a client tab (for the host player, a second WASM instance sits next to
-the Worker). Its config is assembled by
+the Worker). `ClientCore` wraps
+`vimp_engine_core::client::game::ClientState<TanksClient>`: the engine
+crate owns the network buffer (`Interpolator`), the event-frame queue and
+the hot-buffer write (`ClientState<G>` in `packages/engine/core/src/client/game.rs`);
+`TanksClient` (`games/tanks/core/src/client/mod.rs`) implements the
+`GameClientDef` trait — `Predictor`/`ShotPredictor` orchestration, own-tank
+tracking, and the predicted render overlay. `export_client_core_abi!`
+generates the engine-minimum wasm-bindgen methods below (all but
+`set_model`/`try_fire`/`cycle_weapon`/`sync_panel`, which stay hand-written
+in `games/tanks/core/src/lib.rs` since their shape is game-specific). The
+trait's shape is validated by a fixture second client (`TestClient`, tests
+in `packages/engine/core/src/client/game.rs`) before any real second game
+exists. Its config is assembled by
 [packages/engine/src/lib/clientCoreConfig.js](../../packages/engine/src/lib/clientCoreConfig.js) from the
 `prediction`/`interpolation` sections of CONFIG_DATA plus the bundled
 `opcodes.js` registry; the `timeStepMs` field fixes the units (ms, unlike
@@ -179,8 +232,12 @@ the Worker). Its config is assembled by
 interpolated), `[3]` — the tank count N, followed by N×12
 (`keyId, gameId, x, y, angle, gun, vx, vy, engineLoad, condition, size,
 teamId`), then M dynamics × 5 (`keyId, index, x, y, angle`); the local
-tank's predicted record comes last (12 values, the same shape — it
-overrides the interpolated one). `keyId` — numeric ids from `SNAPSHOT_KEYS`.
+tank's predicted record comes last. This tail is written by the engine
+verbatim from `GameClientDef::render_overlay`'s `RenderOverlay.tail` — the
+engine only knows the camera (`RenderOverlay.camera`) and the presence flag,
+not the tail's field layout (`TanksClient::render_overlay` builds it as the
+same 12-value shape, so bytes are unchanged from before the trait split).
+`keyId` — numeric ids from `SNAPSHOT_KEYS`.
 
 **motion.rs** — shared mass-free tick formulas for motion (turret, throttle,
 lateral grip, thrust/braking, engine load, turning): the authoritative side
@@ -206,13 +263,13 @@ scenarios).
 
 | Layer | Where | Covers |
 | --- | --- | --- |
-| Rust unit | `core/src/*` (`#[cfg(test)]`) | PRNG, BodyTag, frame layout, the nav grid, A*, the spatial grid; the client module: round-trip unpack, the interpolator (seq/dedup/late/lerp), the predictor (replay/visualError/freeze), shots (gates/dedup/RTT), raycast, the hot buffer |
-| Predictor parity | `core/src/client/predictor.rs` (`mod parity`) | the predictor's motion replica against the Rapier world (6 scenarios) — **required to run for any edit to motion in the core or `models.js`** |
-| Rust integration | `core/tests/sim.rs` | simulation scenarios: driving, walls, hitscan kills, friendly fire, a bomb, weapon switching, bots (patrol and combat), clears, handoff |
+| Rust unit | `packages/engine/core/src/* + games/tanks/core/src/*` (`#[cfg(test)]`) | PRNG, BodyTag, frame layout, the nav grid, A*, the spatial grid; the client module: round-trip unpack, the interpolator (seq/dedup/late/lerp), the predictor (replay/visualError/freeze), shots (gates/dedup/RTT), raycast, the hot buffer |
+| Predictor parity | `games/tanks/core/src/client/predictor.rs` (`mod parity`) | the predictor's motion replica against the Rapier world (6 scenarios) — **required to run for any edit to motion in the core or `models.js`** |
+| Rust integration | `games/tanks/core/tests/sim.rs` | simulation scenarios: driving, walls, hitscan kills, friendly fire, a bomb, weapon switching, bots (patrol and combat), clears, handoff |
 | JS↔WASM harness | `tests/core/core.test.js` + `tests/core/clientCore.test.js` | the ABI on a real config/maps, frame round-trips via `decode_frame`; e2e for the client core: interpolation, seq reordering, predictor convergence with the core on a real config, try_fire and duplicate suppression |
 
 `tests/core/` tests are part of `npm test` and **are skipped** if
-`core/pkg-node/` isn't built (JS development is possible without the Rust
+`games/tanks/core/pkg-node/` isn't built (JS development is possible without the Rust
 toolchain). CI builds the core and runs both layers of tests.
 
 ## Known technical quirks

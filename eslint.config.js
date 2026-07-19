@@ -223,9 +223,9 @@ export default [
       'games/*/dist/**', // сборка бандлов игры (этап 6)
       'public/**', // статика, которую не нужно линтить
       'build/**',
-      'core/pkg-node/**', // сгенерированный wasm-pack glue (nodejs)
-      'core/pkg-web/**', // сгенерированный wasm-pack glue (web)
-      'core/target/**', // артефакты cargo
+      'games/*/core/pkg-node/**', // сгенерированный wasm-pack glue (nodejs)
+      'games/*/core/pkg-web/**', // сгенерированный wasm-pack glue (web)
+      'target/**', // артефакты cargo (workspace)
       'games/*/src/data/maps/json/**', // сгенерированные JSON-карты (maps:export)
       '**/.*', // игнорировать все файлы/директории, начинающиеся с '.'
       '**/_*', // игнорировать все файлы/директории, начинающиеся с '_'
