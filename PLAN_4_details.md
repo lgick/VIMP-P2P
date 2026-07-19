@@ -103,7 +103,15 @@
 
 **Уже generic / движковое, минимум работы:** `raycast.rs`, `pathfinder.rs`, `spatial.rs`, `rng.rs`, `map.rs` (респауны по произвольным командам), math в `physics.rs`.
 
-**Требует разделения `BodyTag`:** `physics.rs:4-16` — `Shot{weapon, owner_id}` игровые поля в движковом теге.
+**Требует разделения `BodyTag`:** `physics.rs:4-16` — `Shot{weapon, owner_id}` игровые поля в движковом теге. Остаётся нерешённым и после трейт-распила ниже (не блокирует его — `BodyTag::decode` вызывается только внутри `TanksSim`/`BotView`, не в движковом коде `game.rs`); актуально к физическому распилу crate (4b).
+
+**Фактическая реализация пункта 1 (трейты `GameDef`/`GameSim` + `EngineSim<TanksGame>`):**
+- `core/src/sim.rs` — `trait GameDef { type Sim: GameSim<Self>; }`, `trait GameSim<G>` (spawn/remove/reset участников, `apply_input`, запросы состояния, `on_fixed_step`/`on_contacts`/`on_before_destroy`/`on_ai_tick`, `build_snapshot_blocks`, `serialize`/`deserialize`, `rebuild_spatial_grid`), `struct SimCtx<'a>` (мир, конфиг, карта, нав-граф, сетка, PRNG, события, destroy-очередь) — конструируется только на время тика (`step`/`step_fixed`), остальные методы трейта получают точечные параметры вместо всего `SimCtx`.
+- `core/src/game.rs` — `EngineSim<G: GameDef = TanksGame>` (было `GameState`; `pub type GameState = EngineSim<TanksGame>` оставляет старое имя рабочим во всех вызывающих местах без правок). Владеет `world`/`map`/`nav`/`spatial`/`rng`/`accumulator`/`events`/`bodies_to_destroy`; `step`/`step_fixed` — единственное место, что зовёт `sim.on_fixed_step`/`on_contacts`/`on_before_destroy`/`on_ai_tick`; `build_snapshot_blocks` добавляет блок динамики карты поверх игровых блоков от `sim`.
+- `core/src/tanks.rs` — `TanksGame` (маркер), `TanksSim` (бывшие игровые поля `GameState`: `tanks`/`bots`/`shots`/накопители снапшота/`key_bits`), реализация `GameSim<TanksGame>` + перенесённые `process_hitscan`/`create_weapon_action`/`process_shots_expired_by_time`/`detonate`/`apply_damage`/`remove_shots`. `BotView<'a>` — адаптер с именами полей/методов монолитного `GameState` (`world`/`nav`/`spatial`/`rng`/`tanks`/`key_bits`/`weapon_index`/`tank_position_rounded`/`tank_alive`/`update_tank_keys`), передаётся в `BotBrain::update` вместо `&mut GameState` — тело `bots/controller.rs` не потребовало смысловых изменений, только замена типа параметра.
+- `on_before_destroy(&mut self, world: &PhysicsWorld, handle)` — метод трейта, которого не было в дословной сигнатуре PLAN.md §3.6; добавлен, т.к. `destroy_queued_bodies` (движковое) нуждается в игровом хуке для null-маркера уничтоженной бомбы без утечки `BodyTag`-семантики в `game.rs`.
+- `CoreConfig` не разделён на движковую/игровую половины (в `sim.rs`/`game.rs` используется целиком, `GameDef` без `type Config`) — этот шаг не был частью пункта 1, актуален вместе с `BodyTag`-разделением к физическому распилу 4b.
+- Проверено: `cargo test --manifest-path core/Cargo.toml` — 95/95 (включая `client::predictor::parity::*` и `state_dump_restores_identical_simulation`), пересборка `core:build:node`+`core:build:web`, `npm test` — 664/664, `npx eslint .` — чисто.
 
 ---
 

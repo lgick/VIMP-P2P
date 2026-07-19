@@ -16,8 +16,10 @@ pub mod map;
 pub mod motion;
 pub mod physics;
 pub mod rng;
+pub mod sim;
 pub mod snapshot;
 pub mod tank;
+pub mod tanks;
 
 use client::ClientState;
 use game::GameState;
@@ -57,21 +59,7 @@ impl GameCore {
     /// Информация о загруженной карте: setId, масштабированные респауны,
     /// размеры мира (JSON).
     pub fn map_info(&self) -> String {
-        let Some(map) = &self.state.map else {
-            return "null".to_string();
-        };
-
-        let width = map.grid.first().map(|row| row.len()).unwrap_or(0) as f32 * map.step;
-        let height = map.grid.len() as f32 * map.step;
-
-        serde_json::json!({
-            "setId": map.set_id,
-            "step": map.step,
-            "width": width,
-            "height": height,
-            "respawns": map.respawns,
-        })
-        .to_string()
+        self.state.map_info_json()
     }
 
     // ***** участники ***** //
@@ -170,22 +158,7 @@ impl GameCore {
     /// Живые игроки плоским массивом [id, teamId, x, y, ...]
     /// (аналог Game.getAlivePlayers для меты).
     pub fn alive_players(&self) -> Vec<f32> {
-        let mut out = Vec::new();
-
-        for (id, tank) in &self.state.tanks {
-            if !tank.is_alive() {
-                continue;
-            }
-
-            if let Some(pos) = self.state.tank_position_rounded(*id) {
-                out.push(*id as f32);
-                out.push(tank.team_id as f32);
-                out.push(pos[0]);
-                out.push(pos[1]);
-            }
-        }
-
-        out
+        self.state.alive_players_flat()
     }
 
     // ***** снапшот ***** //

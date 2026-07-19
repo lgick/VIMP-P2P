@@ -4,7 +4,7 @@ use std::f32::consts::PI;
 use rapier2d::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::game::GameState;
+use crate::tanks::BotView;
 
 // константы поведения бота (из src/server/modules/bots/BotController.js)
 const AI_UPDATE_INTERVAL: f32 = 0.1;
@@ -138,7 +138,7 @@ impl BotBrain {
         }
     }
 
-    fn key_bit(&self, game: &GameState, key: HeldKey) -> u32 {
+    fn key_bit(&self, game: &BotView<'_>, key: HeldKey) -> u32 {
         let bits = &game.key_bits;
 
         match key {
@@ -152,7 +152,7 @@ impl BotBrain {
     }
 
     /// Обновляет клавишу только при изменении состояния (JS _setKeyState).
-    fn set_key_state(&mut self, game: &mut GameState, key: HeldKey, is_down: bool) {
+    fn set_key_state(&mut self, game: &mut BotView<'_>, key: HeldKey, is_down: bool) {
         let index = HELD_KEYS.iter().position(|&k| k == key).unwrap();
 
         if self.key_states[index] != is_down {
@@ -165,18 +165,18 @@ impl BotBrain {
         }
     }
 
-    fn press_one_shot(&self, game: &mut GameState, bit: u32) {
+    fn press_one_shot(&self, game: &mut BotView<'_>, bit: u32) {
         game.update_tank_keys(self.game_id, "down", bit);
     }
 
-    fn release_all_keys(&mut self, game: &mut GameState) {
+    fn release_all_keys(&mut self, game: &mut BotView<'_>) {
         for key in HELD_KEYS {
             self.set_key_state(game, key, false);
         }
     }
 
     /// Главный метод обновления (вызывается на каждом тике ядра).
-    pub fn update(&mut self, game: &mut GameState, dt: f32) {
+    pub(crate) fn update(&mut self, game: &mut BotView<'_>, dt: f32) {
         self.my_position = game.tank_position_rounded(self.game_id);
 
         let has_body = game
@@ -238,7 +238,7 @@ impl BotBrain {
 
     /// Принятие решений: атаковать видимого врага, идти к последней
     /// известной позиции или патрулировать.
-    fn make_decision(&mut self, game: &mut GameState) {
+    fn make_decision(&mut self, game: &mut BotView<'_>) {
         if self.target_scan_timer > 0.0 && self.state != BotState::Patrolling {
             return;
         }
@@ -282,7 +282,7 @@ impl BotBrain {
     }
 
     /// Новая случайная цель патрулирования + путь к ней.
-    fn set_new_patrol_target(&mut self, game: &mut GameState) {
+    fn set_new_patrol_target(&mut self, game: &mut BotView<'_>) {
         let Some(nav) = &game.nav else {
             return;
         };
@@ -297,7 +297,7 @@ impl BotBrain {
     }
 
     /// Движение согласно текущему состоянию.
-    fn execute_movement(&mut self, game: &mut GameState) {
+    fn execute_movement(&mut self, game: &mut BotView<'_>) {
         if let Some(target) = self.target {
             if !game.tank_alive(target) {
                 self.target = None;
@@ -366,7 +366,7 @@ impl BotBrain {
     }
 
     /// Движение по текущему пути.
-    fn follow_path(&mut self, game: &mut GameState) {
+    fn follow_path(&mut self, game: &mut BotView<'_>) {
         let Some(path) = &self.path else {
             return;
         };
@@ -387,7 +387,7 @@ impl BotBrain {
     }
 
     /// Ближайший живой враг (через пространственную сетку).
-    fn find_closest_enemy(&self, game: &GameState) -> Option<u32> {
+    fn find_closest_enemy(&self, game: &BotView<'_>) -> Option<u32> {
         let my = self.my_position?;
         let my_team = game.tanks.get(&self.game_id)?.team_id;
 
@@ -414,7 +414,7 @@ impl BotBrain {
     }
 
     /// Движение к цели (gameId или точка) с обходом препятствий.
-    fn move_to(&mut self, game: &mut GameState, target: MoveTarget) {
+    fn move_to(&mut self, game: &mut BotView<'_>, target: MoveTarget) {
         let Some(tank) = game.tanks.get(&self.game_id) else {
             return;
         };
@@ -484,7 +484,7 @@ impl BotBrain {
     }
 
     /// Прицеливание и стрельба.
-    fn execute_aim_and_shoot(&mut self, game: &mut GameState) {
+    fn execute_aim_and_shoot(&mut self, game: &mut BotView<'_>) {
         let target_alive = self.target.is_some_and(|t| game.tank_alive(t));
 
         if self.reposition_timer > 0.0 || self.state != BotState::Attacking || !target_alive {
@@ -596,7 +596,7 @@ impl BotBrain {
     }
 
     /// Бот застрял: выравнивает башню по корпусу и стреляет в препятствие.
-    fn handle_clearing_obstacle(&mut self, game: &mut GameState) {
+    fn handle_clearing_obstacle(&mut self, game: &mut BotView<'_>) {
         self.release_all_keys(game);
 
         let Some((body_angle, gun_rotation)) = game.tanks.get(&self.game_id).and_then(|tank| {
@@ -630,7 +630,7 @@ impl BotBrain {
     }
 
     /// Новая боевая позиция для стрейфа после выстрела.
-    fn calculate_new_combat_position(&mut self, game: &mut GameState) {
+    fn calculate_new_combat_position(&mut self, game: &mut BotView<'_>) {
         let Some(my) = self.my_position else {
             return;
         };
@@ -657,7 +657,7 @@ impl BotBrain {
 /// Локальное избегание препятствий тремя лучами; динамические объекты
 /// карты игнорируются (бот их таранит).
 fn avoid_obstacles(
-    game: &GameState,
+    game: &BotView<'_>,
     my_body: RigidBodyHandle,
     my_position: Vector,
     desired_direction: Vector,

@@ -772,7 +772,7 @@ mod parity {
             predictor.step(current_mask | one_shot_now);
         }
 
-        let tank = &game.tanks[&1];
+        let tank = &game.sim.tanks[&1];
         let body = &game.world.bodies[tank.body];
         let (state, _) = tank.prediction_state(body);
 
