@@ -124,8 +124,8 @@ HostGame (facade/wiring + core-driven tick)
 
 **The core's boundary is simulation, not meta**: physics, tanks, both weapon
 types, bots, and binary frame packing live in the core; health/ammo live
-there too, and the panel is a projection of its events (`take_events()`:
-kill/health/ammo/activeWeapon/shake). Meta (chat, votes, stats, rounds, the
+there too, and the panel is a projection of its events (`take_events()`'s
+standard dictionary: panelSet/panelActive/death/shake/custom). Meta (chat, votes, stats, rounds, the
 participant registry, auth) is JS running in the Worker.
 
 ### Game loop

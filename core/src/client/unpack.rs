@@ -369,9 +369,10 @@ fn read_explosions(r: &mut Reader, schema: &BlockSchema) -> Result<BlockData, Un
     for _ in 0..count {
         let mut values = [0.0f32; 3];
 
-        for (i, field) in schema.fields.iter().enumerate().take(3) {
-            if let FieldValue::F32(v) = read_field(r, field.ty)? {
-                values[i] = v;
+        for (i, field) in schema.fields.iter().enumerate() {
+            match (i, read_field(r, field.ty)?) {
+                (0..=2, FieldValue::F32(v)) => values[i] = v,
+                _ => {}
             }
         }
 
@@ -389,9 +390,10 @@ fn read_dynamics(r: &mut Reader, schema: &BlockSchema) -> Result<BlockData, Unpa
         let index = r.u8()?;
         let mut values = [0.0f32; 3];
 
-        for (i, field) in schema.fields.iter().enumerate().take(3) {
-            if let FieldValue::F32(v) = read_field(r, field.ty)? {
-                values[i] = v;
+        for (i, field) in schema.fields.iter().enumerate() {
+            match (i, read_field(r, field.ty)?) {
+                (0..=2, FieldValue::F32(v)) => values[i] = v,
+                _ => {}
             }
         }
 

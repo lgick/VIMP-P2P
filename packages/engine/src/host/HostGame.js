@@ -50,8 +50,8 @@ class SnapshotThrottle {
 // Host-фасад: авторитетная часть матча в Worker'е хоста. Симуляция, боты и
 // упаковка снапшотов — в Rust-ядре через GameCoreAdapter, мета (RoundManager,
 // участники, чат, голосования, статистика, панель) — JS-модули ./meta/.
-// Питается событиями ядра (adapter._drainEvents → игровой coreEventRouter →
-// panel/reportKill/shake).
+// Питается стандартным словарём событий ядра (adapter._drainEvents →
+// panel/reportKill/shake; 'custom' — HostPlugin.onCoreEvent).
 export default class HostGame {
   /**
    * @param {Object} data - конфиг игры (merge hostDefaults + игровой
@@ -101,7 +101,7 @@ export default class HostGame {
     // симуляция — в ядре; адаптер под интерфейс Game.js
     this._game = new GameCoreAdapter(core, {
       participants: this._participants,
-      eventRouter: hostPlugin.coreEventRouter,
+      onCoreEvent: hostPlugin.onCoreEvent,
     });
 
     this._panel = new Panel(data.panel);

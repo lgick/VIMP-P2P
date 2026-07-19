@@ -119,13 +119,19 @@ fn push_f64(buf: &mut Vec<u8>, v: f64) {
 }
 
 /// Пишет одно поле строки по типу схемы (интерпретатор `FieldSchema`).
+/// Ветка `_` недостижима, пока `SnapshotConfig::validate()` вызывается на
+/// границе конструирования (`GameCore::new`/`ClientCore::new`) — паникуем
+/// явно вместо тихого no-op, чтобы регресс защиты проявился сразу, а не
+/// усечённым кадром в release-WASM.
 fn write_field(buf: &mut Vec<u8>, ty: FieldType, value: FieldValue) {
     match (ty, value) {
         (FieldType::F32, FieldValue::F32(v)) => push_f32(buf, v),
         (FieldType::U8, FieldValue::U8(v)) => buf.push(v),
         (FieldType::U16, FieldValue::U16(v)) => push_u16(buf, v),
         (FieldType::U32, FieldValue::U32(v)) => push_u32(buf, v),
-        _ => debug_assert!(false, "[core snapshot] тип поля не совпадает со схемой"),
+        _ => unreachable!(
+            "[core snapshot] тип поля не совпадает со схемой — validate() должен был это отловить"
+        ),
     }
 }
 

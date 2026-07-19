@@ -36,8 +36,8 @@ describe('HostPlugin танков: поверхность', () => {
     }
   });
 
-  it('coreEventRouter — функция роутинга событий ядра', () => {
-    expect(typeof hostPlugin.coreEventRouter).toBe('function');
+  it('не задаёт onCoreEvent: не использует custom-события ядра', () => {
+    expect(hostPlugin.onCoreEvent).toBeUndefined();
   });
 
   it('createModules возвращает scripted-модуль с контрактом движка', () => {

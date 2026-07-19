@@ -32,7 +32,6 @@ export default defineConfig({
             'tests/host/HostGame.test.js',
             'tests/host/hostPlugin.test.js',
             'tests/host/botCommand.test.js',
-            'tests/host/coreEventRouter.test.js',
             'tests/host/TanksBotManager.test.js',
           ],
         },
@@ -54,7 +53,6 @@ export default defineConfig({
           include: [
             'tests/host/hostPlugin.test.js',
             'tests/host/botCommand.test.js',
-            'tests/host/coreEventRouter.test.js',
             'tests/host/TanksBotManager.test.js',
             'tests/client/tanksClientPlugin.test.js',
           ],

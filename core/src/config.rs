@@ -169,6 +169,13 @@ impl BlockKind {
     /// совпадать по количеству и порядку типов полей — иначе `pack`/`unpack`
     /// либо тихо портят кадр (debug_assert выключен в release-WASM), либо
     /// паникуют (Explosions/Dynamics при лишних полях). См. `SnapshotConfig::validate`.
+    ///
+    /// `validate()` не проверяет `field.interp`: он потребляется позиционно
+    /// (по индексу `i`, не по имени) интерполятором
+    /// (`core/src/client/interpolator.rs`). Смена `interp` двух
+    /// одинаково-типизированных полей в JSON-схеме пройдёт `validate()`, но
+    /// молча сломает интерполяцию (например, angle-wrap применится не к
+    /// тому полю).
     fn expected_fields(self) -> &'static [FieldType] {
         use FieldType::{F32, U8, U16};
 

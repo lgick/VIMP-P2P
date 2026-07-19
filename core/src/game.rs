@@ -184,17 +184,18 @@ impl GameState {
 
         // мета узнаёт стартовые значения панели (как setActiveWeapon +
         // takeDamage(0) в конструкторе JS-версии)
-        self.events.push(CoreEvent::ActiveWeapon {
+        self.events.push(CoreEvent::PanelActive {
             id: game_id,
-            weapon: self
+            field: self
                 .cfg
                 .weapons
                 .get_index(tank.current_weapon)
                 .map(|(name, _)| name.clone())
                 .unwrap_or_default(),
         });
-        self.events.push(CoreEvent::Health {
+        self.events.push(CoreEvent::PanelSet {
             id: game_id,
+            field: "health".to_string(),
             value: tank.health,
         });
 
@@ -556,7 +557,7 @@ impl GameState {
         };
 
         if destroyed {
-            self.events.push(CoreEvent::Kill {
+            self.events.push(CoreEvent::Death {
                 victim: target_id,
                 killer: shooter_id,
             });

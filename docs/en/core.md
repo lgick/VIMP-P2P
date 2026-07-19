@@ -85,7 +85,7 @@ core.load_map(JSON.stringify(mapData)); // scaling happens inside the core
 | `new GameCore(config_json)` | the Rapier world, weapons, models, keys, the snapshot-key registry |
 | `load_map(map_json)` | map bodies + bots' nav graph; scale — the map's `scale` or the config's `mapScale` |
 | `map_info()` | JSON: `setId`, `step`, dimensions, scaled `respawns` |
-| `spawn_actor(id, model, teamId, x, y, angle°)` | a tank; emits `activeWeapon` + `health` |
+| `spawn_actor(id, model, teamId, x, y, angle°)` | a tank; emits `panelActive` + `panelSet(health)` |
 | `remove_actor(id)` | removal + a null marker in the next frame |
 | `reset_actor(id, teamId, x, y, angle°)` | respawn/team change (keys/throttle reset, health untouched) |
 | `reset_all_vitals()` | health/ammo back to defaults (a new round) |
@@ -100,15 +100,22 @@ core.load_map(JSON.stringify(mapData)); // scaling happens inside the core
 
 ### Events (`take_events()`)
 
-A JSON array; the buffer clears on read. Fuel for RoundManager (`kill`),
-Panel (`health`/`ammo`/`activeWeapon`), and the frame-side meta (`shake`):
+A JSON array; the buffer clears on read. The standard engine dictionary
+(Wasm Host ABI, `core/src/events.rs`) — `GameCoreAdapter._drainEvents`
+routes it into meta by itself, with no game-side mediator: `panelSet`/
+`panelActive` → Panel (`field` is the game's panel-schema key, not tied to
+a specific weapon), `death` → RoundManager.reportKill, `shake` → per-user
+camera shake in frame meta. `custom` is the only type outside the
+dictionary, carrying game-specific meaning: the adapter drains it as-is
+into `HostPlugin.onCoreEvent(data, services)` (tanks doesn't use it —
+`onCoreEvent` is left unset):
 
 ```json
 [
-  { "type": "kill", "victim": 2, "killer": 1 },
-  { "type": "health", "id": 2, "value": 60.0 },
-  { "type": "ammo", "id": 1, "weapon": "w1", "value": 199.0 },
-  { "type": "activeWeapon", "id": 1, "weapon": "w2" },
+  { "type": "death", "victim": 2, "killer": 1 },
+  { "type": "panelSet", "id": 2, "field": "health", "value": 60.0 },
+  { "type": "panelSet", "id": 1, "field": "w1", "value": 199.0 },
+  { "type": "panelActive", "id": 1, "field": "w2" },
   { "type": "shake", "id": 2, "intensity": 20, "duration": 200 }
 ]
 ```

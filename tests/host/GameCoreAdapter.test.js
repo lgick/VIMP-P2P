@@ -3,9 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import GameCoreAdapter from '../../packages/engine/src/host/GameCoreAdapter.js';
 
 // Юнит-тесты адаптера ядра: маппинг команд на ABI, различение бот/человек,
-// диспетчеризация событий ядра в инъецируемый eventRouter, флаги камеры в
+// генерик-роутинг стандартного словаря событий ядра (panelSet/panelActive/
+// death/shake) в мету + 'custom' в HostPlugin.onCoreEvent, флаги камеры в
 // packFrame. Ядро — фейк (реальный core покрыт интеграционными
-// HostGame.test.js и tests/core); игровой роутер — coreEventRouter.test.js.
+// HostGame.test.js и tests/core).
 
 // Фейк ядра: записывает вызовы, отдаёт заранее заданные события/кадр.
 const makeFakeCore = (events = []) => ({
@@ -68,8 +69,6 @@ const makeParticipants = (bots = new Set()) => ({
   get: id => ({ isScripted: bots.has(id) }),
 });
 
-const noopRouter = () => {};
-
 describe('GameCoreAdapter', () => {
   let core;
   let panel;
@@ -84,7 +83,6 @@ describe('GameCoreAdapter', () => {
   it('createMap грузит масштабированную карту со scale:1', () => {
     const adapter = new GameCoreAdapter(core, {
       participants: makeParticipants(),
-      eventRouter: noopRouter,
     });
 
     adapter.createMap({ step: 19.2, map: [[0]], scale: 0.6, setId: 'c1' });
@@ -100,7 +98,6 @@ describe('GameCoreAdapter', () => {
   it('createPlayer различает человека (spawn_actor) и бота (spawn_scripted_actor)', () => {
     const adapter = new GameCoreAdapter(core, {
       participants: makeParticipants(new Set([2])),
-      eventRouter: noopRouter,
     });
 
     adapter.createPlayer(1, 'm1', 'Human', 1, [10, 20, 0]);
@@ -121,7 +118,6 @@ describe('GameCoreAdapter', () => {
   it('removePlayer различает человека (remove_actor) и бота (remove_scripted_actor)', () => {
     const adapter = new GameCoreAdapter(core, {
       participants: makeParticipants(new Set([2])),
-      eventRouter: noopRouter,
     });
 
     adapter.removePlayer(1);
@@ -134,7 +130,6 @@ describe('GameCoreAdapter', () => {
   it('changePlayerData → reset_actor с координатами респауна', () => {
     const adapter = new GameCoreAdapter(core, {
       participants: makeParticipants(),
-      eventRouter: noopRouter,
     });
 
     adapter.changePlayerData(1, { respawnData: [5, 6, 180], teamId: 2 });
@@ -145,7 +140,6 @@ describe('GameCoreAdapter', () => {
   it('applyInput → apply_input с seq', () => {
     const adapter = new GameCoreAdapter(core, {
       participants: makeParticipants(),
-      eventRouter: noopRouter,
     });
 
     adapter.applyInput(1, 42, 'down', 'forward');
@@ -156,7 +150,6 @@ describe('GameCoreAdapter', () => {
   it('getPosition: [] от ядра → [0, 0]', () => {
     const adapter = new GameCoreAdapter(core, {
       participants: makeParticipants(),
-      eventRouter: noopRouter,
     });
 
     expect(adapter.getPosition(1)).toEqual([10, 20]);
@@ -166,7 +159,6 @@ describe('GameCoreAdapter', () => {
   it('getPlayersData парсит players_data ядра', () => {
     const adapter = new GameCoreAdapter(core, {
       participants: makeParticipants(),
-      eventRouter: noopRouter,
     });
 
     expect(adapter.getPlayersData()).toEqual({
@@ -174,35 +166,73 @@ describe('GameCoreAdapter', () => {
     });
   });
 
-  // словарь событий принадлежит игре: адаптер лишь дренирует take_events()
-  // и отдаёт каждое событие инъецируемому роутеру вместе с сервисами меты
-  it('updateData диспетчеризует события ядра в eventRouter с сервисами', () => {
+  // стандартный словарь событий ядра (Wasm Host ABI) роутится адаптером
+  // напрямую в мету — игре не нужен свой eventRouter
+  it('updateData роутит стандартные события ядра в панель/vimp', () => {
     const events = [
-      { type: 'health', id: 1, value: 80 },
-      { type: 'kill', victim: 2, killer: 1 },
+      { type: 'panelSet', id: 1, field: 'health', value: 80 },
+      { type: 'panelActive', id: 1, field: 'w2' },
+      { type: 'death', victim: 2, killer: 1 },
+      { type: 'shake', id: 1, intensity: 20, duration: 200 },
     ];
 
     core = makeFakeCore(events);
 
-    const eventRouter = vi.fn();
     const adapter = new GameCoreAdapter(core, {
       participants: makeParticipants(),
-      eventRouter,
     });
 
     adapter.injectServices({ vimp, panel });
     adapter.updateData(1 / 120);
 
     expect(core.calls).toContainEqual(['step', 1 / 120]);
-    expect(eventRouter).toHaveBeenCalledTimes(2);
-    expect(eventRouter).toHaveBeenNthCalledWith(1, events[0], { vimp, panel });
-    expect(eventRouter).toHaveBeenNthCalledWith(2, events[1], { vimp, panel });
+    expect(panel.updateUser).toHaveBeenCalledWith('1', 'health', 80, 'set');
+    expect(panel.setActiveWeapon).toHaveBeenCalledWith('1', 'w2');
+    expect(vimp.reportKill).toHaveBeenCalledWith('2', '1');
+    expect(vimp.triggerCameraShake).toHaveBeenCalledWith('1', {
+      intensity: 20,
+      duration: 200,
+    });
+  });
+
+  // 'custom' — единственный тип вне стандартного словаря, у него игровой
+  // смысл: адаптер отдаёт его опциональному HostPlugin.onCoreEvent как есть
+  it("updateData роутит 'custom' события в onCoreEvent, остальные не трогает его", () => {
+    const events = [
+      { type: 'custom', data: { foo: 'bar' } },
+      { type: 'panelSet', id: 1, field: 'health', value: 80 },
+    ];
+
+    core = makeFakeCore(events);
+
+    const onCoreEvent = vi.fn();
+    const adapter = new GameCoreAdapter(core, {
+      participants: makeParticipants(),
+      onCoreEvent,
+    });
+
+    adapter.injectServices({ vimp, panel });
+    adapter.updateData(1 / 120);
+
+    expect(onCoreEvent).toHaveBeenCalledTimes(1);
+    expect(onCoreEvent).toHaveBeenCalledWith({ foo: 'bar' }, { vimp, panel });
+  });
+
+  it('updateData не падает без onCoreEvent при отсутствии custom-событий', () => {
+    core = makeFakeCore([{ type: 'panelSet', id: 1, field: 'health', value: 80 }]);
+
+    const adapter = new GameCoreAdapter(core, {
+      participants: makeParticipants(),
+    });
+
+    adapter.injectServices({ vimp, panel });
+
+    expect(() => adapter.updateData(1 / 120)).not.toThrow();
   });
 
   it('packFrame прокидывает флаги камеры и playerId, возвращает ArrayBuffer', () => {
     const adapter = new GameCoreAdapter(core, {
       participants: makeParticipants(),
-      eventRouter: noopRouter,
     });
 
     const buf = adapter.packFrame([10, 20, true, '20:200'], 1234.5, 7, 1);
@@ -225,7 +255,6 @@ describe('GameCoreAdapter', () => {
   it('packFrame наблюдателя: playerId null → -1, без камеры', () => {
     const adapter = new GameCoreAdapter(core, {
       participants: makeParticipants(),
-      eventRouter: noopRouter,
     });
 
     adapter.packFrame(0, 1000, 3, null);

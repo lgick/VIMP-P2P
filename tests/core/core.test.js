@@ -263,11 +263,16 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
 
       const events = takeEvents(core);
 
-      expect(events).toContainEqual({ type: 'activeWeapon', id: 1, weapon: 'w1' });
-      expect(events).toContainEqual({ type: 'health', id: 1, value: 100 });
+      expect(events).toContainEqual({ type: 'panelActive', id: 1, field: 'w1' });
+      expect(events).toContainEqual({
+        type: 'panelSet',
+        id: 1,
+        field: 'health',
+        value: 100,
+      });
     });
 
-    it('убийство: ammo/shake/health/kill', () => {
+    it('убийство: panelSet(ammo)/shake/panelSet(health)/death', () => {
       core.spawn_actor(1, 'm1', 1, 0, 0, 0);
       core.spawn_actor(2, 'm1', 2, 60, 0, 0);
       stepTicks(core, 1);
@@ -279,13 +284,13 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
       }
 
       const events = takeEvents(core);
-      const kill = events.find(e => e.type === 'kill');
+      const death = events.find(e => e.type === 'death');
 
-      expect(kill).toEqual({ type: 'kill', victim: 2, killer: 1 });
+      expect(death).toEqual({ type: 'death', victim: 2, killer: 1 });
       expect(core.is_alive(2)).toBe(false);
 
       const ammo = events
-        .filter(e => e.type === 'ammo' && e.id === 1)
+        .filter(e => e.type === 'panelSet' && e.id === 1 && e.field === 'w1')
         .map(e => e.value);
 
       expect(ammo).toEqual([199, 198, 197]);
@@ -308,8 +313,18 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
 
       const events = takeEvents(core);
 
-      expect(events).toContainEqual({ type: 'health', id: 2, value: 100 });
-      expect(events).toContainEqual({ type: 'ammo', id: 1, weapon: 'w1', value: 200 });
+      expect(events).toContainEqual({
+        type: 'panelSet',
+        id: 2,
+        field: 'health',
+        value: 100,
+      });
+      expect(events).toContainEqual({
+        type: 'panelSet',
+        id: 1,
+        field: 'w1',
+        value: 200,
+      });
     });
   });
 

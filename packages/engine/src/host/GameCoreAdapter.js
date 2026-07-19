@@ -1,8 +1,9 @@
 // Адаптер Rust-ядра (GameCore) под интерфейс, который потребляют мета-модули
 // хоста (RoundManager, SocketManager) и host-фасад. За поверхностью Game.js
-// (+ упаковка снапшотов) стоит WASM-ядро; события ядра (take_events)
-// проецируются в мету через инъецируемый игровой eventRouter — словарь
-// типов событий принадлежит игре, адаптер его не знает.
+// (+ упаковка снапшотов) стоит WASM-ядро; события ядра (take_events) несут
+// стандартный движковый словарь (panelSet/panelActive/death/shake/custom,
+// Wasm Host ABI) — адаптер роутит их в мету сам. 'custom' (вне словаря,
+// игровой смысл) уходит в опциональный HostPlugin.onCoreEvent.
 //
 // Различие scripted/человек — по participants.get(gameId).isScripted:
 // scripted-участник создаётся как танк + ИИ-контроллер внутри ядра
@@ -14,13 +15,13 @@ export default class GameCoreAdapter {
    * @param {Object} deps
    * @param {ParticipantManager} deps.participants - реестр участников
    *   (различение scripted/человек при спавне и удалении).
-   * @param {Function} deps.eventRouter - игровой роутер событий ядра:
-   *   (event, services) => void.
+   * @param {Function} [deps.onCoreEvent] - игровой обработчик 'custom'
+   *   событий ядра: (data, services) => void.
    */
-  constructor(core, { participants, eventRouter }) {
+  constructor(core, { participants, onCoreEvent }) {
     this._core = core;
     this._participants = participants;
-    this._eventRouter = eventRouter;
+    this._onCoreEvent = onCoreEvent;
     this._services = {}; // { vimp, panel } — инъекция как у Game.js
   }
 
@@ -113,14 +114,37 @@ export default class GameCoreAdapter {
     this._drainEvents();
   }
 
-  // дренирует события ядра и отдаёт их игровому eventRouter'у вместе с
-  // сервисами меты ({ panel, vimp }) — маппинг типов событий на мету
-  // целиком у игры (games/tanks/src/host/coreEventRouter.js)
+  // дренирует события ядра и роутит стандартный словарь в мету ({ panel,
+  // vimp }); 'custom' (игровой смысл вне словаря) — в HostPlugin.onCoreEvent
   _drainEvents() {
     const events = JSON.parse(this._core.take_events());
+    const { panel, vimp } = this._services;
 
     for (const event of events) {
-      this._eventRouter(event, this._services);
+      switch (event.type) {
+        case 'panelSet':
+          panel.updateUser(String(event.id), event.field, event.value, 'set');
+          break;
+
+        case 'panelActive':
+          panel.setActiveWeapon(String(event.id), event.field);
+          break;
+
+        case 'death':
+          vimp.reportKill(String(event.victim), String(event.killer));
+          break;
+
+        case 'shake':
+          vimp.triggerCameraShake(String(event.id), {
+            intensity: event.intensity,
+            duration: event.duration,
+          });
+          break;
+
+        case 'custom':
+          this._onCoreEvent?.(event.data, this._services);
+          break;
+      }
     }
   }
 

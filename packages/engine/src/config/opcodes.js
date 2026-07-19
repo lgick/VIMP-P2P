@@ -23,6 +23,11 @@ export const SNAPSHOT_FORMAT_VERSION = 3;
 // + interpolator.rs (lerp/lerpAngle только для class:'hot') читают эту
 // схему, а не хардкодят раскладку по каждому kind).
 // Новое оружие/карта обязаны быть зарегистрированы здесь.
+// ВНИМАНИЕ: порядок и interp полей позиционно привязаны к Row-структурам
+// core/src/snapshot.rs — interpolator.rs читает interp по индексу поля
+// (schema.fields[i]), не по имени. Переставлять поля местами или менять
+// interp без синхронной правки Rust-структур нельзя: validate() проверяет
+// только количество и тип полей, не interp и не порядок по смыслу.
 export const SNAPSHOT_KEYS = {
   m1: {
     id: 1,

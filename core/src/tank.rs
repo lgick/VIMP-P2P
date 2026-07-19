@@ -222,8 +222,9 @@ impl Tank {
         let new_health = (self.health - amount).max(0.0);
 
         self.health = new_health;
-        events.push(CoreEvent::Health {
+        events.push(CoreEvent::PanelSet {
             id: self.game_id,
+            field: "health".to_string(),
             value: new_health,
         });
 
@@ -272,9 +273,9 @@ impl Tank {
                 (self.ammo[self.current_weapon] - consumption).max(0.0);
             self.cooldowns[self.current_weapon] = weapon.fire_rate;
 
-            events.push(CoreEvent::Ammo {
+            events.push(CoreEvent::PanelSet {
                 id: self.game_id,
-                weapon: name.clone(),
+                field: name.clone(),
                 value: self.ammo[self.current_weapon],
             });
 
@@ -312,9 +313,9 @@ impl Tank {
 
         self.current_weapon = key as usize;
 
-        events.push(CoreEvent::ActiveWeapon {
+        events.push(CoreEvent::PanelActive {
             id: self.game_id,
-            weapon: weapons.get_index(self.current_weapon).unwrap().0.clone(),
+            field: weapons.get_index(self.current_weapon).unwrap().0.clone(),
         });
     }
 
@@ -480,8 +481,9 @@ impl Tank {
         self.health = cfg.panel.get("health").map(|p| p.value).unwrap_or(100.0);
         self.condition = 3;
 
-        events.push(CoreEvent::Health {
+        events.push(CoreEvent::PanelSet {
             id: self.game_id,
+            field: "health".to_string(),
             value: self.health,
         });
 
@@ -489,9 +491,9 @@ impl Tank {
             self.ammo[index] = cfg.panel.get(name).map(|p| p.value).unwrap_or(0.0);
             self.cooldowns[index] = 0.0;
 
-            events.push(CoreEvent::Ammo {
+            events.push(CoreEvent::PanelSet {
                 id: self.game_id,
-                weapon: name.clone(),
+                field: name.clone(),
                 value: self.ammo[index],
             });
         }

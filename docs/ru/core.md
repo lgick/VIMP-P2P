@@ -84,7 +84,7 @@ core.load_map(JSON.stringify(mapData)); // масштабирование вну
 | `new GameCore(config_json)` | мир Rapier, оружие, модели, клавиши, реестр снапшот-ключей |
 | `load_map(map_json)` | тела карты + нав-граф ботов; масштаб — `scale` карты или `mapScale` конфига |
 | `map_info()` | JSON: `setId`, `step`, размеры, масштабированные `respawns` |
-| `spawn_actor(id, model, teamId, x, y, angle°)` | танк; эмитит `activeWeapon` + `health` |
+| `spawn_actor(id, model, teamId, x, y, angle°)` | танк; эмитит `panelActive` + `panelSet(health)` |
 | `remove_actor(id)` | удаление + null-маркер в следующем кадре |
 | `reset_actor(id, teamId, x, y, angle°)` | респаун/смена команды (клавиши/газ сброшены, здоровье — нет) |
 | `reset_all_vitals()` | здоровье/боезапас к дефолтам (новый раунд) |
@@ -99,15 +99,21 @@ core.load_map(JSON.stringify(mapData)); // масштабирование вну
 
 ### События (`take_events()`)
 
-JSON-массив; буфер очищается при чтении. Топливо для RoundManager
-(`kill`), Panel (`health`/`ammo`/`activeWeapon`), кадровой меты (`shake`):
+JSON-массив; буфер очищается при чтении. Стандартный движковый словарь
+(Wasm Host ABI, `core/src/events.rs`) — `GameCoreAdapter._drainEvents`
+роутит его в мету сам, без игрового посредника: `panelSet`/`panelActive` →
+Panel (`field` — ключ схемы панели игры, не завязан на конкретное оружие),
+`death` → RoundManager.reportKill, `shake` → тряска камеры (per-user мета
+кадра). `custom` — единственный тип вне словаря, с игровым смыслом:
+дренируется адаптером как есть и уходит в `HostPlugin.onCoreEvent(data,
+services)` (у танков не используется — `onCoreEvent` не задан):
 
 ```json
 [
-  { "type": "kill", "victim": 2, "killer": 1 },
-  { "type": "health", "id": 2, "value": 60.0 },
-  { "type": "ammo", "id": 1, "weapon": "w1", "value": 199.0 },
-  { "type": "activeWeapon", "id": 1, "weapon": "w2" },
+  { "type": "death", "victim": 2, "killer": 1 },
+  { "type": "panelSet", "id": 2, "field": "health", "value": 60.0 },
+  { "type": "panelSet", "id": 1, "field": "w1", "value": 199.0 },
+  { "type": "panelActive", "id": 1, "field": "w2" },
   { "type": "shake", "id": 2, "intensity": 20, "duration": 200 }
 ]
 ```

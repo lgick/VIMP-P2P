@@ -151,15 +151,17 @@ Implements the physics/bots/packing surface consumed by
   `changePlayerData` → `reset_actor`;
 - **input** → `apply_input` (seq is confirmed by the core in the frame's
   player block);
-- **event projection**: after `step`, drains `take_events()` and hands each
-  event to the injected game `eventRouter`
-  (`games/tanks/src/host/coreEventRouter.js`) together with the meta services
-  (`{ panel, vimp }`) — the event-type dictionary belongs to the game, the
-  adapter doesn't know it. The tanks router maps `health`/`ammo` →
-  `panel.updateUser(..., 'set')`, `activeWeapon` → `panel.setActiveWeapon`,
-  `shake` → `HostGame.triggerCameraShake`, `kill` → `HostGame.reportKill`
-  (health/ammo live in the core, the panel is their projection). The core
-  operates on numeric ids (u32), meta keys by string — the router converts
+- **event projection**: after `step`, drains `take_events()` and routes the
+  standard engine dictionary (Wasm Host ABI, `core/src/events.rs`) itself,
+  with no game-side mediator: `panelSet`/`panelActive` →
+  `panel.updateUser(..., 'set')`/`panel.setActiveWeapon` (`field` is the
+  game's panel-schema key, not tied to a specific weapon), `death` →
+  `HostGame.reportKill`, `shake` → `HostGame.triggerCameraShake`
+  (health/ammo live in the core, the panel is their projection). `custom` is
+  the only type carrying game-specific meaning outside the dictionary:
+  drained as-is into the optional `HostPlugin.onCoreEvent(data, { panel,
+  vimp })` (tanks doesn't use it — `onCoreEvent` is left unset). The core
+  operates on numeric ids (u32), meta keys by string — the adapter converts
   event ids to strings at this boundary;
 - **packing**: `packBody` → `pack_body`, `packFrame` → `pack_frame` +
   `frame_bytes` (a copy from WASM memory, works on both the web and nodejs
@@ -182,11 +184,12 @@ core). It's built by the `createModules(ctx)` factory
 **The tanks HostPlugin** (`games/tanks/src/host/index.js`; imported by the
 engine only through `gameRegistry.static.js` — temporary static composition
 until stage 6) — the whole game half of the host as a single
-object: `gameConfig`, `authSchema`, `coreEventRouter`, `chatCommands`
-(`/bot`), `systemMessages` (the `b:*` group), `createModules` (the bots
-scripted module), `buildClientGameConfig()` (the game half of CONFIG_DATA).
-It's consumed by `host.worker.js` (configs/auth) and `HostGame` (the event
-router, commands, codes, modules).
+object: `gameConfig`, `authSchema`, `chatCommands` (`/bot`), `systemMessages`
+(the `b:*` group), `createModules` (the bots scripted module),
+`buildClientGameConfig()` (the game half of CONFIG_DATA); optionally
+`onCoreEvent` for game-specific `custom` core events (tanks doesn't set it).
+It's consumed by `host.worker.js` (configs/auth) and `HostGame` (commands,
+codes, modules, `onCoreEvent`).
 
 ## Meta modules (`packages/engine/src/host/meta/`)
 

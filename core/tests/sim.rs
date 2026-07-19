@@ -234,12 +234,12 @@ fn hitscan_shot_kills_after_three_hits() {
 
     let kills: Vec<_> = all
         .iter()
-        .filter(|e| matches!(e, CoreEvent::Kill { .. }))
+        .filter(|e| matches!(e, CoreEvent::Death { .. }))
         .collect();
 
     assert_eq!(kills.len(), 1, "события: {all:?}");
 
-    if let CoreEvent::Kill { victim, killer } = kills[0] {
+    if let CoreEvent::Death { victim, killer } = kills[0] {
         assert_eq!(*victim, 2);
         assert_eq!(*killer, 1);
     }
@@ -251,7 +251,7 @@ fn hitscan_shot_kills_after_three_hits() {
     let healths: Vec<f64> = all
         .iter()
         .filter_map(|e| match e {
-            CoreEvent::Health { id: 2, value } => Some(*value),
+            CoreEvent::PanelSet { id: 2, field, value } if field == "health" => Some(*value),
             _ => None,
         })
         .collect();
@@ -262,7 +262,7 @@ fn hitscan_shot_kills_after_three_hits() {
     let ammo: Vec<f64> = all
         .iter()
         .filter_map(|e| match e {
-            CoreEvent::Ammo { id: 1, weapon, value } if weapon == "w1" => Some(*value),
+            CoreEvent::PanelSet { id: 1, field, value } if field == "w1" => Some(*value),
             _ => None,
         })
         .collect();
@@ -287,7 +287,7 @@ fn friendly_fire_disabled_blocks_damage() {
 
     assert!(
         !all.iter()
-            .any(|e| matches!(e, CoreEvent::Health { id: 2, .. })),
+            .any(|e| matches!(e, CoreEvent::PanelSet { id: 2, field, .. } if field == "health")),
         "урон по своей команде запрещён: {all:?}"
     );
     assert!(core.is_alive(2));
@@ -316,7 +316,7 @@ fn bomb_detonates_and_damages_nearby_enemy() {
     let victim_health: Vec<f64> = all
         .iter()
         .filter_map(|e| match e {
-            CoreEvent::Health { id: 2, value } => Some(*value),
+            CoreEvent::PanelSet { id: 2, field, value } if field == "health" => Some(*value),
             _ => None,
         })
         .collect();
@@ -328,7 +328,7 @@ fn bomb_detonates_and_damages_nearby_enemy() {
     // владелец бомбы — та же команда)
     assert!(
         !all.iter()
-            .any(|e| matches!(e, CoreEvent::Health { id: 1, .. })),
+            .any(|e| matches!(e, CoreEvent::PanelSet { id: 1, field, .. } if field == "health")),
         "владелец не должен получить урон: {all:?}"
     );
 }
@@ -347,7 +347,7 @@ fn weapon_switch_cycles_and_reports() {
 
     assert!(
         all.iter().any(
-            |e| matches!(e, CoreEvent::ActiveWeapon { id: 1, weapon } if weapon == "w2")
+            |e| matches!(e, CoreEvent::PanelActive { id: 1, field } if field == "w2")
         ),
         "события: {all:?}"
     );
@@ -359,7 +359,7 @@ fn weapon_switch_cycles_and_reports() {
 
     assert!(
         all.iter().any(
-            |e| matches!(e, CoreEvent::ActiveWeapon { id: 1, weapon } if weapon == "w1")
+            |e| matches!(e, CoreEvent::PanelActive { id: 1, field } if field == "w1")
         ),
         "цикл должен вернуться к w1: {all:?}"
     );
@@ -399,7 +399,7 @@ fn bots_fight_each_other() {
 
         if events(&mut core)
             .iter()
-            .any(|e| matches!(e, CoreEvent::Kill { .. }))
+            .any(|e| matches!(e, CoreEvent::Death { .. }))
         {
             killed = true;
             break;
