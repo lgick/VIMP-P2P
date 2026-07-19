@@ -39,6 +39,8 @@ impl GameCore {
         let cfg: config::CoreConfig =
             serde_json::from_str(config_json).map_err(|e| JsError::new(&e.to_string()))?;
 
+        cfg.snapshot.validate().map_err(|e| JsError::new(&e))?;
+
         let packer = SnapshotPacker::new(cfg.snapshot.clone());
 
         Ok(GameCore {
@@ -74,7 +76,7 @@ impl GameCore {
 
     // ***** участники ***** //
 
-    pub fn spawn_tank(
+    pub fn spawn_actor(
         &mut self,
         game_id: u32,
         model: &str,
@@ -84,17 +86,17 @@ impl GameCore {
         angle_deg: f32,
     ) -> Result<(), JsError> {
         self.state
-            .spawn_tank(game_id, model, team_id, x, y, angle_deg)
+            .spawn_actor(game_id, model, team_id, x, y, angle_deg)
             .map_err(|e| JsError::new(&e))
     }
 
-    pub fn remove_tank(&mut self, game_id: u32) {
-        self.state.remove_tank(game_id);
+    pub fn remove_actor(&mut self, game_id: u32) {
+        self.state.remove_actor(game_id);
     }
 
     /// Респаун/смена команды (аналог Game.changePlayerData).
-    pub fn reset_tank(&mut self, game_id: u32, team_id: u8, x: f32, y: f32, angle_deg: f32) {
-        self.state.reset_tank(game_id, team_id, x, y, angle_deg);
+    pub fn reset_actor(&mut self, game_id: u32, team_id: u8, x: f32, y: f32, angle_deg: f32) {
+        self.state.reset_actor(game_id, team_id, x, y, angle_deg);
     }
 
     /// Сброс здоровья/боезапаса всех танков (аналог Panel.reset).
@@ -102,7 +104,7 @@ impl GameCore {
         self.state.reset_all_vitals();
     }
 
-    pub fn add_bot(
+    pub fn spawn_scripted_actor(
         &mut self,
         game_id: u32,
         model: &str,
@@ -112,12 +114,12 @@ impl GameCore {
         angle_deg: f32,
     ) -> Result<(), JsError> {
         self.state
-            .add_bot(game_id, model, team_id, x, y, angle_deg)
+            .spawn_scripted_actor(game_id, model, team_id, x, y, angle_deg)
             .map_err(|e| JsError::new(&e))
     }
 
-    pub fn remove_bot(&mut self, game_id: u32) {
-        self.state.remove_bot(game_id);
+    pub fn remove_scripted_actor(&mut self, game_id: u32) {
+        self.state.remove_scripted_actor(game_id);
     }
 
     // ***** ввод и шаг ***** //
@@ -314,6 +316,8 @@ impl ClientCore {
     pub fn new(config_json: &str) -> Result<ClientCore, JsError> {
         let cfg: config::ClientConfig =
             serde_json::from_str(config_json).map_err(|e| JsError::new(&e.to_string()))?;
+
+        cfg.snapshot.validate().map_err(|e| JsError::new(&e))?;
 
         Ok(ClientCore {
             state: ClientState::new(cfg),

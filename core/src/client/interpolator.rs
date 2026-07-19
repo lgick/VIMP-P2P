@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 
-use crate::config::InterpolationConfig;
+use crate::config::{BlockClass, Interp, InterpolationConfig, SnapshotConfig};
 use crate::physics::{lerp, lerp_angle};
 
 use super::unpack::{BlockData, DecodedCamera, DecodedSnapshot};
@@ -20,8 +20,8 @@ const SEQ_DEDUP_WINDOW: u32 = 128;
 // maxFrameAge чистил буфер при живом потоке кадров)
 const MAX_BUFFER_FRAMES: usize = 256;
 
-// индексы углов в строке танка (angle, gunRotation) и длина лерп-части
-const TANK_ANGLE_INDEXES: [usize; 2] = [2, 3];
+// длина лерп-части строки танка (x, y, angle, gunRotation, vx, vy, engineLoad);
+// способ интерполяции каждого поля — из схемы (Interp::Lerp/LerpAngle)
 const TANK_LERP_LENGTH: usize = 7;
 
 /// Содержимое кадра для выдачи: снапшот + камера.
@@ -75,6 +75,7 @@ pub struct SampleResult {
 pub struct Interpolator {
     delay: f64,
     max_frame_age: f64,
+    snapshot_cfg: SnapshotConfig,
     frames: Vec<BufferedFrame>,
     offset_ema: Option<f64>,
     last_render_time: Option<f64>,
@@ -83,10 +84,11 @@ pub struct Interpolator {
 }
 
 impl Interpolator {
-    pub fn new(cfg: &InterpolationConfig) -> Self {
+    pub fn new(cfg: &InterpolationConfig, snapshot_cfg: SnapshotConfig) -> Self {
         Self {
             delay: cfg.delay,
             max_frame_age: cfg.max_frame_age,
+            snapshot_cfg,
             frames: Vec::new(),
             offset_ema: None,
             last_render_time: None,
@@ -227,7 +229,12 @@ impl Interpolator {
 
         // нет следующего кадра — hold на A без экстраполяции
         let Some(frame_b) = self.frames.get(1) else {
-            let game = interpolate_game(&frame_a.data.snapshot, &frame_a.data.snapshot, 0.0);
+            let game = interpolate_game(
+                &frame_a.data.snapshot,
+                &frame_a.data.snapshot,
+                0.0,
+                &self.snapshot_cfg,
+            );
             let camera = strip_camera(frame_a.data.camera.as_ref());
 
             return SampleResult {
@@ -241,7 +248,12 @@ impl Interpolator {
             / (frame_b.server_time - frame_a.server_time))
             .clamp(0.0, 1.0) as f32;
 
-        let game = interpolate_game(&frame_a.data.snapshot, &frame_b.data.snapshot, alpha);
+        let game = interpolate_game(
+            &frame_a.data.snapshot,
+            &frame_b.data.snapshot,
+            alpha,
+            &self.snapshot_cfg,
+        );
         let camera = interpolate_camera(
             frame_a.data.camera.as_ref(),
             frame_b.data.camera.as_ref(),
@@ -272,15 +284,40 @@ impl Interpolator {
     }
 }
 
+// интерполирует одно значение по способу интерполяции схемы;
+// Discrete — без интерполяции, значение кадра A (как condition/size/team)
+fn interp_value(interp: Interp, a: f32, b: f32, alpha: f32) -> f32 {
+    match interp {
+        Interp::Lerp => lerp(a, b, alpha),
+        Interp::LerpAngle => lerp_angle(a, b, alpha),
+        Interp::Discrete => a,
+    }
+}
+
 // интерполирует непрерывную часть снапшота (танки + динамика карты);
-// блок участвует, только если присутствует в обоих кадрах
-fn interpolate_game(a: &DecodedSnapshot, b: &DecodedSnapshot, alpha: f32) -> InterpolatedGame {
+// блок участвует, только если присутствует в обоих кадрах И его класс —
+// Hot (событийные блоки — трассеры/бомбы/взрывы — не интерполируются,
+// выдаются кадром как есть через take_frames)
+fn interpolate_game(
+    a: &DecodedSnapshot,
+    b: &DecodedSnapshot,
+    alpha: f32,
+    cfg: &SnapshotConfig,
+) -> InterpolatedGame {
     let mut game = InterpolatedGame::default();
 
     for block in &a.blocks {
         let Some(block_b) = b.block_by_key(&block.key) else {
             continue;
         };
+
+        let Some(schema) = cfg.keys.get(&block.key) else {
+            continue;
+        };
+
+        if schema.class != BlockClass::Hot {
+            continue;
+        }
 
         match (&block.data, block_b) {
             (BlockData::Tanks(tanks_a), BlockData::Tanks(tanks_b)) => {
@@ -293,11 +330,9 @@ fn interpolate_game(a: &DecodedSnapshot, b: &DecodedSnapshot, alpha: f32) -> Int
                     let mut floats = [0.0f32; TANK_LERP_LENGTH];
 
                     for i in 0..TANK_LERP_LENGTH {
-                        floats[i] = if TANK_ANGLE_INDEXES.contains(&i) {
-                            lerp_angle(row_a.floats[i], row_b.floats[i], alpha)
-                        } else {
-                            lerp(row_a.floats[i], row_b.floats[i], alpha)
-                        };
+                        let interp = schema.fields.get(i).map_or(Interp::Discrete, |f| f.interp);
+
+                        floats[i] = interp_value(interp, row_a.floats[i], row_b.floats[i], alpha);
                     }
 
                     // дискретные поля (condition, size, teamId) — из кадра A
@@ -318,14 +353,18 @@ fn interpolate_game(a: &DecodedSnapshot, b: &DecodedSnapshot, alpha: f32) -> Int
                         continue;
                     };
 
+                    let mut values = [0.0f32; 3];
+
+                    for i in 0..3 {
+                        let interp = schema.fields.get(i).map_or(Interp::Discrete, |f| f.interp);
+
+                        values[i] = interp_value(interp, values_a[i], values_b[i], alpha);
+                    }
+
                     game.dynamics.push(InterpolatedDynamic {
                         key_id: block.key_id,
                         index: *index,
-                        values: [
-                            lerp(values_a[0], values_b[0], alpha),
-                            lerp(values_a[1], values_b[1], alpha),
-                            lerp_angle(values_a[2], values_b[2], alpha),
-                        ],
+                        values,
                     });
                 }
             }
@@ -360,6 +399,7 @@ mod tests {
     use indexmap::IndexMap;
 
     use super::*;
+    use crate::config::test_support::full_snapshot_config;
     use crate::snapshot::TankRow;
 
     use super::super::unpack::DecodedBlock;
@@ -367,10 +407,13 @@ mod tests {
     const DELAY: f64 = 100.0;
 
     fn make() -> Interpolator {
-        Interpolator::new(&InterpolationConfig {
-            delay: DELAY,
-            max_frame_age: 1000.0,
-        })
+        Interpolator::new(
+            &InterpolationConfig {
+                delay: DELAY,
+                max_frame_age: 1000.0,
+            },
+            full_snapshot_config(3, 5),
+        )
     }
 
     fn tank_row(x: f32, angle: f32) -> TankRow {

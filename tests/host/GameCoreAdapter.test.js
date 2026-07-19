@@ -17,20 +17,20 @@ const makeFakeCore = (events = []) => ({
   clear() {
     this.calls.push(['clear']);
   },
-  spawn_tank(...a) {
-    this.calls.push(['spawn_tank', ...a]);
+  spawn_actor(...a) {
+    this.calls.push(['spawn_actor', ...a]);
   },
-  add_bot(...a) {
-    this.calls.push(['add_bot', ...a]);
+  spawn_scripted_actor(...a) {
+    this.calls.push(['spawn_scripted_actor', ...a]);
   },
-  remove_tank(id) {
-    this.calls.push(['remove_tank', id]);
+  remove_actor(id) {
+    this.calls.push(['remove_actor', id]);
   },
-  remove_bot(id) {
-    this.calls.push(['remove_bot', id]);
+  remove_scripted_actor(id) {
+    this.calls.push(['remove_scripted_actor', id]);
   },
-  reset_tank(...a) {
-    this.calls.push(['reset_tank', ...a]);
+  reset_actor(...a) {
+    this.calls.push(['reset_actor', ...a]);
   },
   apply_input(...a) {
     this.calls.push(['apply_input', ...a]);
@@ -97,7 +97,7 @@ describe('GameCoreAdapter', () => {
     expect(parsed.setId).toBe('c1');
   });
 
-  it('createPlayer различает человека (spawn_tank) и бота (add_bot)', () => {
+  it('createPlayer различает человека (spawn_actor) и бота (spawn_scripted_actor)', () => {
     const adapter = new GameCoreAdapter(core, {
       participants: makeParticipants(new Set([2])),
       eventRouter: noopRouter,
@@ -106,11 +106,19 @@ describe('GameCoreAdapter', () => {
     adapter.createPlayer(1, 'm1', 'Human', 1, [10, 20, 0]);
     adapter.createPlayer(2, 'm1', 'Bot', 2, [30, 40, 90]);
 
-    expect(core.calls).toContainEqual(['spawn_tank', 1, 'm1', 1, 10, 20, 0]);
-    expect(core.calls).toContainEqual(['add_bot', 2, 'm1', 2, 30, 40, 90]);
+    expect(core.calls).toContainEqual(['spawn_actor', 1, 'm1', 1, 10, 20, 0]);
+    expect(core.calls).toContainEqual([
+      'spawn_scripted_actor',
+      2,
+      'm1',
+      2,
+      30,
+      40,
+      90,
+    ]);
   });
 
-  it('removePlayer различает человека (remove_tank) и бота (remove_bot)', () => {
+  it('removePlayer различает человека (remove_actor) и бота (remove_scripted_actor)', () => {
     const adapter = new GameCoreAdapter(core, {
       participants: makeParticipants(new Set([2])),
       eventRouter: noopRouter,
@@ -119,11 +127,11 @@ describe('GameCoreAdapter', () => {
     adapter.removePlayer(1);
     adapter.removePlayer(2);
 
-    expect(core.calls).toContainEqual(['remove_tank', 1]);
-    expect(core.calls).toContainEqual(['remove_bot', 2]);
+    expect(core.calls).toContainEqual(['remove_actor', 1]);
+    expect(core.calls).toContainEqual(['remove_scripted_actor', 2]);
   });
 
-  it('changePlayerData → reset_tank с координатами респауна', () => {
+  it('changePlayerData → reset_actor с координатами респауна', () => {
     const adapter = new GameCoreAdapter(core, {
       participants: makeParticipants(),
       eventRouter: noopRouter,
@@ -131,7 +139,7 @@ describe('GameCoreAdapter', () => {
 
     adapter.changePlayerData(1, { respawnData: [5, 6, 180], teamId: 2 });
 
-    expect(core.calls).toContainEqual(['reset_tank', 1, 2, 5, 6, 180]);
+    expect(core.calls).toContainEqual(['reset_actor', 1, 2, 5, 6, 180]);
   });
 
   it('applyInput → apply_input с seq', () => {

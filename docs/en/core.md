@@ -85,11 +85,11 @@ core.load_map(JSON.stringify(mapData)); // scaling happens inside the core
 | `new GameCore(config_json)` | the Rapier world, weapons, models, keys, the snapshot-key registry |
 | `load_map(map_json)` | map bodies + bots' nav graph; scale — the map's `scale` or the config's `mapScale` |
 | `map_info()` | JSON: `setId`, `step`, dimensions, scaled `respawns` |
-| `spawn_tank(id, model, teamId, x, y, angle°)` | a tank; emits `activeWeapon` + `health` |
-| `remove_tank(id)` | removal + a null marker in the next frame |
-| `reset_tank(id, teamId, x, y, angle°)` | respawn/team change (keys/throttle reset, health untouched) |
+| `spawn_actor(id, model, teamId, x, y, angle°)` | a tank; emits `activeWeapon` + `health` |
+| `remove_actor(id)` | removal + a null marker in the next frame |
+| `reset_actor(id, teamId, x, y, angle°)` | respawn/team change (keys/throttle reset, health untouched) |
 | `reset_all_vitals()` | health/ammo back to defaults (a new round) |
-| `add_bot(id, model, teamId, x, y, angle°)` / `remove_bot(id)` | a tank + AI controller inside the core |
+| `spawn_scripted_actor(id, model, teamId, x, y, angle°)` / `remove_scripted_actor(id)` | a tank + AI controller inside the core |
 | `apply_input(id, seq, action, name)` | `'down'/'up'` input + key name; `seq` is confirmed in the player block |
 | `step(dt)` | fixed physics steps + bot AI + the spatial grid |
 | `clear()` | fully clears the world (a map change) |
@@ -214,7 +214,7 @@ toolchain). CI builds the core and runs both layers of tests.
   step**: a shot fired the same tick as a spawn "misses" the target
   (tests use a warm-up `step`). Doesn't show up in real scenarios (a spawn
   at round start).
-- `remove_tank` places a null removal marker in the next frame itself.
+- `remove_actor` places a null removal marker in the next frame itself.
 
 ---
 

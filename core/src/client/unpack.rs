@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use serde_json::{Map, Value, json};
 
 use crate::bomb::BombRow;
-use crate::config::{BlockKind, SnapshotConfig};
+use crate::config::{BlockKind, BlockSchema, FieldType, FieldValue, PLAYER_STATE_LEN, SnapshotConfig};
 use crate::physics::round2;
 use crate::snapshot::{TankRow, TracerRow};
 
@@ -30,7 +30,7 @@ pub struct DecodedCamera {
 pub struct DecodedPlayer {
     pub game_id: u8,
     pub input_seq: u32,
-    pub state: [f32; 8],
+    pub state: [f32; PLAYER_STATE_LEN],
     pub centering: bool,
 }
 
@@ -139,6 +139,18 @@ impl<'a> Reader<'a> {
     }
 }
 
+/// Читает одно поле строки по типу схемы (интерпретатор `FieldSchema`,
+/// зеркало `snapshot::write_field`). Float снапшота — с округлением
+/// round2 (readFloat из JS-версии).
+fn read_field(r: &mut Reader, ty: FieldType) -> Result<FieldValue, UnpackError> {
+    Ok(match ty {
+        FieldType::F32 => FieldValue::F32(r.f32_round2()?),
+        FieldType::U8 => FieldValue::U8(r.u8()?),
+        FieldType::U16 => FieldValue::U16(r.u16()?),
+        FieldType::U32 => FieldValue::U32(r.u32()?),
+    })
+}
+
 /// Распаковывает бинарный кадр (порт unpackFrame).
 pub fn unpack_frame(data: &[u8], cfg: &SnapshotConfig) -> Result<DecodedFrame, UnpackError> {
     let mut r = Reader::new(data);
@@ -183,7 +195,7 @@ pub fn unpack_frame(data: &[u8], cfg: &SnapshotConfig) -> Result<DecodedFrame, U
     if flags & CAMERA_FLAG_HAS_PLAYER != 0 {
         let game_id = r.u8()?;
         let input_seq = r.u32()?;
-        let mut state = [0.0f32; 8];
+        let mut state = [0.0f32; PLAYER_STATE_LEN];
 
         for value in &mut state {
             *value = r.f32_raw()?; // без округления (предикшен)
@@ -210,11 +222,11 @@ pub fn unpack_frame(data: &[u8], cfg: &SnapshotConfig) -> Result<DecodedFrame, U
         };
 
         let data = match info.kind {
-            BlockKind::Tanks => read_tanks(&mut r)?,
-            BlockKind::Tracers => read_tracers(&mut r)?,
-            BlockKind::Bombs => read_bombs(&mut r)?,
-            BlockKind::Explosions => read_explosions(&mut r)?,
-            BlockKind::Dynamics => read_dynamics(&mut r)?,
+            BlockKind::Tanks => read_tanks(&mut r, info)?,
+            BlockKind::Tracers => read_tracers(&mut r, info)?,
+            BlockKind::Bombs => read_bombs(&mut r, info)?,
+            BlockKind::Explosions => read_explosions(&mut r, info)?,
+            BlockKind::Dynamics => read_dynamics(&mut r, info)?,
         };
 
         snapshot.blocks.push(DecodedBlock {
@@ -234,7 +246,7 @@ pub fn unpack_frame(data: &[u8], cfg: &SnapshotConfig) -> Result<DecodedFrame, U
     })
 }
 
-fn read_tanks(r: &mut Reader) -> Result<BlockData, UnpackError> {
+fn read_tanks(r: &mut Reader, schema: &BlockSchema) -> Result<BlockData, UnpackError> {
     let count = r.u8()?;
     let mut result = IndexMap::new();
 
@@ -247,14 +259,19 @@ fn read_tanks(r: &mut Reader) -> Result<BlockData, UnpackError> {
         }
 
         let mut floats = [0.0f32; 7];
+        let mut condition = 0u8;
+        let mut size = 0u8;
+        let mut team = 0u8;
 
-        for value in &mut floats {
-            *value = r.f32_round2()?;
+        for (i, field) in schema.fields.iter().enumerate() {
+            match (i, read_field(r, field.ty)?) {
+                (0..=6, FieldValue::F32(v)) => floats[i] = v,
+                (7, FieldValue::U8(v)) => condition = v,
+                (8, FieldValue::U8(v)) => size = v,
+                (9, FieldValue::U8(v)) => team = v,
+                _ => {}
+            }
         }
-
-        let condition = r.u8()?;
-        let size = r.u8()?;
-        let team = r.u8()?;
 
         result.insert(
             id,
@@ -270,19 +287,23 @@ fn read_tanks(r: &mut Reader) -> Result<BlockData, UnpackError> {
     Ok(BlockData::Tanks(result))
 }
 
-fn read_tracers(r: &mut Reader) -> Result<BlockData, UnpackError> {
+fn read_tracers(r: &mut Reader, schema: &BlockSchema) -> Result<BlockData, UnpackError> {
     let count = r.u16()?;
     let mut result = Vec::with_capacity(count as usize);
 
     for _ in 0..count {
         let mut floats = [0.0f32; 6];
+        let mut was_hit = false;
+        let mut shooter = 0u8;
 
-        for value in &mut floats {
-            *value = r.f32_round2()?;
+        for (i, field) in schema.fields.iter().enumerate() {
+            match (i, read_field(r, field.ty)?) {
+                (0..=5, FieldValue::F32(v)) => floats[i] = v,
+                (6, FieldValue::U8(v)) => was_hit = v == 1,
+                (7, FieldValue::U8(v)) => shooter = v,
+                _ => {}
+            }
         }
-
-        let was_hit = r.u8()? == 1;
-        let shooter = r.u8()?;
 
         result.push(TracerRow {
             floats,
@@ -294,7 +315,7 @@ fn read_tracers(r: &mut Reader) -> Result<BlockData, UnpackError> {
     Ok(BlockData::Tracers(result))
 }
 
-fn read_bombs(r: &mut Reader) -> Result<BlockData, UnpackError> {
+fn read_bombs(r: &mut Reader, schema: &BlockSchema) -> Result<BlockData, UnpackError> {
     let count = r.u16()?;
     let mut result = IndexMap::new();
 
@@ -306,12 +327,24 @@ fn read_bombs(r: &mut Reader) -> Result<BlockData, UnpackError> {
             continue;
         }
 
-        let x = r.f32_round2()?;
-        let y = r.f32_round2()?;
-        let angle = r.f32_round2()?;
-        let size = r.u8()?;
-        let time = r.u16()?;
-        let owner = r.u8()?;
+        let mut x = 0.0f32;
+        let mut y = 0.0f32;
+        let mut angle = 0.0f32;
+        let mut size = 0u8;
+        let mut time = 0u16;
+        let mut owner = 0u8;
+
+        for (i, field) in schema.fields.iter().enumerate() {
+            match (i, read_field(r, field.ty)?) {
+                (0, FieldValue::F32(v)) => x = v,
+                (1, FieldValue::F32(v)) => y = v,
+                (2, FieldValue::F32(v)) => angle = v,
+                (3, FieldValue::U8(v)) => size = v,
+                (4, FieldValue::U16(v)) => time = v,
+                (5, FieldValue::U8(v)) => owner = v,
+                _ => {}
+            }
+        }
 
         result.insert(
             id,
@@ -329,25 +362,40 @@ fn read_bombs(r: &mut Reader) -> Result<BlockData, UnpackError> {
     Ok(BlockData::Bombs(result))
 }
 
-fn read_explosions(r: &mut Reader) -> Result<BlockData, UnpackError> {
+fn read_explosions(r: &mut Reader, schema: &BlockSchema) -> Result<BlockData, UnpackError> {
     let count = r.u16()?;
     let mut result = Vec::with_capacity(count as usize);
 
     for _ in 0..count {
-        result.push([r.f32_round2()?, r.f32_round2()?, r.f32_round2()?]);
+        let mut values = [0.0f32; 3];
+
+        for (i, field) in schema.fields.iter().enumerate().take(3) {
+            if let FieldValue::F32(v) = read_field(r, field.ty)? {
+                values[i] = v;
+            }
+        }
+
+        result.push(values);
     }
 
     Ok(BlockData::Explosions(result))
 }
 
-fn read_dynamics(r: &mut Reader) -> Result<BlockData, UnpackError> {
+fn read_dynamics(r: &mut Reader, schema: &BlockSchema) -> Result<BlockData, UnpackError> {
     let count = r.u8()?;
     let mut result = IndexMap::new();
 
     for _ in 0..count {
         let index = r.u8()?;
+        let mut values = [0.0f32; 3];
 
-        result.insert(index, [r.f32_round2()?, r.f32_round2()?, r.f32_round2()?]);
+        for (i, field) in schema.fields.iter().enumerate().take(3) {
+            if let FieldValue::F32(v) = read_field(r, field.ty)? {
+                values[i] = v;
+            }
+        }
+
+        result.insert(index, values);
     }
 
     Ok(BlockData::Dynamics(result))
@@ -519,33 +567,14 @@ pub fn frame_to_json(frame: &DecodedFrame) -> Value {
 
 #[cfg(test)]
 mod tests {
-    use indexmap::IndexMap;
-
     use super::*;
-    use crate::config::SnapshotKeyInfo;
+    use crate::config::test_support::full_snapshot_config;
     use crate::snapshot::{Block, CameraData, PlayerBlock, SnapshotPacker};
 
     // round-trip против упаковщика того же crate: раскладка не может
     // разойтись между pack и unpack по построению, тесты фиксируют формы
     fn test_config() -> SnapshotConfig {
-        let entries = [
-            ("m1", 1, BlockKind::Tanks),
-            ("w1", 2, BlockKind::Tracers),
-            ("w2", 3, BlockKind::Bombs),
-            ("w2e", 4, BlockKind::Explosions),
-            ("c1", 5, BlockKind::Dynamics),
-        ];
-        let mut keys = IndexMap::new();
-
-        for (key, id, kind) in entries {
-            keys.insert(key.to_string(), SnapshotKeyInfo { id, kind });
-        }
-
-        SnapshotConfig {
-            version: 3,
-            port: 5,
-            keys,
-        }
+        full_snapshot_config(3, 5)
     }
 
     fn packed_frame(

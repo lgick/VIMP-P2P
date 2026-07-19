@@ -82,7 +82,7 @@ describe.skipIf(!coreAvailable)('ClientCore (клиентское ядро)', ()
       const core = makeCore();
       const client = makeClientCore();
 
-      core.spawn_tank(1, 'm1', 1, 100.123, 200.456, 0);
+      core.spawn_actor(1, 'm1', 1, 100.123, 200.456, 0);
 
       const decoded = decodeFrame(client, packFrame(core, 0, 1, { playerId: 1 }));
 
@@ -97,7 +97,7 @@ describe.skipIf(!coreAvailable)('ClientCore (клиентское ядро)', ()
       const core = makeCore();
       const client = makeClientCore();
 
-      core.spawn_tank(2, 'm1', 1, 100.567, 50, 0);
+      core.spawn_actor(2, 'm1', 1, 100.567, 50, 0);
       stepTicks(core, 1); // кэш строк снапшота обновляется на тике
 
       let decoded = decodeFrame(client, packFrame(core, 0, 1));
@@ -107,7 +107,7 @@ describe.skipIf(!coreAvailable)('ClientCore (клиентское ядро)', ()
       expect(row[0]).toBe(100.57); // round2
       expect(row.slice(7)).toEqual([3, 2, 1]); // condition, size, teamId
 
-      core.remove_tank(2);
+      core.remove_actor(2);
       decoded = decodeFrame(client, packFrame(core, 0, 2));
       expect(decoded.snapshot.m1['2']).toBeNull();
     });
@@ -116,7 +116,7 @@ describe.skipIf(!coreAvailable)('ClientCore (клиентское ядро)', ()
       const core = makeCore();
       const client = makeClientCore();
 
-      core.spawn_tank(1, 'm1', 1, 100, 100, 0);
+      core.spawn_actor(1, 'm1', 1, 100, 100, 0);
       core.apply_input(1, 1, 'down', 'fire');
       stepTicks(core, 1);
 
@@ -134,7 +134,7 @@ describe.skipIf(!coreAvailable)('ClientCore (клиентское ядро)', ()
     const makeFrames = () => {
       const core = makeCore();
 
-      core.spawn_tank(1, 'm1', 1, 100, 100, 0);
+      core.spawn_actor(1, 'm1', 1, 100, 100, 0);
       core.apply_input(1, 1, 'down', 'forward');
       stepTicks(core, 60);
 
@@ -226,7 +226,7 @@ describe.skipIf(!coreAvailable)('ClientCore (клиентское ядро)', ()
       const core = makeCore();
       const client = makeClientCore();
 
-      core.spawn_tank(1, 'm1', 1, 100, 100, 0);
+      core.spawn_actor(1, 'm1', 1, 100, 100, 0);
       stepTicks(core, 1); // кэш строк снапшота обновляется на тике
       client.set_model('m1');
       client.set_active(true);
@@ -294,7 +294,7 @@ describe.skipIf(!coreAvailable)('ClientCore (клиентское ядро)', ()
       const core = makeCore();
       const client = makeClientCore();
 
-      core.spawn_tank(1, 'm1', 1, 100, 100, 0);
+      core.spawn_actor(1, 'm1', 1, 100, 100, 0);
       stepTicks(core, 1);
       client.set_model('m1');
       client.set_active(true);
@@ -325,7 +325,7 @@ describe.skipIf(!coreAvailable)('ClientCore (клиентское ядро)', ()
       // нет модели/кадров
       expect(client.try_fire(0)).toBeUndefined();
 
-      core.spawn_tank(1, 'm1', 1, 100, 100, 0);
+      core.spawn_actor(1, 'm1', 1, 100, 100, 0);
       stepTicks(core, 1);
       client.set_model('m1');
       client.set_active(true);

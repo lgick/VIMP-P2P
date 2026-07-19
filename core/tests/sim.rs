@@ -81,12 +81,51 @@ fn config_json() -> String {
             "version": 3,
             "port": 5,
             "keys": {
-                "m1": { "id": 1, "kind": "tanks" },
-                "w1": { "id": 2, "kind": "tracers" },
-                "w2": { "id": 3, "kind": "bombs" },
-                "w2e": { "id": 4, "kind": "explosions" },
-                "c1": { "id": 5, "kind": "dynamics" },
-                "c2": { "id": 6, "kind": "dynamics" }
+                "m1": { "id": 1, "kind": "tanks", "class": "hot", "fields": [
+                    { "name": "x", "ty": "f32", "interp": "lerp" },
+                    { "name": "y", "ty": "f32", "interp": "lerp" },
+                    { "name": "angle", "ty": "f32", "interp": "lerpAngle" },
+                    { "name": "gunRotation", "ty": "f32", "interp": "lerpAngle" },
+                    { "name": "vx", "ty": "f32", "interp": "lerp" },
+                    { "name": "vy", "ty": "f32", "interp": "lerp" },
+                    { "name": "engineLoad", "ty": "f32", "interp": "lerp" },
+                    { "name": "condition", "ty": "u8" },
+                    { "name": "size", "ty": "u8" },
+                    { "name": "team", "ty": "u8" }
+                ] },
+                "w1": { "id": 2, "kind": "tracers", "class": "event", "fields": [
+                    { "name": "startX", "ty": "f32" },
+                    { "name": "startY", "ty": "f32" },
+                    { "name": "endX", "ty": "f32" },
+                    { "name": "endY", "ty": "f32" },
+                    { "name": "bodyX", "ty": "f32" },
+                    { "name": "bodyY", "ty": "f32" },
+                    { "name": "wasHit", "ty": "u8" },
+                    { "name": "shooterId", "ty": "u8" }
+                ] },
+                "w2": { "id": 3, "kind": "bombs", "class": "event", "fields": [
+                    { "name": "x", "ty": "f32" },
+                    { "name": "y", "ty": "f32" },
+                    { "name": "angle", "ty": "f32" },
+                    { "name": "size", "ty": "u8" },
+                    { "name": "time", "ty": "u16" },
+                    { "name": "ownerId", "ty": "u8" }
+                ] },
+                "w2e": { "id": 4, "kind": "explosions", "class": "event", "fields": [
+                    { "name": "x", "ty": "f32" },
+                    { "name": "y", "ty": "f32" },
+                    { "name": "radius", "ty": "f32" }
+                ] },
+                "c1": { "id": 5, "kind": "dynamics", "class": "hot", "fields": [
+                    { "name": "x", "ty": "f32", "interp": "lerp" },
+                    { "name": "y", "ty": "f32", "interp": "lerp" },
+                    { "name": "angle", "ty": "f32", "interp": "lerpAngle" }
+                ] },
+                "c2": { "id": 6, "kind": "dynamics", "class": "hot", "fields": [
+                    { "name": "x", "ty": "f32", "interp": "lerp" },
+                    { "name": "y", "ty": "f32", "interp": "lerp" },
+                    { "name": "angle", "ty": "f32", "interp": "lerpAngle" }
+                ] }
             }
         },
         "seed": 42
@@ -141,7 +180,7 @@ fn events(core: &mut GameCore) -> Vec<CoreEvent> {
 fn tank_drives_forward() {
     let mut core = make_core();
 
-    core.spawn_tank(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
+    core.spawn_actor(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
     core.apply_input(1, 1, "down", "forward");
 
     steps(&mut core, 120);
@@ -159,7 +198,7 @@ fn tank_collides_with_map_walls() {
 
     core.load_map(&map_json()).unwrap();
     // танк смотрит на левую стену (x=32 — внутренняя грань)
-    core.spawn_tank(1, "m1", 1, 100.0, 100.0, 180.0).unwrap();
+    core.spawn_actor(1, "m1", 1, 100.0, 100.0, 180.0).unwrap();
     core.apply_input(1, 1, "down", "forward");
 
     steps(&mut core, 400);
@@ -178,8 +217,8 @@ fn hitscan_shot_kills_after_three_hits() {
     let mut core = make_core();
 
     // стрелок смотрит на цель в упор
-    core.spawn_tank(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
-    core.spawn_tank(2, "m1", 2, 60.0, 0.0, 0.0).unwrap();
+    core.spawn_actor(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
+    core.spawn_actor(2, "m1", 2, 60.0, 0.0, 0.0).unwrap();
 
     // прогрев: broad-phase узнаёт о новых телах на шаге мира
     core.step(DT);
@@ -235,8 +274,8 @@ fn hitscan_shot_kills_after_three_hits() {
 fn friendly_fire_disabled_blocks_damage() {
     let mut core = make_core();
 
-    core.spawn_tank(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
-    core.spawn_tank(2, "m1", 1, 60.0, 0.0, 0.0).unwrap();
+    core.spawn_actor(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
+    core.spawn_actor(2, "m1", 1, 60.0, 0.0, 0.0).unwrap();
 
     core.step(DT);
     core.take_events();
@@ -258,8 +297,8 @@ fn friendly_fire_disabled_blocks_damage() {
 fn bomb_detonates_and_damages_nearby_enemy() {
     let mut core = make_core();
 
-    core.spawn_tank(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
-    core.spawn_tank(2, "m1", 2, 20.0, 0.0, 0.0).unwrap();
+    core.spawn_actor(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
+    core.spawn_actor(2, "m1", 2, 20.0, 0.0, 0.0).unwrap();
 
     core.take_events();
 
@@ -298,7 +337,7 @@ fn bomb_detonates_and_damages_nearby_enemy() {
 fn weapon_switch_cycles_and_reports() {
     let mut core = make_core();
 
-    core.spawn_tank(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
+    core.spawn_actor(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
     core.take_events();
 
     core.apply_input(1, 1, "down", "nextWeapon");
@@ -331,7 +370,7 @@ fn bot_moves_on_map() {
     let mut core = make_core();
 
     core.load_map(&map_json()).unwrap();
-    core.add_bot(1, "m1", 1, 100.0, 100.0, 0.0).unwrap();
+    core.spawn_scripted_actor(1, "m1", 1, 100.0, 100.0, 0.0).unwrap();
 
     let start = core.position_of(1);
 
@@ -349,8 +388,8 @@ fn bots_fight_each_other() {
     let mut core = make_core();
 
     core.load_map(&map_json()).unwrap();
-    core.add_bot(1, "m1", 1, 150.0, 200.0, 0.0).unwrap();
-    core.add_bot(2, "m1", 2, 300.0, 200.0, 180.0).unwrap();
+    core.spawn_scripted_actor(1, "m1", 1, 150.0, 200.0, 0.0).unwrap();
+    core.spawn_scripted_actor(2, "m1", 2, 300.0, 200.0, 180.0).unwrap();
 
     // до 60 секунд боя (боты мажут: AIM_INACCURACY)
     let mut killed = false;
@@ -374,7 +413,7 @@ fn bots_fight_each_other() {
 fn remove_players_and_shots_reports_names() {
     let mut core = make_core();
 
-    core.spawn_tank(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
+    core.spawn_actor(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
 
     let names: Vec<String> =
         serde_json::from_str(&core.remove_players_and_shots()).unwrap();
@@ -387,14 +426,14 @@ fn remove_players_and_shots_reports_names() {
 }
 
 #[test]
-fn reset_tank_moves_and_stops() {
+fn reset_actor_moves_and_stops() {
     let mut core = make_core();
 
-    core.spawn_tank(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
+    core.spawn_actor(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
     core.apply_input(1, 1, "down", "forward");
     steps(&mut core, 60);
 
-    core.reset_tank(1, 2, 500.0, 300.0, 90.0);
+    core.reset_actor(1, 2, 500.0, 300.0, 90.0);
 
     let pos = core.position_of(1);
 
@@ -414,8 +453,8 @@ fn state_dump_restores_identical_simulation() {
     let mut core = make_core();
 
     core.load_map(&map_json()).unwrap();
-    core.spawn_tank(1, "m1", 1, 100.0, 100.0, 0.0).unwrap();
-    core.add_bot(2, "m1", 2, 400.0, 400.0, 180.0).unwrap();
+    core.spawn_actor(1, "m1", 1, 100.0, 100.0, 0.0).unwrap();
+    core.spawn_scripted_actor(2, "m1", 2, 400.0, 400.0, 180.0).unwrap();
     core.apply_input(1, 1, "down", "forward");
 
     steps(&mut core, 60);
@@ -441,8 +480,8 @@ fn clear_resets_world() {
     let mut core = make_core();
 
     core.load_map(&map_json()).unwrap();
-    core.spawn_tank(1, "m1", 1, 100.0, 100.0, 0.0).unwrap();
-    core.add_bot(2, "m1", 2, 400.0, 400.0, 180.0).unwrap();
+    core.spawn_actor(1, "m1", 1, 100.0, 100.0, 0.0).unwrap();
+    core.spawn_scripted_actor(2, "m1", 2, 400.0, 400.0, 180.0).unwrap();
 
     steps(&mut core, 10);
     core.clear();
@@ -453,8 +492,18 @@ fn clear_resets_world() {
 
     // мир пригоден к новой карте и новым игрокам
     core.load_map(&map_json()).unwrap();
-    core.spawn_tank(3, "m1", 1, 100.0, 100.0, 0.0).unwrap();
+    core.spawn_actor(3, "m1", 1, 100.0, 100.0, 0.0).unwrap();
     steps(&mut core, 10);
 
     assert!(!core.position_of(3).is_empty());
 }
+
+// Примечание: конструктор GameCore::new теперь отклоняет невалидную
+// snapshot-схему (SnapshotConfig::validate, см. core/src/config.rs), но
+// проверить это интеграционным тестом здесь нельзя — JsError::new вызывает
+// wasm-bindgen import, недоступный на нативном таргете `cargo test`
+// (паника "cannot call wasm-bindgen imported functions on non-wasm
+// targets" на любом Err-пути `Result<_, JsError>`, не только в этой
+// проверке). Покрытие валидации — юнит-тесты `config.rs::validate_tests`,
+// которые тестируют `SnapshotConfig::validate()` напрямую, в обход
+// wasm-bindgen обёртки.

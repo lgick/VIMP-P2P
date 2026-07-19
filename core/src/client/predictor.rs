@@ -14,7 +14,7 @@ use std::collections::VecDeque;
 
 use indexmap::IndexMap;
 
-use crate::config::{KeyConfig, ModelConfig};
+use crate::config::{KeyConfig, ModelConfig, PLAYER_STATE_LEN};
 use crate::motion::{self, TurretInput};
 use crate::physics::normalize_angle;
 
@@ -44,7 +44,7 @@ pub struct TankState {
 }
 
 impl TankState {
-    pub fn from_array(s: [f32; 8]) -> Self {
+    pub fn from_array(s: [f32; PLAYER_STATE_LEN]) -> Self {
         Self {
             x: s[0],
             y: s[1],
@@ -272,7 +272,7 @@ impl Predictor {
     /// Reconciliation: авторитетное состояние сервера + replay истории ввода.
     pub fn on_server_state(
         &mut self,
-        state: [f32; 8],
+        state: [f32; PLAYER_STATE_LEN],
         centering: bool,
         server_time: f64,
         offset: f64,
@@ -497,7 +497,7 @@ mod tests {
             "snapshot": {
                 "version": 3,
                 "port": 5,
-                "keys": { "m1": { "id": 1, "kind": "tanks" } }
+                "keys": { "m1": { "id": 1, "kind": "tanks", "class": "hot" } }
             },
             "seed": 42
         }))
@@ -721,17 +721,17 @@ mod parity {
     }
 
     // прогон core+replica с расписанием масок { шаг → маска }
-    fn simulate(steps: usize, schedule: &[(usize, u32)]) -> ([f32; 8], TankState) {
+    fn simulate(steps: usize, schedule: &[(usize, u32)]) -> ([f32; PLAYER_STATE_LEN], TankState) {
         let cfg = core_config();
         let mut game = GameState::new(cfg.clone());
 
-        game.spawn_tank(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
+        game.spawn_actor(1, "m1", 1, 0.0, 0.0, 0.0).unwrap();
 
         let mut predictor = Predictor::new(STEP_MS, &cfg.player_keys, &cfg.models);
 
         predictor.set_model("m1");
         predictor.set_active(true);
-        predictor.on_server_state([0.0; 8], false, 0.0, 0.0, 0.0);
+        predictor.on_server_state([0.0; PLAYER_STATE_LEN], false, 0.0, 0.0, 0.0);
 
         let one_shot_mask: u32 = cfg
             .player_keys
@@ -779,7 +779,7 @@ mod parity {
         (state, predictor.state)
     }
 
-    fn expect_close(core: [f32; 8], replica: TankState, tolerance: f32) {
+    fn expect_close(core: [f32; PLAYER_STATE_LEN], replica: TankState, tolerance: f32) {
         assert!(
             (replica.x - core[0]).abs() < tolerance,
             "x: replica {} vs core {}",

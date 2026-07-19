@@ -8,7 +8,7 @@ use crate::bomb::{Bomb, BombRow};
 use crate::bots::controller::BotBrain;
 use crate::bots::navigation::NavigationSystem;
 use crate::bots::spatial::{SpatialEntity, SpatialGrid};
-use crate::config::{CoreConfig, WeaponKind};
+use crate::config::{CoreConfig, PLAYER_STATE_LEN, WeaponKind};
 use crate::events::CoreEvent;
 use crate::map::{GameMap, MapConfig};
 use crate::physics::{BodyTag, round1, round2};
@@ -154,7 +154,7 @@ impl GameState {
     // ***** участники ***** //
 
     /// Создаёт танк (Game.createPlayer).
-    pub fn spawn_tank(
+    pub fn spawn_actor(
         &mut self,
         game_id: u32,
         model_name: &str,
@@ -204,7 +204,7 @@ impl GameState {
     }
 
     /// Удаляет танк (Game.removePlayer) и ставит null-маркер для клиентов.
-    pub fn remove_tank(&mut self, game_id: u32) {
+    pub fn remove_actor(&mut self, game_id: u32) {
         if let Some(tank) = self.tanks.shift_remove(&game_id) {
             self.world.remove_body(tank.body);
             self.cached_players.shift_remove(&game_id);
@@ -213,7 +213,7 @@ impl GameState {
     }
 
     /// Перемещает танк при смене команды/респауне (Game.changePlayerData).
-    pub fn reset_tank(&mut self, game_id: u32, team_id: u8, x: f32, y: f32, angle_deg: f32) {
+    pub fn reset_actor(&mut self, game_id: u32, team_id: u8, x: f32, y: f32, angle_deg: f32) {
         if let Some(tank) = self.tanks.get_mut(&game_id) {
             if let Some(body) = self.world.bodies.get_mut(tank.body) {
                 tank.change_player_data(team_id, x, y, angle_deg, body);
@@ -231,7 +231,7 @@ impl GameState {
     }
 
     /// Добавляет бота: танк + ИИ-контроллер внутри ядра.
-    pub fn add_bot(
+    pub fn spawn_scripted_actor(
         &mut self,
         game_id: u32,
         model_name: &str,
@@ -240,7 +240,7 @@ impl GameState {
         y: f32,
         angle_deg: f32,
     ) -> Result<(), String> {
-        self.spawn_tank(game_id, model_name, team_id, x, y, angle_deg)?;
+        self.spawn_actor(game_id, model_name, team_id, x, y, angle_deg)?;
 
         if !self.bots.contains_key(&game_id) {
             let brain = BotBrain::new(game_id, &mut self.rng);
@@ -251,9 +251,9 @@ impl GameState {
         Ok(())
     }
 
-    pub fn remove_bot(&mut self, game_id: u32) {
+    pub fn remove_scripted_actor(&mut self, game_id: u32) {
         self.bots.shift_remove(&game_id);
-        self.remove_tank(game_id);
+        self.remove_actor(game_id);
     }
 
     // ***** ввод ***** //
@@ -298,7 +298,7 @@ impl GameState {
     }
 
     /// Состояние танка для client-side prediction (без округлений).
-    pub fn prediction_state(&self, game_id: u32) -> Option<([f32; 8], bool)> {
+    pub fn prediction_state(&self, game_id: u32) -> Option<([f32; PLAYER_STATE_LEN], bool)> {
         let tank = self.tanks.get(&game_id)?;
         let body = self.world.bodies.get(tank.body)?;
 

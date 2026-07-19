@@ -1,5 +1,7 @@
 use crate::bomb::BombRow;
-use crate::config::{BlockKind, SnapshotConfig};
+use crate::config::{
+    BlockKind, BlockSchema, FieldType, FieldValue, PLAYER_STATE_LEN, SnapshotConfig,
+};
 
 // Бинарный пакер snapshot-кадра: порт SnapshotPacker из
 // src/lib/snapshotCodec.js. Раскладка (v3) идентична байт-в-байт —
@@ -20,6 +22,20 @@ pub struct TankRow {
     pub team: u8,
 }
 
+impl TankRow {
+    /// Значение поля по индексу схемы — порядок должен совпадать с
+    /// `FieldSchema`-списком ключа `m1` (opcodes.js): 0..6 floats,
+    /// 7 condition, 8 size, 9 team.
+    fn field(&self, i: usize) -> FieldValue {
+        match i {
+            0..=6 => FieldValue::F32(self.floats[i]),
+            7 => FieldValue::U8(self.condition),
+            8 => FieldValue::U8(self.size),
+            _ => FieldValue::U8(self.team),
+        }
+    }
+}
+
 /// Строка трассера в блоке `tracers`:
 /// startX, startY, endX, endY, bodyX, bodyY + wasHit + shooterId.
 #[derive(Clone, Copy)]
@@ -27,6 +43,16 @@ pub struct TracerRow {
     pub floats: [f32; 6],
     pub was_hit: bool,
     pub shooter: u8,
+}
+
+impl TracerRow {
+    fn field(&self, i: usize) -> FieldValue {
+        match i {
+            0..=5 => FieldValue::F32(self.floats[i]),
+            6 => FieldValue::U8(self.was_hit as u8),
+            _ => FieldValue::U8(self.shooter),
+        }
+    }
 }
 
 /// Типизированные блоки тела снапшота (kind из opcodes.js).
@@ -66,7 +92,7 @@ pub struct CameraData {
 pub struct PlayerBlock {
     pub game_id: u8,
     pub input_seq: u32,
-    pub state: [f32; 8],
+    pub state: [f32; PLAYER_STATE_LEN],
     pub centering: bool,
 }
 
@@ -92,6 +118,17 @@ fn push_f64(buf: &mut Vec<u8>, v: f64) {
     buf.extend_from_slice(&v.to_be_bytes());
 }
 
+/// Пишет одно поле строки по типу схемы (интерпретатор `FieldSchema`).
+fn write_field(buf: &mut Vec<u8>, ty: FieldType, value: FieldValue) {
+    match (ty, value) {
+        (FieldType::F32, FieldValue::F32(v)) => push_f32(buf, v),
+        (FieldType::U8, FieldValue::U8(v)) => buf.push(v),
+        (FieldType::U16, FieldValue::U16(v)) => push_u16(buf, v),
+        (FieldType::U32, FieldValue::U32(v)) => push_u32(buf, v),
+        _ => debug_assert!(false, "[core snapshot] тип поля не совпадает со схемой"),
+    }
+}
+
 impl SnapshotPacker {
     pub fn new(cfg: SnapshotConfig) -> Self {
         Self {
@@ -107,27 +144,30 @@ impl SnapshotPacker {
         self.body.clear();
 
         for (key, block) in blocks {
-            let info = self.cfg.keys.get(key).ok_or_else(|| {
+            let schema = self.cfg.keys.get(key).ok_or_else(|| {
                 format!(
                     "[core snapshot] Неизвестный ключ снапшота '{key}': \
                      зарегистрируйте его в src/config/opcodes.js"
                 )
             })?;
 
-            if info.kind != block.kind() {
+            if schema.kind != block.kind() {
                 return Err(format!(
                     "[core snapshot] Раскладка блока '{key}' не совпадает с kind из opcodes.js"
                 ));
             }
 
-            self.body.push(info.id);
-            Self::write_block(&mut self.body, block);
+            self.body.push(schema.id);
+            Self::write_block(&mut self.body, schema, block);
         }
 
         Ok(())
     }
 
-    fn write_block(buf: &mut Vec<u8>, block: &Block) {
+    /// Интерпретатор схемы: форма блока (ширина count/id, null-маркер)
+    /// зависит от `kind` (см. `BlockKind`), раскладка полей строки —
+    /// от `schema.fields` (см. `FieldSchema`).
+    fn write_block(buf: &mut Vec<u8>, schema: &BlockSchema, block: &Block) {
         match block {
             Block::Tanks(items) => {
                 buf.push(items.len() as u8);
@@ -140,13 +180,9 @@ impl SnapshotPacker {
                         Some(row) => {
                             buf.push(1);
 
-                            for value in row.floats {
-                                push_f32(buf, value);
+                            for (i, field) in schema.fields.iter().enumerate() {
+                                write_field(buf, field.ty, row.field(i));
                             }
-
-                            buf.push(row.condition);
-                            buf.push(row.size);
-                            buf.push(row.team);
                         }
                     }
                 }
@@ -155,12 +191,9 @@ impl SnapshotPacker {
                 push_u16(buf, items.len() as u16);
 
                 for row in items {
-                    for value in row.floats {
-                        push_f32(buf, value);
+                    for (i, field) in schema.fields.iter().enumerate() {
+                        write_field(buf, field.ty, row.field(i));
                     }
-
-                    buf.push(row.was_hit as u8);
-                    buf.push(row.shooter);
                 }
             }
             Block::Bombs(items) => {
@@ -173,12 +206,10 @@ impl SnapshotPacker {
                         None => buf.push(0),
                         Some(row) => {
                             buf.push(1);
-                            push_f32(buf, row.x);
-                            push_f32(buf, row.y);
-                            push_f32(buf, row.angle);
-                            buf.push(row.size);
-                            push_u16(buf, row.time);
-                            buf.push(row.owner);
+
+                            for (i, field) in schema.fields.iter().enumerate() {
+                                write_field(buf, field.ty, row.field(i));
+                            }
                         }
                     }
                 }
@@ -186,20 +217,21 @@ impl SnapshotPacker {
             Block::Explosions(items) => {
                 push_u16(buf, items.len() as u16);
 
-                for [x, y, radius] in items {
-                    push_f32(buf, *x);
-                    push_f32(buf, *y);
-                    push_f32(buf, *radius);
+                for values in items {
+                    for (i, field) in schema.fields.iter().enumerate() {
+                        write_field(buf, field.ty, FieldValue::F32(values[i]));
+                    }
                 }
             }
             Block::Dynamics(items) => {
                 buf.push(items.len() as u8);
 
-                for (index, [x, y, angle]) in items {
+                for (index, values) in items {
                     buf.push(*index);
-                    push_f32(buf, *x);
-                    push_f32(buf, *y);
-                    push_f32(buf, *angle);
+
+                    for (i, field) in schema.fields.iter().enumerate() {
+                        write_field(buf, field.ty, FieldValue::F32(values[i]));
+                    }
                 }
             }
         }
@@ -281,26 +313,14 @@ impl SnapshotPacker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::SnapshotKeyInfo;
+    use crate::config::test_support::{tanks_schema, tracers_schema};
     use indexmap::IndexMap;
 
     fn test_config() -> SnapshotConfig {
         let mut keys = IndexMap::new();
 
-        keys.insert(
-            "m1".to_string(),
-            SnapshotKeyInfo {
-                id: 1,
-                kind: BlockKind::Tanks,
-            },
-        );
-        keys.insert(
-            "w1".to_string(),
-            SnapshotKeyInfo {
-                id: 2,
-                kind: BlockKind::Tracers,
-            },
-        );
+        keys.insert("m1".to_string(), tanks_schema(1));
+        keys.insert("w1".to_string(), tracers_schema(2));
 
         SnapshotConfig {
             version: 3,

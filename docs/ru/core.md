@@ -84,11 +84,11 @@ core.load_map(JSON.stringify(mapData)); // масштабирование вну
 | `new GameCore(config_json)` | мир Rapier, оружие, модели, клавиши, реестр снапшот-ключей |
 | `load_map(map_json)` | тела карты + нав-граф ботов; масштаб — `scale` карты или `mapScale` конфига |
 | `map_info()` | JSON: `setId`, `step`, размеры, масштабированные `respawns` |
-| `spawn_tank(id, model, teamId, x, y, angle°)` | танк; эмитит `activeWeapon` + `health` |
-| `remove_tank(id)` | удаление + null-маркер в следующем кадре |
-| `reset_tank(id, teamId, x, y, angle°)` | респаун/смена команды (клавиши/газ сброшены, здоровье — нет) |
+| `spawn_actor(id, model, teamId, x, y, angle°)` | танк; эмитит `activeWeapon` + `health` |
+| `remove_actor(id)` | удаление + null-маркер в следующем кадре |
+| `reset_actor(id, teamId, x, y, angle°)` | респаун/смена команды (клавиши/газ сброшены, здоровье — нет) |
 | `reset_all_vitals()` | здоровье/боезапас к дефолтам (новый раунд) |
-| `add_bot(id, model, teamId, x, y, angle°)` / `remove_bot(id)` | танк + ИИ-контроллер внутри ядра |
+| `spawn_scripted_actor(id, model, teamId, x, y, angle°)` / `remove_scripted_actor(id)` | танк + ИИ-контроллер внутри ядра |
 | `apply_input(id, seq, action, name)` | ввод `'down'/'up'` + имя клавиши; `seq` подтверждается в player-блоке |
 | `step(dt)` | фикс-шаги физики + ИИ ботов + пространственная сетка |
 | `clear()` | полная очистка мира (смена карты) |
@@ -207,7 +207,7 @@ CI собирает ядро и гоняет оба слоя.
 - **Свежесозданное тело попадает в broad-phase на первом шаге мира**: выстрел
   в том же тике, что и спавн, цель «не видит» (в тестах — прогрев одним
   `step`). На реальных сценариях (спавн в начале раунда) не проявляется.
-- `remove_tank` сам ставит null-маркер удаления в следующий кадр.
+- `remove_actor` сам ставит null-маркер удаления в следующий кадр.
 
 ---
 

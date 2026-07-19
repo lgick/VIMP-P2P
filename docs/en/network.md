@@ -210,8 +210,17 @@ rounded). Weapon events carry the author's id (`shooterId`/`ownerId`,
 added in v3) — the shooter uses it to suppress authoritative duplicates of
 locally spawned shots (the client core, `core/src/client/shot.rs`).
 
+Each `SNAPSHOT_KEYS` entry is more than `{id, kind}`: `class` (`'hot'` —
+interpolated by the client between frames, `'event'` — one-shot, delivered
+as-is in the frame) and `fields` — the row's field schema (`name`, `ty`:
+`f32`/`u8`/`u16`/`u32`, `interp`: `lerp`/`lerpAngle`/`discrete`, for
+`class: 'hot'` only). `fields` must match the key's Row struct in
+`core/src/snapshot.rs` exactly in field count and type order (`GameCore`/
+`ClientCore` reject the constructor on a mismatch).
+
 When adding a new weapon/entity, its snapshot key **must** be registered in
-`SNAPSHOT_KEYS`, or `pack_body` will throw. If the existing `kind` values
+`SNAPSHOT_KEYS` — with a full `fields` list for its `kind` — or
+`pack_body`/the core constructor will throw. If the existing `kind` values
 don't fit the data shape, add a new block layout to `core/src/snapshot.rs`
 + `core/src/client/unpack.rs` and bump the format version. See
 [extending.md](extending.md#new-weapon).

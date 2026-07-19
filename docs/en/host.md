@@ -146,8 +146,9 @@ Implements the physics/bots/packing surface consumed by
   is already scaled in JS by `RoundManager.scaleMapData`, so it's loaded
   with `scale: 1` — the core doesn't scale it again); `createPlayer`/
   `removePlayer` tell scripted participants and humans apart via
-  `participant.isScripted` (`add_bot`/`remove_bot` — a tank + AI in the
-  core — versus `spawn_tank`/`remove_tank`); `changePlayerData` → `reset_tank`;
+  `participant.isScripted` (`spawn_scripted_actor`/`remove_scripted_actor` —
+  a tank + AI in the core — versus `spawn_actor`/`remove_actor`);
+  `changePlayerData` → `reset_actor`;
 - **input** → `apply_input` (seq is confirmed by the core in the frame's
   player block);
 - **event projection**: after `step`, drains `take_events()` and hands each

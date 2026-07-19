@@ -1,7 +1,7 @@
 use rapier2d::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::config::{CoreConfig, KeyConfig, ModelConfig, WeaponConfig};
+use crate::config::{CoreConfig, KeyConfig, ModelConfig, PLAYER_STATE_LEN, WeaponConfig};
 use crate::events::CoreEvent;
 use crate::motion::{self, TurretInput};
 use crate::physics::{BodyTag, deg_to_rad, round2};
@@ -519,7 +519,7 @@ impl Tank {
     }
 
     /// Состояние для client-side prediction (без округлений).
-    pub fn prediction_state(&self, body: &RigidBody) -> ([f32; 8], bool) {
+    pub fn prediction_state(&self, body: &RigidBody) -> ([f32; PLAYER_STATE_LEN], bool) {
         let pos = body.translation();
         let vel = body.linvel();
 

@@ -165,9 +165,11 @@ arguments). Expansion happens in the game crate, so `#[wasm_bindgen]`/`JsError`
 resolve against its dependencies — the engine crate still does not depend on
 wasm-bindgen.
 
-**GameCore** — renames: `spawn_tank`→`spawn_actor`, `remove_tank`→`remove_actor`,
-`reset_tank`→`reset_actor`, `add_bot`→`spawn_scripted_actor`,
-`remove_bot`→`remove_scripted_actor`. Unchanged: `new(configJson)` (format
+**GameCore** — participant lifecycle methods:
+`spawn_actor`/`remove_actor`/`reset_actor` (human),
+`spawn_scripted_actor`/`remove_scripted_actor` (scripted, formerly
+`spawn_tank`/`remove_tank`/`reset_tank`/`add_bot`/`remove_bot`).
+Unchanged: `new(configJson)` (format
 `{engine:{timeStep,seed,snapshot,mapScale,mapSetId}, game:{models,weapons,panel,playerKeys,friendlyFire}}`),
 `load_map`, `map_info`, `apply_input`, `step`, `take_events`, `pack_body`,
 `pack_frame`, `body_has_events`, `frame_ptr/frame_bytes`, `is_alive`,

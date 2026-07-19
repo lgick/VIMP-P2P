@@ -47,7 +47,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
 
   describe('вертикальный MVP: танк ездит через WASM', () => {
     it('танк разгоняется вперёд и подтверждает seq ввода', () => {
-      core.spawn_tank(1, 'm1', 1, 0, 0, 0);
+      core.spawn_actor(1, 'm1', 1, 0, 0, 0);
       core.apply_input(1, 15, 'down', 'forward');
 
       stepTicks(core, 120);
@@ -62,7 +62,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
     it('стена карты останавливает танк', () => {
       core.load_map(JSON.stringify(poolMini));
       // едет влево в стену (внутренняя грань стены x = 19.2)
-      core.spawn_tank(1, 'm1', 1, 78, 312, 180);
+      core.spawn_actor(1, 'm1', 1, 78, 312, 180);
       core.apply_input(1, 1, 'down', 'forward');
 
       stepTicks(core, 400);
@@ -76,7 +76,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
   describe('round-trip кадра v3 через decode_frame', () => {
     it('кадр играющего: заголовок, камера, player-блок, танки, динамика', () => {
       core.load_map(JSON.stringify(poolMini));
-      core.spawn_tank(1, 'm1', 1, 78, 312, 0);
+      core.spawn_actor(1, 'm1', 1, 78, 312, 0);
       core.apply_input(1, 3, 'down', 'forward');
       stepTicks(core, 10);
 
@@ -129,8 +129,8 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
     });
 
     it('трассер w1 несёт shooterId и wasHit (формат v3)', () => {
-      core.spawn_tank(1, 'm1', 1, 0, 0, 0);
-      core.spawn_tank(2, 'm1', 2, 60, 0, 0);
+      core.spawn_actor(1, 'm1', 1, 0, 0, 0);
+      core.spawn_actor(2, 'm1', 2, 60, 0, 0);
       stepTicks(core, 1); // прогрев broad-phase
 
       core.apply_input(1, 1, 'down', 'fire');
@@ -154,7 +154,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
     });
 
     it('бомба w2: создание с ownerId, затем взрыв w2e и null-маркер', () => {
-      core.spawn_tank(1, 'm1', 1, 0, 0, 0);
+      core.spawn_actor(1, 'm1', 1, 0, 0, 0);
       stepTicks(core, 1);
 
       core.apply_input(1, 1, 'down', 'nextWeapon');
@@ -194,10 +194,10 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
       expect(Math.abs(ey)).toBeLessThan(2);
     });
 
-    it('remove_tank даёт null-маркер в следующем кадре', () => {
-      core.spawn_tank(1, 'm1', 1, 0, 0, 0);
+    it('remove_actor даёт null-маркер в следующем кадре', () => {
+      core.spawn_actor(1, 'm1', 1, 0, 0, 0);
       stepTicks(core, 1);
-      core.remove_tank(1);
+      core.remove_actor(1);
 
       core.pack_body();
       core.pack_frame(0, 1, false, 0, 0, false, undefined, -1);
@@ -208,8 +208,8 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
     });
 
     it('события снапшота копятся между pack_body (throttle на JS)', () => {
-      core.spawn_tank(1, 'm1', 1, 0, 0, 0);
-      core.spawn_tank(2, 'm1', 2, 60, 0, 0);
+      core.spawn_actor(1, 'm1', 1, 0, 0, 0);
+      core.spawn_actor(2, 'm1', 2, 60, 0, 0);
       stepTicks(core, 1);
 
       // два выстрела в разных тиках между отправками
@@ -234,7 +234,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
     });
 
     it('body_has_events классифицирует кадр (события → meta, позиции → state)', () => {
-      core.spawn_tank(1, 'm1', 1, 0, 0, 0);
+      core.spawn_actor(1, 'm1', 1, 0, 0, 0);
       core.step(DT);
       core.pack_body();
 
@@ -250,7 +250,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
 
       expect(core.body_has_events()).toBe(false); // события дренированы
 
-      core.remove_tank(1);
+      core.remove_actor(1);
       core.pack_body();
 
       expect(core.body_has_events()).toBe(true); // null-маркер удаления
@@ -259,7 +259,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
 
   describe('события ядра для меты', () => {
     it('спавн сообщает активное оружие и здоровье', () => {
-      core.spawn_tank(1, 'm1', 1, 0, 0, 0);
+      core.spawn_actor(1, 'm1', 1, 0, 0, 0);
 
       const events = takeEvents(core);
 
@@ -268,8 +268,8 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
     });
 
     it('убийство: ammo/shake/health/kill', () => {
-      core.spawn_tank(1, 'm1', 1, 0, 0, 0);
-      core.spawn_tank(2, 'm1', 2, 60, 0, 0);
+      core.spawn_actor(1, 'm1', 1, 0, 0, 0);
+      core.spawn_actor(2, 'm1', 2, 60, 0, 0);
       stepTicks(core, 1);
       core.take_events();
 
@@ -297,8 +297,8 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
     });
 
     it('reset_all_vitals восстанавливает панель', () => {
-      core.spawn_tank(1, 'm1', 1, 0, 0, 0);
-      core.spawn_tank(2, 'm1', 2, 60, 0, 0);
+      core.spawn_actor(1, 'm1', 1, 0, 0, 0);
+      core.spawn_actor(2, 'm1', 2, 60, 0, 0);
       stepTicks(core, 1);
       core.apply_input(1, 1, 'down', 'fire');
       stepTicks(core, 2);
@@ -316,7 +316,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
   describe('боты', () => {
     it('бот патрулирует карту без внешнего ввода', () => {
       core.load_map(JSON.stringify(poolMini));
-      core.add_bot(1, 'm1', 1, 78, 312, 0);
+      core.spawn_scripted_actor(1, 'm1', 1, 78, 312, 0);
 
       const [sx, sy] = core.position_of(1);
 
@@ -329,8 +329,8 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
     });
 
     it('alive_players отдаёт плоский список для меты', () => {
-      core.spawn_tank(1, 'm1', 1, 10, 20, 0);
-      core.spawn_tank(2, 'm1', 2, 30, 40, 0);
+      core.spawn_actor(1, 'm1', 1, 10, 20, 0);
+      core.spawn_actor(2, 'm1', 2, 30, 40, 0);
 
       expect(Array.from(core.alive_players())).toEqual([1, 1, 10, 20, 2, 2, 30, 40]);
     });
@@ -338,7 +338,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
 
   describe('очистка и смена карты', () => {
     it('remove_players_and_shots возвращает имена для очистки полотна', () => {
-      core.spawn_tank(1, 'm1', 1, 0, 0, 0);
+      core.spawn_actor(1, 'm1', 1, 0, 0, 0);
 
       const names = JSON.parse(core.remove_players_and_shots());
 
@@ -348,7 +348,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
 
     it('clear готовит мир к новой карте', () => {
       core.load_map(JSON.stringify(poolMini));
-      core.spawn_tank(1, 'm1', 1, 78, 312, 0);
+      core.spawn_actor(1, 'm1', 1, 78, 312, 0);
       stepTicks(core, 5);
 
       core.clear();
@@ -357,7 +357,7 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
       expect(core.position_of(1)).toHaveLength(0);
 
       core.load_map(JSON.stringify(poolMini));
-      core.spawn_tank(2, 'm1', 2, 960, 312, 180);
+      core.spawn_actor(2, 'm1', 2, 960, 312, 180);
       stepTicks(core, 5);
 
       expect(core.position_of(2)).toHaveLength(2);
@@ -367,8 +367,8 @@ describe.skipIf(!coreAvailable)('GameCore (nodejs-таргет)', () => {
   describe('handoff (Spike B)', () => {
     it('serialize/deserialize продолжает симуляцию бит-в-бит', () => {
       core.load_map(JSON.stringify(poolMini));
-      core.spawn_tank(1, 'm1', 1, 78, 312, 0);
-      core.add_bot(2, 'm1', 2, 960, 312, 180);
+      core.spawn_actor(1, 'm1', 1, 78, 312, 0);
+      core.spawn_scripted_actor(2, 'm1', 2, 960, 312, 180);
       core.apply_input(1, 1, 'down', 'forward');
       stepTicks(core, 60);
 

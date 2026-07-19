@@ -1,7 +1,7 @@
 use rapier2d::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::config::WeaponConfig;
+use crate::config::{FieldValue, WeaponConfig};
 use crate::physics::{BodyTag, round2};
 
 /// Взрывной снаряд (порт src/server/parts/Bomb.js).
@@ -81,4 +81,19 @@ pub struct BombRow {
     pub size: u8,
     pub time: u16,
     pub owner: u8,
+}
+
+impl BombRow {
+    /// Значение поля по индексу схемы ключа `w2` (opcodes.js):
+    /// 0 x, 1 y, 2 angle, 3 size, 4 time, 5 ownerId.
+    pub(crate) fn field(&self, i: usize) -> FieldValue {
+        match i {
+            0 => FieldValue::F32(self.x),
+            1 => FieldValue::F32(self.y),
+            2 => FieldValue::F32(self.angle),
+            3 => FieldValue::U8(self.size),
+            4 => FieldValue::U16(self.time),
+            _ => FieldValue::U8(self.owner),
+        }
+    }
 }

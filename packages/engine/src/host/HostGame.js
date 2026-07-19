@@ -275,7 +275,7 @@ export default class HostGame {
     }
 
     // список удаляемых с полотна игроков ведёт RoundManager, но null-маркеры
-    // в кадр кладёт само ядро (remove_tank) — здесь лишь опустошаем очередь,
+    // в кадр кладёт само ядро (remove_actor) — здесь лишь опустошаем очередь,
     // чтобы она не росла
     const removedPlayersList = this._roundManager.removedPlayersList;
 

@@ -6,7 +6,8 @@
 //
 // Различие scripted/человек — по participants.get(gameId).isScripted:
 // scripted-участник создаётся как танк + ИИ-контроллер внутри ядра
-// (add_bot/remove_bot), человек — только танк (spawn_tank/remove_tank).
+// (spawn_scripted_actor/remove_scripted_actor), человек — только танк
+// (spawn_actor/remove_actor).
 export default class GameCoreAdapter {
   /**
    * @param {GameCore} core - экземпляр WASM-ядра.
@@ -49,18 +50,18 @@ export default class GameCoreAdapter {
     const [x, y, angle] = data;
 
     if (this._isScripted(gameId)) {
-      this._core.add_bot(gameId, model, teamId, x, y, angle);
+      this._core.spawn_scripted_actor(gameId, model, teamId, x, y, angle);
     } else {
-      this._core.spawn_tank(gameId, model, teamId, x, y, angle);
+      this._core.spawn_actor(gameId, model, teamId, x, y, angle);
     }
   }
 
   // удаляет танк (Game.removePlayer). Scripted → удаляет и ИИ-контроллер
   removePlayer(gameId) {
     if (this._isScripted(gameId)) {
-      this._core.remove_bot(gameId);
+      this._core.remove_scripted_actor(gameId);
     } else {
-      this._core.remove_tank(gameId);
+      this._core.remove_actor(gameId);
     }
   }
 
@@ -76,7 +77,7 @@ export default class GameCoreAdapter {
   changePlayerData(gameId, data) {
     const [x, y, angle] = data.respawnData;
 
-    this._core.reset_tank(gameId, data.teamId, x, y, angle);
+    this._core.reset_actor(gameId, data.teamId, x, y, angle);
   }
 
   // ***** ввод ***** //

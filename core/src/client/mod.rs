@@ -47,7 +47,7 @@ pub struct ClientState {
 
 impl ClientState {
     pub fn new(cfg: ClientConfig) -> Self {
-        let interpolator = Interpolator::new(&cfg.interpolation);
+        let interpolator = Interpolator::new(&cfg.interpolation, cfg.snapshot.clone());
         let predictor = Predictor::new(cfg.time_step_ms, &cfg.player_keys, &cfg.models);
         let shot = ShotPredictor::new(&cfg.models, &cfg.weapons, cfg.seed);
 
@@ -420,11 +420,46 @@ mod tests {
                 "version": 3,
                 "port": 5,
                 "keys": {
-                    "m1": { "id": 1, "kind": "tanks" },
-                    "w1": { "id": 2, "kind": "tracers" },
-                    "w2": { "id": 3, "kind": "bombs" },
-                    "w2e": { "id": 4, "kind": "explosions" },
-                    "c1": { "id": 5, "kind": "dynamics" }
+                    "m1": { "id": 1, "kind": "tanks", "class": "hot", "fields": [
+                        { "name": "x", "ty": "f32", "interp": "lerp" },
+                        { "name": "y", "ty": "f32", "interp": "lerp" },
+                        { "name": "angle", "ty": "f32", "interp": "lerpAngle" },
+                        { "name": "gunRotation", "ty": "f32", "interp": "lerpAngle" },
+                        { "name": "vx", "ty": "f32", "interp": "lerp" },
+                        { "name": "vy", "ty": "f32", "interp": "lerp" },
+                        { "name": "engineLoad", "ty": "f32", "interp": "lerp" },
+                        { "name": "condition", "ty": "u8" },
+                        { "name": "size", "ty": "u8" },
+                        { "name": "team", "ty": "u8" }
+                    ] },
+                    "w1": { "id": 2, "kind": "tracers", "class": "event", "fields": [
+                        { "name": "startX", "ty": "f32" },
+                        { "name": "startY", "ty": "f32" },
+                        { "name": "endX", "ty": "f32" },
+                        { "name": "endY", "ty": "f32" },
+                        { "name": "bodyX", "ty": "f32" },
+                        { "name": "bodyY", "ty": "f32" },
+                        { "name": "wasHit", "ty": "u8" },
+                        { "name": "shooterId", "ty": "u8" }
+                    ] },
+                    "w2": { "id": 3, "kind": "bombs", "class": "event", "fields": [
+                        { "name": "x", "ty": "f32" },
+                        { "name": "y", "ty": "f32" },
+                        { "name": "angle", "ty": "f32" },
+                        { "name": "size", "ty": "u8" },
+                        { "name": "time", "ty": "u16" },
+                        { "name": "ownerId", "ty": "u8" }
+                    ] },
+                    "w2e": { "id": 4, "kind": "explosions", "class": "event", "fields": [
+                        { "name": "x", "ty": "f32" },
+                        { "name": "y", "ty": "f32" },
+                        { "name": "radius", "ty": "f32" }
+                    ] },
+                    "c1": { "id": 5, "kind": "dynamics", "class": "hot", "fields": [
+                        { "name": "x", "ty": "f32", "interp": "lerp" },
+                        { "name": "y", "ty": "f32", "interp": "lerp" },
+                        { "name": "angle", "ty": "f32", "interp": "lerpAngle" }
+                    ] }
                 }
             },
             "interpolation": { "delay": 100, "maxFrameAge": 1000 },

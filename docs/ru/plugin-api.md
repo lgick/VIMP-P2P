@@ -164,9 +164,10 @@ export default {
 поэтому `#[wasm_bindgen]`/`JsError` резолвятся против его зависимостей —
 engine-crate от wasm-bindgen не зависит вовсе.
 
-**GameCore** — переименования: `spawn_tank`→`spawn_actor`,
-`remove_tank`→`remove_actor`, `reset_tank`→`reset_actor`,
-`add_bot`→`spawn_scripted_actor`, `remove_bot`→`remove_scripted_actor`.
+**GameCore** — методы жизненного цикла участников:
+`spawn_actor`/`remove_actor`/`reset_actor` (человек),
+`spawn_scripted_actor`/`remove_scripted_actor` (scripted, было
+`spawn_tank`/`remove_tank`/`reset_tank`/`add_bot`/`remove_bot`).
 Без изменений: `new(configJson)` (формат
 `{engine:{timeStep,seed,snapshot,mapScale,mapSetId}, game:{models,weapons,panel,playerKeys,friendlyFire}}`),
 `load_map`, `map_info`, `apply_input`, `step`, `take_events`, `pack_body`,

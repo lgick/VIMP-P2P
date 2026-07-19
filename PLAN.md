@@ -248,8 +248,8 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 ### Этап 4. Rust: генерализация и распил ядра (XL, параллелен этапу 3; 4a — до этапа 5)
 
 **4a. Генерализация в одном crate (XL, 3 PR).**
-1. Трейты `GameDef/GameSim` + `EngineSim<TanksGame>`: `GameState` (`core/src/game.rs`) распадается на движковый цикл (аккумулятор фикс-шага, контакты, destroy-очередь — `game.rs:344-417`) и `TanksSim` (`on_fixed_step`/`on_contacts`/`on_ai_tick`); ABI-переименования (`spawn_actor`/`spawn_scripted_actor`/...); зеркально `GameCoreAdapter`.
-2. Schema-driven снапшот: расширенный `SnapshotConfig` (схема блоков + `playerState`), интерпретаторы в `snapshot.rs`/`unpack.rs`/интерполятор/hot-буфер; `SNAPSHOT_FORMAT_VERSION=4`; зеркально `src/config/opcodes.js` (схема уходит в конфиг игры) и generic `reconstructHot` в `main.js`.
+1. ABI-переименования (`spawn_actor`/`spawn_scripted_actor`/`remove_actor`/`remove_scripted_actor`/`reset_actor`) ✅ выполнено; зеркально `GameCoreAdapter`. Трейты `GameDef/GameSim` + `EngineSim<TanksGame>`: `GameState` (`core/src/game.rs`) распадается на движковый цикл (аккумулятор фикс-шага, контакты, destroy-очередь — `game.rs:344-417`) и `TanksSim` (`on_fixed_step`/`on_contacts`/`on_ai_tick`) — в работе (4a.3).
+2. Schema-driven снапшот ✅ выполнено: расширенный `SnapshotConfig` (`BlockSchema{id,kind,class,fields}` + `PLAYER_STATE_LEN`), интерпретаторы в `snapshot.rs`/`unpack.rs`/интерполяторе; зеркально `src/config/opcodes.js`. Байтовая раскладка не изменилась → `SNAPSHOT_FORMAT_VERSION` не поднят; `reconstructHot` в `main.js` сознательно не переписан (raскладка hot-записи не изменилась, см. PLAN_4_details.md).
 3. Стандартные события (`panelSet/panelActive/death/shake/custom`) + конфиг `{engine, game}`; `GameCoreAdapter._drainEvents` → generic-роутинг (снимает временный eventRouter из 3.1); `Predictor` generic (`STATE_LEN` из схемы), `ShotPredictor` → игровой модуль crate.
 - Готово: `cargo test` (~90) зелёный, `tests/core/*` + `tests/host/HostGame.test.js` зелёные на пересобранном `pkg-node`, бенчмарк-гейт `step+pack_body` без деградации, ручной smoke.
 

@@ -1,6 +1,7 @@
 // Игровой scripted-модуль танков: тонкий менеджер ботов поверх ядра.
-// ИИ, навигация и пространственная сетка живут в Rust-ядре (add_bot создаёт
-// танк + контроллер) — здесь только регистрация участников и связка со
+// ИИ, навигация и пространственная сетка живут в Rust-ядре
+// (spawn_scripted_actor создаёт танк + контроллер) — здесь только
+// регистрация участников и связка со
 // Stat/Panel. Контракт scripted-модуля (дергает движок — RoundManager,
 // HostGame, чат-команда /bot): createMap, createBots, removeBots,
 // removeOneBotForPlayer, getBots, getBotCount, getBotCountsPerTeam.
@@ -34,7 +35,7 @@ export default class TanksBotManager {
   }
 
   // создаёт заданное количество ботов-участников (танки в ядре — на старте
-  // раунда через RoundManager → coreAdapter.createPlayer → core.add_bot)
+  // раунда через RoundManager → coreAdapter.createPlayer → core.spawn_scripted_actor)
   createBots(count, teamName = null) {
     if (!this._respawns) {
       return 0;
@@ -119,7 +120,7 @@ export default class TanksBotManager {
 
     this._stat.removeUser(gameId, participant.teamId);
     this._panel.removeUser(gameId);
-    this._coreAdapter.removePlayer(gameId); // → core.remove_bot (танк + ИИ)
+    this._coreAdapter.removePlayer(gameId); // → core.remove_scripted_actor (танк + ИИ)
 
     this._participants.remove(gameId);
   }

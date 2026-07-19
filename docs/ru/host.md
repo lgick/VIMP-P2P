@@ -134,8 +134,8 @@ prediction) собирает `packages/engine/src/lib/buildClientConfig.js`.
   отмасштабирована в JS `RoundManager.scaleMapData`, поэтому грузится со
   `scale: 1` — ядро не масштабирует повторно); `createPlayer`/`removePlayer`
   различают scripted-участника и человека по `participant.isScripted`
-  (`add_bot`/`remove_bot` — танк + ИИ в ядре — против
-  `spawn_tank`/`remove_tank`); `changePlayerData` → `reset_tank`;
+  (`spawn_scripted_actor`/`remove_scripted_actor` — танк + ИИ в ядре — против
+  `spawn_actor`/`remove_actor`); `changePlayerData` → `reset_actor`;
 - **ввод** → `apply_input` (seq подтверждается ядром в player-блоке кадра);
 - **проекция событий**: после `step` дренирует `take_events()` и отдаёт каждое
   событие инъецируемому игровому `eventRouter`'у
