@@ -20,7 +20,7 @@ container. On the VPS, Nginx terminates HTTPS and proxies to the app port
 > The node stage then runs `npm run game:build` (builds the `@vimp/tanks`
 > plugin bundle — client/host entries, the WASM asset, maps, sounds,
 > `manifest.json` — into `games/tanks/dist/`) followed by `npm run
-> build:app` (audio + engine Vite build), with `pkg-web` already in
+> build:app` (engine Vite build), with `pkg-web` already in
 > place. The runner stage copies both `packages/engine/dist/` and
 > `games/tanks/dist/`; the master reads the plugin only through
 > `GameCatalog` (`dist/manifest.json` + `dist/maps/*.json`) — it never

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { ENGINE_API_VERSION } from '../packages/engine/src/config/opcodes.js';
 import hostDefaults from '../packages/engine/src/config/hostDefaults.js';
 import gameConfig from '../games/tanks/src/config/game.js';
@@ -11,7 +12,7 @@ import gameConfig from '../games/tanks/src/config/game.js';
 // Запуск (в порядке зависимостей) — см. games/tanks/package.json "build".
 
 const distDir = new URL('../games/tanks/dist/', import.meta.url);
-const distPath = distDir.pathname;
+const distPath = fileURLToPath(distDir);
 const assetsPath = path.join(distPath, 'assets');
 const mapsPath = path.join(distPath, 'maps');
 

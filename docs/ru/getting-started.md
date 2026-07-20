@@ -31,7 +31,7 @@ mkcert -key-file key.pem -cert-file cert.pem localhost 127.0.0.1 ::1
 
 ```bash
 npm run core:build     # WASM-ядро (один раз; повторять при правках core/)
-npm run audio:process
+npm run game:build     # бандл игры-плагина, включая обработанные звуки (нужен ffmpeg)
 npm run dev
 ```
 
@@ -43,8 +43,8 @@ npm run dev
 
 ```bash
 npm start              # production-запуск мастера (читает .env: VIMP_DOMAIN и др.)
-npm run build          # прод-сборка (WASM-ядро + бандл игры-плагина + обработка аудио + Vite bundle движка)
-npm run build:app      # сборка только движка (аудио + Vite; ядро и игра-плагин уже собраны)
+npm run build          # прод-сборка (WASM-ядро + бандл игры-плагина, включая аудио + Vite bundle движка)
+npm run build:app      # сборка только движка (Vite; ядро и игра-плагин уже собраны)
 npm run core:build     # сборка Rust-ядра в WASM (web + nodejs; нужен Rust-тулчейн)
 npm run core:test      # Rust-тесты ядра (cargo test)
 npm run maps:export    # экспорт карт в JSON (games/tanks/dist/maps/) для мастера/ядра

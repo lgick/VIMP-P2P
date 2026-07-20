@@ -3,7 +3,7 @@ _*
 node_modules/
 coverage/
 .TRASH
-public/sounds/
+games/tanks/build/
 dist
 logs
 *.log

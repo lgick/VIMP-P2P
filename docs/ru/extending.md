@@ -36,7 +36,7 @@
 ## Новый звук
 
 1. Добавьте запись в [games/tanks/src/config/sounds.js](../../games/tanks/src/config/sounds.js): `file`, `priority`, `volume`, опционально `loop`.
-2. Положите аудиофайл в `public/sounds/` в форматах **`.webm` и `.mp3`** (список кодеков — `codecList`).
+2. Положите исходный файл в `games/tanks/assets/audio-raw/` и выполните `npm run game:build` — `audio:process` нормализует его (ffmpeg) и выпускает **`.webm` и `.mp3`** (список кодеков — `codecList`) в `games/tanks/dist/sounds/`, раздаваемый через `assetsBase`.
 3. Воспроизведение: UI/системные — `soundManager.playSystemSound(name)`; пространственные — `registerSound(name, { position })` (лимит голосов и приоритеты соблюдает `SoundManager`, см. [client.md](client.md#soundmanager)).
 
 ## Новая клиентская сущность (part)

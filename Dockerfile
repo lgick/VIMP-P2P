@@ -52,7 +52,7 @@ COPY --from=core-builder /app/games/tanks/core/pkg-web ./games/tanks/core/pkg-we
 ENV NODE_ENV=production
 
 # сборка игры-плагина (client/host-бандлы, wasm, карты, звуки, manifest.json
-# → games/tanks/dist/) и движка (audio + vite build → packages/engine/dist/)
+# → games/tanks/dist/) и движка (vite build → packages/engine/dist/)
 RUN npm run game:build && npm run build:app
 
 # ============================================================

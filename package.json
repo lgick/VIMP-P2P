@@ -25,7 +25,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "build": "npm run core:build:web && npm run game:build && npm run build:app",
-    "build:app": "npm run audio:process && npm -w @vimp/engine run build",
+    "build:app": "npm -w @vimp/engine run build",
     "audio:process": "node scripts/process-audio.js",
     "core:build": "npm run core:build:web && npm run core:build:node",
     "core:build:web": "wasm-pack build games/tanks/core --release --target web --out-dir pkg-web",

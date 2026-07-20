@@ -74,8 +74,10 @@ Steps:
 
 1. Add an entry in [games/tanks/src/config/sounds.js](../../games/tanks/src/config/sounds.js):
    `file`, `priority`, `volume`, optionally `loop`.
-2. Place the audio file in `public/sounds/` in both **`.webm` and
-   `.mp3`** formats (the codec list — `codecList`).
+2. Put the source file into `games/tanks/assets/audio-raw/` and run
+   `npm run game:build` — `audio:process` normalizes it (ffmpeg) and
+   emits **`.webm` and `.mp3`** (the codec list — `codecList`) into
+   `games/tanks/dist/sounds/`, served via `assetsBase`.
 3. Playback: UI/system sounds — `soundManager.playSystemSound(name)`;
    spatial ones — `registerSound(name, { position })` (voice limits and
    priorities are handled by `SoundManager`, see

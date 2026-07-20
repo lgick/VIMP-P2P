@@ -6,7 +6,7 @@ import path from 'path';
 const execPromise = promisify(exec);
 
 const sourceDir = 'games/tanks/assets/audio-raw';
-const outputDir = 'packages/engine/public/sounds';
+const outputDir = 'games/tanks/build/sounds';
 
 const AUDIO_EXTENSIONS = ['.wav', '.mp3', '.flac', '.aiff', '.ogg', '.m4a'];
 

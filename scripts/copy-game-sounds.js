@@ -1,19 +1,23 @@
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 // Копирует уже обработанные звуки игры (npm run audio:process →
-// packages/engine/public/sounds — текущий раздающий путь движка, Этап <6)
+// games/tanks/build/sounds — промежуточный каталог, в .gitignore)
 // в dist/ игры (games/tanks/dist/sounds/) — ассет под
-// GameManifest.assetsBase (Этап 6.2, GameCatalog мастера). Обработка
-// (ffmpeg-нормализация громкости) общая для обоих назначений — пересчитывать
-// её здесь незачем, только копия готовых файлов.
+// GameManifest.assetsBase (GameCatalog мастера). Обработка
+// (ffmpeg-нормализация громкости) выполняется один раз в game:build.
 // Запуск: npm run audio:process && node scripts/copy-game-sounds.js
 
-const sourceDir = new URL('../packages/engine/public/sounds/', import.meta.url);
-const targetDir = new URL('../games/tanks/dist/sounds/', import.meta.url);
+const sourceDir = fileURLToPath(
+  new URL('../games/tanks/build/sounds/', import.meta.url),
+);
+const targetDir = fileURLToPath(
+  new URL('../games/tanks/dist/sounds/', import.meta.url),
+);
 
 if (!fs.existsSync(sourceDir)) {
   console.error(
-    `Error: '${sourceDir.pathname}' not found. Run 'npm run audio:process' first.`,
+    `Error: '${sourceDir}' not found. Run 'npm run audio:process' first.`,
   );
   process.exit(1);
 }
@@ -21,4 +25,4 @@ if (!fs.existsSync(sourceDir)) {
 fs.rmSync(targetDir, { recursive: true, force: true });
 fs.cpSync(sourceDir, targetDir, { recursive: true });
 
-console.log(`copied sounds: ${sourceDir.pathname} -> ${targetDir.pathname}`);
+console.log(`copied sounds: ${sourceDir} -> ${targetDir}`);

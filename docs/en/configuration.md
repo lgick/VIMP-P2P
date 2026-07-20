@@ -360,7 +360,7 @@ the validator code doesn't.
 ## games/tanks/src/config/sounds.js
 
 The sound catalog. Each sound: `file` (the filename without an extension
-in `public/sounds/`), `priority` (higher wins when voices compete),
+in `games/tanks/dist/sounds/`), `priority` (higher wins when voices compete),
 `volume`, optionally `loop: true`. `codecList: ['webm', 'mp3']` — files
 must exist in both formats. More on playback — [client.md](client.md#soundmanager).
 

@@ -31,7 +31,7 @@ Certificate paths are set in `packages/engine/src/config/master.js` (`httpsOptio
 
 ```bash
 npm run core:build     # WASM core (once; repeat after editing core/)
-npm run audio:process
+npm run game:build     # game plugin bundle incl. processed sounds (needs ffmpeg)
 npm run dev
 ```
 
@@ -43,8 +43,8 @@ Other commands:
 
 ```bash
 npm start              # production run of the master (reads .env: VIMP_DOMAIN, etc.)
-npm run build           # production build (WASM core + game plugin bundle + audio processing + engine Vite bundle)
-npm run build:app       # engine build only (audio + Vite; core and game plugin already built)
+npm run build           # production build (WASM core + game plugin bundle incl. audio + engine Vite bundle)
+npm run build:app       # engine build only (Vite; core and game plugin already built)
 npm run core:build      # build the Rust core to WASM (web + nodejs; needs the Rust toolchain)
 npm run core:test       # Rust core tests (cargo test)
 npm run maps:export     # export maps to JSON (games/tanks/dist/maps/) for the master/core
