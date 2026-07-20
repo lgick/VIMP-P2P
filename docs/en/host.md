@@ -49,8 +49,9 @@ Main-thread messages:
   assembles the game config (a merge of the engine defaults
   `packages/engine/src/config/hostDefaults.js` and `HostPlugin.gameConfig`)
   and applies room settings to it
-  (`applyRoomOverrides`: name/map/limit ≤ `roomDefaults.maxPlayers`/timers/
-  friendly fire; maps come
+  (`applyRoomOverrides`, `packages/engine/src/lib/applyRoomOverrides.js`:
+  name/map/limit ≤ `roomDefaults.maxPlayers`/timers (`roundTime`/`mapTime`
+  clamped to `roomTimeMin…roomTimeMax`)/friendly fire; maps come
   from `room.maps` if the main thread fetched the master's catalog),
   initializes the core via `HostPlugin.createCore(coreConfigJson, {
   wasmUrl: room.game.wasmUrl })`, creates `HostGame`, replies `ready`;

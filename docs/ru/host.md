@@ -44,8 +44,10 @@
   wasmUrl }`, собирается `connectAsHost` из активного `GameManifest`),
   собирает конфиг игры (merge движковых дефолтов
   `packages/engine/src/config/hostDefaults.js` и `HostPlugin.gameConfig`) и
-  применяет к нему настройки комнаты (`applyRoomOverrides`: имя/карта/лимит
-  ≤ `roomDefaults.maxPlayers`/таймеры/friendly fire; карты —
+  применяет к нему настройки комнаты (`applyRoomOverrides`,
+  `packages/engine/src/lib/applyRoomOverrides.js`: имя/карта/лимит
+  ≤ `roomDefaults.maxPlayers`/таймеры (`roundTime`/`mapTime` клампятся в
+  `roomTimeMin…roomTimeMax`)/friendly fire; карты —
   из `room.maps`, если главный поток скачал каталог мастера), инициализирует
   ядро через `HostPlugin.createCore(coreConfigJson, { wasmUrl:
   room.game.wasmUrl })`, создаёт `HostGame`, отвечает `ready`; `handoff` —

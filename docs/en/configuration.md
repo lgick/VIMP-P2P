@@ -59,6 +59,7 @@ merge.
 | `networkSendRate` | `4` | A snapshot is sent every Nth tick (4 → 30 packets/sec) |
 | `roundTime` | `120000` | Round duration |
 | `mapTime` | `600000` | Map duration |
+| `roomTimeMin` / `roomTimeMax` | `10000` / `3600000` | Server-side clamp bounds for the room's user-set `roundTime`/`mapTime` (the lobby form is not a trust boundary) |
 | `voteTime` | `10000` | How long a vote window stays open |
 | `timeBlockedVote` | `30000` | Cooldown between votes on the same topic |
 | `teamChangeGracePeriod` | `10000` | The team-change window at round start |

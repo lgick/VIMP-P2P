@@ -438,6 +438,10 @@ export default class HostGame {
   mapReady(gameId) {
     const user = this._participants.get(gameId);
 
+    if (!user) {
+      return;
+    }
+
     if (user.currentMap !== this._roundManager.currentMap) {
       this.sendMap(gameId);
       return;
@@ -451,6 +455,11 @@ export default class HostGame {
   // сообщает о готовности игрока к игре
   firstShotReady(gameId) {
     const user = this._participants.get(gameId);
+
+    if (!user) {
+      return;
+    }
+
     const socketId = user.socketId;
 
     user.isReady = true;
@@ -706,6 +715,11 @@ export default class HostGame {
   // обновляет команды (формат wire: 'seq:action:name')
   updateKeys(gameId, keyStr) {
     const user = this._participants.get(gameId);
+
+    if (!user) {
+      return;
+    }
+
     const [seq, action, name] = keyStr.split(':');
 
     user.lastActionTime = Date.now();
@@ -730,7 +744,7 @@ export default class HostGame {
   pushMessage(gameId, message) {
     const user = this._participants.get(gameId);
 
-    if (user.isReady === false) {
+    if (!user || user.isReady === false) {
       return;
     }
 
@@ -755,7 +769,7 @@ export default class HostGame {
   parseVote(gameId, data) {
     const user = this._participants.get(gameId);
 
-    if (user.isReady === false) {
+    if (!user || user.isReady === false) {
       return;
     }
 

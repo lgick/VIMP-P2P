@@ -5,9 +5,9 @@
 // сюда приходят уже разобранные пакеты клиентов, обратно уходят wire-кадры
 // (JSON-строки и бинарные ArrayBuffer'ы через Transferable).
 
-import hostDefaults from '../config/hostDefaults.js';
 import clientDefaults from '../config/clientDefaults.js';
 import wsports from '../config/wsports.js';
+import { applyRoomOverrides } from '../lib/applyRoomOverrides.js';
 import { buildClientConfig } from '../lib/buildClientConfig.js';
 import { buildCoreConfig } from '../lib/coreConfig.js';
 import { validateAuth } from '../lib/validators.js';
@@ -43,47 +43,6 @@ const clients = new Map();
 // эстафета Worker'ов (Этап 5.2): socketId → gameId участников, восстановленных
 // из handoff-меты — их порт-машины поднимаются минуя хендшейк
 let handoffClients = null;
-
-// собирает конфиг игры (движковые дефолты + игровая половина) и применяет
-// пользовательские настройки комнаты
-function applyRoomOverrides(room = {}, plugin) {
-  const game = structuredClone({ ...hostDefaults, ...plugin.gameConfig });
-
-  // Этап 5.1: актуальные карты мастера (фетчит главный поток) вместо бандла
-  if (room.maps && Object.keys(room.maps).length) {
-    game.maps = room.maps;
-
-    // дефолтная карта бандла могла уйти из каталога мастера
-    if (!game.maps[game.currentMap]) {
-      game.currentMap = Object.keys(game.maps)[0];
-    }
-  }
-
-  if (Number.isFinite(room.maxPlayers)) {
-    game.maxPlayers = Math.max(
-      1,
-      Math.min(game.roomDefaults.maxPlayers, room.maxPlayers),
-    );
-  }
-
-  if (room.map && game.maps[room.map]) {
-    game.currentMap = room.map;
-  }
-
-  if (Number.isFinite(room.roundTime)) {
-    game.timers.roundTime = room.roundTime;
-  }
-
-  if (Number.isFinite(room.mapTime)) {
-    game.timers.mapTime = room.mapTime;
-  }
-
-  if (typeof room.friendlyFire === 'boolean') {
-    game.parts.friendlyFire = room.friendlyFire;
-  }
-
-  return game;
-}
 
 // wire-сокет пользователя: пишет кадры в главный поток (роутер WebRTC/loopback)
 function makeWorkerSocket(socketId) {

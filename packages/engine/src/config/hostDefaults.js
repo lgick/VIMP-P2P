@@ -27,6 +27,11 @@ export default {
     // время карты (10 минут)
     mapTime: 600000,
 
+    // границы пользовательских roundTime/mapTime комнаты (клампы в
+    // host.worker.js; зеркально min/max в lobby.pug, там в секундах)
+    roomTimeMin: 10000,
+    roomTimeMax: 3600000,
+
     // время голосования (10 секунд)
     voteTime: 10000,
 

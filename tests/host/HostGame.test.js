@@ -249,6 +249,29 @@ describe.skipIf(!coreAvailable)('HostGame (core-driven)', () => {
 // Эстафета Worker'ов (Этап 5.2): мягкий перенос комнаты в новый Worker на
 // границе раунда — без дампа ядра (мир пересоздаётся стартом раунда),
 // переносится JS-мета: участники, боты, счёт, карта с остатком, seq кадров.
+// Д4.1: гонка «кик → в полёте ещё сообщения клиента до disconnect» — методы
+// с participants.get(gameId) не должны кидать TypeError на чужом gameId
+describe.skipIf(!coreAvailable)('HostGame: null-guard\'ы (Д4.1)', () => {
+  let host;
+
+  beforeEach(async () => {
+    ({ host } = await createHost());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.resetModules();
+  });
+
+  it('методы с несуществующим gameId не кидают', () => {
+    expect(() => host.updateKeys('999', '1:down:forward')).not.toThrow();
+    expect(() => host.pushMessage('999', 'hello')).not.toThrow();
+    expect(() => host.parseVote('999', 'teams')).not.toThrow();
+    expect(() => host.mapReady('999')).not.toThrow();
+    expect(() => host.firstShotReady('999')).not.toThrow();
+  });
+});
+
 describe.skipIf(!coreAvailable)('HostGame: эстафета Worker\'ов (5.2)', () => {
   afterEach(() => {
     vi.useRealTimers();

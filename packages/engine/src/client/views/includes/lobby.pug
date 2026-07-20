@@ -10,10 +10,10 @@ div#lobby
         input#lobby-max-players(type='number', min='1')
       label
         span= 'Round time (s)'
-        input#lobby-round-time(type='number', min='1')
+        input#lobby-round-time(type='number', min='10', max='3600')
       label
         span= 'Map time (s)'
-        input#lobby-map-time(type='number', min='1')
+        input#lobby-map-time(type='number', min='10', max='3600')
       label
         input#lobby-friendly-fire(type='checkbox')
         span= 'Friendly fire'

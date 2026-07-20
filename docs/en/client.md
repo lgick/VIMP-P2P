@@ -153,8 +153,8 @@ The "Create server" form is pre-filled from the active game manifest's
 picker built from `manifest.maps.list`. The game picker (`#lobby-game`)
 stays hidden while the master's catalog has a single game. On submit the
 overrides are sent as the room object to `connectAsHost` →
-`HostController` → the Worker, where `host.worker.js`'s
-`applyRoomOverrides` already reads `maxPlayers`/`roundTime`/`mapTime`/
+`HostController` → the Worker, where `applyRoomOverrides`
+(`packages/engine/src/lib/applyRoomOverrides.js`) already reads `maxPlayers`/`roundTime`/`mapTime`/
 `friendlyFire`/`map` (these fields predate stage 6.3 — only the client-side
 form that fills them is new).
 

@@ -40,7 +40,7 @@ Classic-фолбэка на Worker нет (запретил бы ESM и потр
 
 Конфиг — [packages/engine/src/config/lobby.js](../../packages/engine/src/config/lobby.js) (бандлится в сборку, т.к. лобби проходит до подключения к хосту). Замер пинга **приблизительный** (клиент→мастер→хост, не P2P RTT) — так и подаётся в UI.
 
-Форма «Создать сервер» заполняется дефолтами из `roomDefaults` манифеста активной игры (`populateRoomForm` в `main.js`): лимит игроков, время раунда/карты (в UI — секунды, по проводу — миллисекунды), огонь по своим и выбор карты из `manifest.maps.list`. Селектор игры (`#lobby-game`) скрыт, пока в каталоге мастера одна игра. При отправке переопределения уходят объектом комнаты в `connectAsHost` → `HostController` → Worker, где `applyRoomOverrides` в `host.worker.js` уже читает `maxPlayers`/`roundTime`/`mapTime`/`friendlyFire`/`map` (эти поля существовали до этапа 6.3 — новая часть только клиентская форма, которая их заполняет).
+Форма «Создать сервер» заполняется дефолтами из `roomDefaults` манифеста активной игры (`populateRoomForm` в `main.js`): лимит игроков, время раунда/карты (в UI — секунды, по проводу — миллисекунды), огонь по своим и выбор карты из `manifest.maps.list`. Селектор игры (`#lobby-game`) скрыт, пока в каталоге мастера одна игра. При отправке переопределения уходят объектом комнаты в `connectAsHost` → `HostController` → Worker, где `applyRoomOverrides` (`packages/engine/src/lib/applyRoomOverrides.js`) уже читает `maxPlayers`/`roundTime`/`mapTime`/`friendlyFire`/`map` (эти поля существовали до этапа 6.3 — новая часть только клиентская форма, которая их заполняет).
 
 Publisher-паттерн связей внутри тройки:
 

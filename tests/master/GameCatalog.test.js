@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import GameCatalog from '../../packages/engine/src/master/GameCatalog.js';
 
 // Каталог игр-плагинов мастера (Этап 6.2): сканирует games/*/dist/manifest.json
@@ -93,6 +93,39 @@ describe('GameCatalog', () => {
     const catalog = new GameCatalog(gamesDir);
 
     expect(catalog.ids).toEqual(['tanks']);
+  });
+
+  it('игра с manifest.id ≠ имени директории пропускается с warn (Д4.3)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    writeManifest('wrong-dir', fixtureManifest); // manifest.id === 'tanks'
+    writeManifest('tanks', fixtureManifest);
+
+    const catalog = new GameCatalog(gamesDir);
+
+    expect(catalog.ids).toEqual(['tanks']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('wrong-dir'));
+
+    warn.mockRestore();
+  });
+
+  it('битый JSON карты пропускается с warn, мастер не падает (Д4.3)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    writeManifest('tanks', fixtureManifest);
+    writeMap('tanks', 'arena', { setId: 'c1', step: 32, layers: {} });
+
+    const mapsDir = path.join(gamesDir, 'tanks', 'dist', 'maps');
+
+    fs.writeFileSync(path.join(mapsDir, 'broken.json'), '{oops');
+
+    const catalog = new GameCatalog(gamesDir);
+    const mapCatalog = catalog.getMapCatalog('tanks');
+
+    expect(JSON.parse(mapCatalog.manifest).maps).toEqual(['arena']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('broken.json'));
+
+    warn.mockRestore();
   });
 
   it('dev: entries указывают на Vite /@fs/ исходники, остальное — из манифеста', () => {

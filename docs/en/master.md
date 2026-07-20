@@ -76,7 +76,10 @@ running pre-6.4 client code.
 The `GameManifest` catalog (`GameCatalog`, Stage 6.2 — see
 [plugin-api.md](plugin-api.md#gamemanifest)):
 scans `games/*/dist/manifest.json` (built by `npm run game:build`) at master
-startup, one entry per game plugin.
+startup, one entry per game plugin. A game whose `manifest.id` differs from
+its directory name is skipped with a warning (the static mount builds paths
+from the id); a map file with broken JSON is skipped with a warning instead
+of crashing the master.
 
 - `GET /games/manifest.json` → a JSON array of every known game's manifest.
 - `GET /games/:id/manifest.json` → one game's manifest; unknown id →

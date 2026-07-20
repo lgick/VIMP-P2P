@@ -31,6 +31,16 @@ export default class GameCatalog {
         continue; // игра не собрана (npm run game:build) — пропускаем
       }
 
+      // статик-маунт мастера строит путь games/<id>/dist по manifest.id —
+      // при расхождении с именем директории он бьёт мимо
+      if (manifest.id !== id) {
+        console.warn(
+          `GameCatalog: skip "${id}" — manifest.id "${manifest.id}" ` +
+            'does not match directory name',
+        );
+        continue;
+      }
+
       this._games.set(manifest.id, {
         manifest: dev ? this._toDevManifest(manifest, gameDir) : manifest,
         mapCatalog: new MapCatalog(
@@ -70,9 +80,13 @@ export default class GameCatalog {
     for (const file of files) {
       const name = file.slice(0, -'.json'.length);
 
-      maps[name] = JSON.parse(
-        fs.readFileSync(path.join(mapsDir, file), 'utf8'),
-      );
+      try {
+        maps[name] = JSON.parse(
+          fs.readFileSync(path.join(mapsDir, file), 'utf8'),
+        );
+      } catch (err) {
+        console.warn(`GameCatalog: skip broken map "${file}": ${err.message}`);
+      }
     }
 
     return maps;
