@@ -1,18 +1,22 @@
 # Plugin API (черновик)
 
-> **Статус: черновик.** Контракты фиксируют целевую архитектуру отделения
-> движка от игры (см. ADR в [architecture.md](architecture.md#adr-движок--приложение-игра--динамический-плагин)).
-> Код пока монолитен (статическая композиция через
-> `packages/engine/src/gameRegistry.static.js`); контракты реализуются
-> поэтапно по плану миграции (`PLAN.md`). В коде уже есть: константа
-> `ENGINE_API_VERSION` (`packages/engine/src/config/opcodes.js`); объекты
-> HostPlugin/ClientPlugin (`games/tanks/src/host/index.js`,
-> `games/tanks/src/client/index.js`), включая `createCore`/
-> `createClientCore` (движок их пока не зовёт — приедет в Этапе 6.3/6.4);
-> сборка игры (`games/tanks/vite.config.js`), выпускающая
+> **Статус: черновик, частично в коде.** Контракты фиксируют целевую
+> архитектуру отделения движка от игры (см. ADR в
+> [architecture.md](architecture.md#adr-движок--приложение-игра--динамический-плагин)).
+> Контракты реализуются поэтапно по плану миграции (`PLAN.md`). В коде уже
+> есть: константа `ENGINE_API_VERSION`
+> (`packages/engine/src/config/opcodes.js`), проверяется при загрузке
+> плагина; объекты HostPlugin/ClientPlugin (`games/tanks/src/host/index.js`,
+> `games/tanks/src/client/index.js`); сборка игры
+> (`games/tanks/vite.config.js`), выпускающая
 > `games/tanks/dist/{client,host}-<hash>.js`, общий хешированный `.wasm`,
-> `maps/*.json`, `sounds/*` и `manifest.json` (`npm run game:build`) —
-> мастер её пока не читает (Этап 6.2).
+> `maps/*.json`, `sounds/*` и `manifest.json` (`npm run game:build`), которую
+> читает `GameCatalog` мастера (Этап 6.2, маршруты `/games/*`). Клиент (Этап
+> 6.3) динамически грузит `ClientPlugin` из манифеста активной игры и зовёт
+> `createClientCore` — в `gameRegistry.static.js` осталась только
+> **хостовая** половина статической композиции (`hostPlugin`, Worker-safe
+> wasm-glue), удаляется в Этапе 6.4, когда `host.worker.js` перейдёт на
+> `entries.host`/`createCore`.
 
 Движок — **приложение** (деплоится один раз: мастер, транспорт,
 Worker-инфраструктура, мета-механизмы, MVC-каркас клиента, Rust-каркас).

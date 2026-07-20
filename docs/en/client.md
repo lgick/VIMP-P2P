@@ -6,10 +6,17 @@ The client is a browser app built on PixiJS (Vite build, Pug templates in
 
 ## main.js — bootstrap, dispatcher, and render loop
 
-- **Bootstrap**: creates `SignalingClient`, connects to the master; on
-  `welcome` it brings up the lobby (`initLobby`). Picking a server →
-  `connectToHost` creates a `WebRtcManager`, establishes P2P, and remembers
-  `currentHostId` (for `/ban`).
+- **Bootstrap**: before anything else, fetches the master's game catalog
+  (`GET /games/manifest.json`, `GameCatalog` — see [master.md](master.md))
+  and dynamically loads the active game's `ClientPlugin` by its manifest's
+  `entries.client` (`packages/engine/src/lib/gamePlugin.js`,
+  `loadClientPlugin`), rejecting a mismatched `engineApi`. With one game in
+  the catalog, the first manifest entry is used and the lobby's game picker
+  stays hidden (see [plugin-api.md](plugin-api.md)). Then creates
+  `SignalingClient`, connects to the master; on `welcome` it brings up the
+  lobby (`initLobby`). Picking a server → `connectToHost` creates a
+  `WebRtcManager`, establishes P2P, and remembers `currentHostId` (for
+  `/ban`).
 - **`/ban` social moderation**: outgoing chat goes through `handleChatSend`
   — it intercepts `/ban <reason>` and, instead of sending it to the host
   (port `CHAT_DATA`), sends the report straight to the master
@@ -27,8 +34,10 @@ The client is a browser app built on PixiJS (Vite build, Pug templates in
   mismatch drops the frame).
 - On `CONFIG_DATA` (port 0) it initializes every module: the PixiJS
   `Application`s, the MVC components, `BakingProvider` (texture baking),
-  `SoundManager`, and the **client core** (`await init()` for WASM + `new
-  ClientCore(...)`, its config is assembled by
+  `SoundManager`, and the **client core** (`ClientPlugin.createClientCore(configJson,
+  { wasmUrl })`, where `wasmUrl` is the active game manifest's
+  `entries.wasm` — the plugin runs its own wasm-bindgen `init()` and returns
+  `{ core, memory }`; the config is assembled by
   [packages/engine/src/lib/clientCoreConfig.js](../../packages/engine/src/lib/clientCoreConfig.js) from the
   `prediction`/`interpolation` sections of CONFIG_DATA); it replies
   `CONFIG_READY`.
@@ -102,6 +111,15 @@ master (`register_host`/heartbeat), and answers the lobby ping
 (`ping_host`). Remote clients' data flows into the same Worker as the host
 player's loopback. Details — [host.md](host.md).
 
+There's no classic-Worker fallback (it would forbid ESM and require an
+inlined WASM binary — see PLAN.md risk #5), so "Create server" first feature-
+detects module-Worker support
+(`packages/engine/src/client/network/workerSupport.js`,
+`supportsModuleWorker` — a browser only reads a `type` constructor option if
+it understands module Workers). On an unsupported browser it shows a plain
+"this browser cannot be a host" message and returns without touching
+anything else — joining existing rooms is unaffected.
+
 ## MVC components (packages/engine/src/client/components/)
 
 Nine `model/` + `view/` + `controller/` triplets: **Auth**, **Lobby**,
@@ -128,6 +146,17 @@ Config — [packages/engine/src/config/lobby.js](../../packages/engine/src/confi
 build, since the lobby happens before connecting to a host). The ping
 measurement is **approximate** (client→master→host, not P2P RTT) and shown
 as such in the UI.
+
+The "Create server" form is pre-filled from the active game manifest's
+`roomDefaults` (`populateRoomForm` in `main.js`): max players, round/map time
+(seconds in the UI, milliseconds on the wire), friendly fire, and a map
+picker built from `manifest.maps.list`. The game picker (`#lobby-game`)
+stays hidden while the master's catalog has a single game. On submit the
+overrides are sent as the room object to `connectAsHost` →
+`HostController` → the Worker, where `host.worker.js`'s
+`applyRoomOverrides` already reads `maxPlayers`/`roundTime`/`mapTime`/
+`friendlyFire`/`map` (these fields predate stage 6.3 — only the client-side
+form that fills them is new).
 
 The Publisher pattern within a triplet:
 
@@ -210,9 +239,9 @@ Data flow:
   `nextWeapon`/`prevWeapon` — `cycle_weapon`). Sending `"seq:action:name"`
   to the host is unchanged.
 
-**The tanks ClientPlugin** (`games/tanks/src/client/index.js`; loaded by the
-engine via `loadClientPlugin()` from `gameRegistry.static.js` — temporary
-static composition until stage 6) supplies `parts` (entity renderers),
+**The tanks ClientPlugin** (`games/tanks/src/client/index.js`; loaded
+dynamically by the engine from the master's `GameManifest`, stage 6.3 —
+`packages/engine/src/lib/gamePlugin.js`) supplies `parts` (entity renderers),
 `bakers` (procedural textures), the game CSS and the hooks. The core's game
 methods are called only from its hooks — `onAuth` (`set_model` on auth), `onPanel` (`sync_panel`
 per panel frame), `onLocalAction` (`try_fire`/`cycle_weapon`); `main.js`
@@ -279,7 +308,11 @@ data, calls `update(data)` on an existing one, or removes it (`null`).
 ## SoundManager
 
 [packages/engine/src/client/SoundManager.js](../../packages/engine/src/client/SoundManager.js) (built on
-Howler.js). Sounds are described in `games/tanks/src/config/sounds.js`.
+Howler.js). Sounds are described in `games/tanks/src/config/sounds.js`; its
+`path` field is overridden client-side (`main.js`, `CONFIG_DATA` handler) to
+`${activeGameManifest.assetsBase}sounds/` — the game build's own sound copy
+served alongside its client/host bundles (`games/tanks/dist/sounds/`),
+rather than the engine-bundled `/sounds/` static copy.
 
 - **UI/system** (no position): `playSystemSound(name)` — plays instantly,
   bypassing priorities (also used for port 6 sounds).

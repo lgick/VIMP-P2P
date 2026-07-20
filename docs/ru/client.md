@@ -4,10 +4,10 @@
 
 ## main.js — бутстрап, диспетчер и рендер-цикл
 
-- **Бутстрап**: создаёт `SignalingClient`, подключается к мастеру; по `welcome` поднимает лобби (`initLobby`). Выбор сервера → `connectToHost` создаёт `WebRtcManager`, устанавливает P2P и запоминает `currentHostId` (для `/ban`).
+- **Бутстрап**: прежде всего фетчит каталог игр мастера (`GET /games/manifest.json`, `GameCatalog` — см. [master.md](master.md)) и динамически грузит `ClientPlugin` активной игры по `entries.client` её манифеста (`packages/engine/src/lib/gamePlugin.js`, `loadClientPlugin`), отклоняя несовпадение `engineApi`. Пока в каталоге одна игра — берётся первая запись манифеста, а селектор игры в лобби скрыт (см. [plugin-api.md](plugin-api.md)). Затем создаёт `SignalingClient`, подключается к мастеру; по `welcome` поднимает лобби (`initLobby`). Выбор сервера → `connectToHost` создаёт `WebRtcManager`, устанавливает P2P и запоминает `currentHostId` (для `/ban`).
 - **Соц-модерация `/ban`**: исходящий чат идёт через `handleChatSend` — он перехватывает `/ban <причина>` и вместо отправки хосту (порт `CHAT_DATA`) шлёт жалобу напрямую мастеру (`signaling.reportHost(currentHostId, reason)`), минуя хоста-читера. Причина обязательна, доступно только гостю (`currentHostId` есть); у хоста-игрока команда даёт локальную подсказку; при разорванном сигнальном WS — честное сообщение об ошибке (жалоба не отправлена). Мастер дополнительно принимает жалобу только от сессии, реально подключавшейся к комнате — см. [master.md](master.md#соц-модерация-ban). Остальной чат — хосту как обычно.
 - Ветвит входящие пакеты хоста (`handleMessage`) по типу данных: строка → JSON `[portId, payload]` → обработчик `socketMethods[portId]`; `ArrayBuffer` → `clientCore.push_frame` (распаковка, вставка в буфер по seq и reconciliation предикта — в ядре; несовпадение версии — кадр отброшен).
-- По `CONFIG_DATA` (порт 0) инициализирует все модули: PixiJS `Application`-ы, MVC-компоненты, `BakingProvider` (запекание текстур), `SoundManager` и **клиентское ядро** (`await init()` WASM + `new ClientCore(...)`, конфиг собирает [packages/engine/src/lib/clientCoreConfig.js](../../packages/engine/src/lib/clientCoreConfig.js) из секций `prediction`/`interpolation` CONFIG_DATA); отвечает `CONFIG_READY`.
+- По `CONFIG_DATA` (порт 0) инициализирует все модули: PixiJS `Application`-ы, MVC-компоненты, `BakingProvider` (запекание текстур), `SoundManager` и **клиентское ядро** (`ClientPlugin.createClientCore(configJson, { wasmUrl })`, где `wasmUrl` — `entries.wasm` манифеста активной игры: плагин сам зовёт свой wasm-bindgen `init()` и возвращает `{ core, memory }`; конфиг собирает [packages/engine/src/lib/clientCoreConfig.js](../../packages/engine/src/lib/clientCoreConfig.js) из секций `prediction`/`interpolation` CONFIG_DATA); отвечает `CONFIG_READY`.
 - Первый кадр (`FIRST_SHOT_DATA`, порт 4) применяется немедленно (`applyShot`), минуя ядро.
 - **Рендер-цикл** `renderTick` на `Ticker.shared` (rAF): `clientCore.sample(now)` → чтение плоского hot-буфера zero-copy из памяти WASM (танки/динамика/камера/предсказанный танк) + `take_frames()` для редких событийных кадров → применение прежним `parse`-конвейером (см. «Клиентское ядро» ниже).
 - Сбросы: смена карты (`MAP_DATA` → `set_map`) и `CLEAR` (→ `reset`) очищают буфер кадров и предикт в ядре.
@@ -26,6 +26,8 @@
 
 Хост-вкладка дополнительно поднимает главнопоточную инфраструктуру роутинга (главный поток — не Worker): **`HostController`** спавнит Worker с ядром и мостит его с транспортами; **`HostConnectionManager`** — **WebRTC-answerer** удалённых клиентов (зеркало `WebRtcManager`): слушает `webrtc_offer` через `SignalingClient`, на каждого создаёт `RTCPeerConnection`, ловит каналы `meta`/`state` в `ondatachannel`, шлёт `webrtc_answer`+ICE, регистрирует комнату у мастера (`register_host`/heartbeat) и отвечает на лобби-пинг (`ping_host`). Данные удалённых клиентов идут в тот же Worker, что и loopback хоста-игрока. Детали — [host.md](host.md).
 
+Classic-фолбэка на Worker нет (запретил бы ESM и потребовал инлайн WASM — см. риск №5 PLAN.md), поэтому «Создать сервер» сперва фича-детектит поддержку модульных Worker'ов (`packages/engine/src/client/network/workerSupport.js`, `supportsModuleWorker` — браузер читает опцию конструктора `type`, только если понимает module-воркеры). На неподдерживающем браузере показывается честное сообщение «этот браузер не может быть хостом» без побочных эффектов — присоединение к существующим комнатам не затрагивается.
+
 ## MVC-компоненты (packages/engine/src/client/components/)
 
 Девять троек `model/` + `view/` + `controller/`: **Auth**, **Lobby**, **CanvasManager**, **Controls**, **Game**, **Chat**, **Panel**, **Stat**, **Vote**.
@@ -37,6 +39,8 @@
 - **controller** — проксирует view-события в модель; дросселирование пинга — в модели (`pingHost` возвращает `false`, если сервер пинговали недавно, интервал `pingInterval`).
 
 Конфиг — [packages/engine/src/config/lobby.js](../../packages/engine/src/config/lobby.js) (бандлится в сборку, т.к. лобби проходит до подключения к хосту). Замер пинга **приблизительный** (клиент→мастер→хост, не P2P RTT) — так и подаётся в UI.
+
+Форма «Создать сервер» заполняется дефолтами из `roomDefaults` манифеста активной игры (`populateRoomForm` в `main.js`): лимит игроков, время раунда/карты (в UI — секунды, по проводу — миллисекунды), огонь по своим и выбор карты из `manifest.maps.list`. Селектор игры (`#lobby-game`) скрыт, пока в каталоге мастера одна игра. При отправке переопределения уходят объектом комнаты в `connectAsHost` → `HostController` → Worker, где `applyRoomOverrides` в `host.worker.js` уже читает `maxPlayers`/`roundTime`/`mapTime`/`friendlyFire`/`map` (эти поля существовали до этапа 6.3 — новая часть только клиентская форма, которая их заполняет).
 
 Publisher-паттерн связей внутри тройки:
 
@@ -93,8 +97,8 @@ Publisher-паттерн связей внутри тройки:
   Отправка хосту `"seq:action:name"` не изменилась.
 
 **ClientPlugin танков** (`games/tanks/src/client/index.js`; грузится движком
-через `loadClientPlugin()` из `gameRegistry.static.js` — временная статическая
-композиция до этапа 6) поставляет `parts` (рендеры сущностей), `bakers`
+динамически по `GameManifest` мастера, этап 6.3 —
+`packages/engine/src/lib/gamePlugin.js`) поставляет `parts` (рендеры сущностей), `bakers`
 (процедурные текстуры), игровой CSS и хуки. Игровые методы ядра зовутся только
 из его хуков — `onAuth` (`set_model` при авторизации), `onPanel` (`sync_panel` на
 кадр панели), `onLocalAction` (`try_fire`/`cycle_weapon`); `main.js` игровых
@@ -142,7 +146,7 @@ Publisher-паттерн связей внутри тройки:
 
 ## SoundManager
 
-[packages/engine/src/client/SoundManager.js](../../packages/engine/src/client/SoundManager.js) (на Howler.js). Звуки описаны в `games/tanks/src/config/sounds.js`.
+[packages/engine/src/client/SoundManager.js](../../packages/engine/src/client/SoundManager.js) (на Howler.js). Звуки описаны в `games/tanks/src/config/sounds.js`; поле `path` переопределяется на клиенте (`main.js`, обработчик `CONFIG_DATA`) на `${activeGameManifest.assetsBase}sounds/` — собственную копию звуков сборки игры рядом с её client/host-бандлами (`games/tanks/dist/sounds/`), вместо бандловой `/sounds/` движка.
 
 - **UI/системные** (без позиции): `playSystemSound(name)` — немедленно, в обход приоритетов (используется и для звуков порта 6).
 - **Пространственные** (позиция в мире): `registerSound(name, { position })` → `processAudibility()` → `updateActiveSounds()` — менеджер сам решает, что слышно, соблюдая лимит голосов (`WORLD_VOICE_LIMIT = 30`) и приоритеты из конфига.

@@ -289,9 +289,58 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 | --- | --- |
 | 6.1 ✅ | **Сборка игры**: `games/tanks/vite.config.js` — два независимых build-прогона (client-entry, host-entry worker-safe) в общий `dist/games/tanks/`; wasm — hashed asset (общий у обоих entry; URL — `entries.wasm` манифеста); пост-шаги: `maps:export` → `dist/games/tanks/maps/*.json`, звуки → `dist/games/tanks/sounds/`, генерация `manifest.json` (хеш-версии). Проверка: host-бандл не содержит DOM-кода |
 | 6.2 ✅ | **Мастер**: `GameCatalog` (`packages/engine/src/master/GameCatalog.js`, по образцу `WorkerCatalog`) — сканирует `dist/games/*/manifest.json`; REST `/games/manifest.json`, `/games/:id/manifest.json`, `/games/:id/maps/*` (per-game `MapCatalog`); `HostRegistry` + `GET /servers` + `register_host`/`host_registered` — поля `gameId`/`gameVersion`. Dev-режим: манифест с Vite-URL исходников (`/@fs/…/games/tanks/src/client/index.js` — трансформация и HMR штатные), `entries.wasm` — Vite-URL `.wasm` из `pkg-web`; ассеты (звуки, карты из `games/tanks/src/data`) — `express.static`-mount `/games/:id/` на мастере |
-| 6.3 | **Клиент**: лобби — `roomDefaults` из манифеста в форму создания комнаты (селект игры скрыт, пока игра одна); «Создать сервер» — фича-детект module worker + dynamic import с внятной ошибкой («браузер не может быть хостом»; join не блокируется); join: `GET /games/:id/manifest.json` → `import(entries.client)` → проверка `engineApi` → подключение; `sounds.path` от `assetsBase`; удалить клиентскую половину `gameRegistry.static.js` |
+| 6.3 ✅ | **Клиент**: лобби — `roomDefaults` из манифеста в форму создания комнаты (селект игры скрыт, пока игра одна); «Создать сервер» — фича-детект module worker + dynamic import с внятной ошибкой («браузер не может быть хостом»; join не блокируется); join: `GET /games/:id/manifest.json` → `import(entries.client)` → проверка `engineApi` → подключение; `sounds.path` от `assetsBase`; удалить клиентскую половину `gameRegistry.static.js` |
 | 6.4 | **Worker**: `init`-сообщение несёт `room.game = {id, version, hostEntryUrl, wasmUrl}`; `host.worker.js` → `await import(hostEntryUrl)` → `plugin.createCore(coreConfigJson, { wasmUrl })`; `applyRoomOverrides` валидирует по `roomDefaults`; удалить `gameRegistry.static.js` целиком |
 | 6.5 | **Эстафета**: составной `codeVersion` (движок+игра), `HANDOFF_VERSION=2` (+gameId/gameVersion), при свопе новый Worker получает свежий `hostEntryUrl`; сбой → существующий `resume`-путь |
+
+**6.3 — заметки реализации.** Новый модуль
+`packages/engine/src/lib/gamePlugin.js` (`fetchGamesManifest`,
+`assertEngineApiCompatible`, `loadClientPlugin`) заменяет клиентскую половину
+`gameRegistry.static.js`: `main.js` при бутстрапе фетчит
+`GET /games/manifest.json` (массив манифестов `GameCatalog`), берёт первую
+запись как активную игру (селектор в лобби скрыт, пока игра одна — §6
+PLAN.md) и грузит её `ClientPlugin` через `import(manifest.entries.client)`
+(`/* @vite-ignore */` — URL целиком рантаймовый, что и требуется:
+ESLint-граница движок↔игра проверяет только статические пути импорта).
+Сбой каталога/несовпадение `engineApi` — фатальная ошибка на этом этапе (без
+игры показывать нечего), сообщение прямо в `document.body`. Клиентское ядро
+теперь создаётся через `ClientPlugin.createClientCore(configJson, { wasmUrl:
+activeGameManifest.entries.wasm })` (уже был реализован в 6.1, просто не
+вызывался) вместо `loadClientCore()`/`new glue.ClientCore(...)` —
+возвращает `{ core, memory }`, `wasm.memory.buffer` в рендер-тике не
+изменился. Фича-детект модульных Worker'ов —
+`packages/engine/src/client/network/workerSupport.js`
+(`supportsModuleWorker`, классический трюк с геттером опции `type`);
+`connectAsHost` проверяет его первым делом и возвращает честную ошибку без
+побочных эффектов — `ensureWebRtcAvailable`/join не затронуты. Форма
+создания комнаты (`lobby.pug`: `#lobby-game` скрытый селект,
+`#lobby-max-players/-round-time/-map-time/-friendly-fire/-map`) заполняется
+из `GameManifest.roomDefaults` (`populateRoomForm`); `connectAsHost`
+собирает из неё `room.{maxPlayers,roundTime,mapTime,friendlyFire,map}` —
+поля, которые `host.worker.js`'s `applyRoomOverrides` уже умел принимать
+(добавлены раньше, независимо от 6.3), так что оверрайды работают без
+изменений хоста. `sounds.path` переопределяется клиентом на
+`${activeGameManifest.assetsBase}sounds/` сразу при получении `CONFIG_DATA`
+(вместо бандловой `/sounds/` из `games/tanks/src/config/sounds.js` — хост
+эту часть конфига не трогает, это осталась задача 6.4/сам конфиг). Клиентская
+пре-валидация `isValidModel` (была через `authSchema.validators` из
+`gameRegistry.static.js`) убрана: `authSchema` контрактно принадлежит
+`HostPlugin` (§3.2), которого клиент теперь не подгружает — авторитетная
+проверка на хосте (`host.worker.js` уже валидирует `hostPlugin.authSchema`)
+осталась единственной; рассинхрон вернётся `AUTH_RESULT`. Хостовая половина
+`gameRegistry.static.js` (`hostPlugin`, `gameMaps`, `initGameCore`/`GameCore`)
+не тронута — используется `host.worker.js`/`HostGame.js`/`coreConfig.js` до
+Этапа 6.4. Не входило в объём 6.3 (осталось для 6.4, вне текста плана для
+этого PR): `host.worker.js`/`connectAsHost` продолжают брать карты и
+worker-бандл комнаты со старых одноигровых маршрутов
+(`/maps/manifest.json`, `/worker/manifest.json`) — переезд на
+`/games/:id/maps/*`/`entries.host` вместе с `applyRoomOverrides`,
+валидирующим по `roomDefaults`, это задача «Worker» (6.4); `SignalingClient
+.registerHost` по-прежнему не шлёт `gameId`/`gameVersion` (задокументировано
+в master.md как Этап 6.4) — лобби со списком серверов, соответственно, пока
+не фильтрует по игре (нечего фильтровать при одной игре). Новые тесты (8):
+`tests/lib/gamePlugin.test.js`, `tests/client/network/workerSupport.test.js`.
+`npx eslint .` и `npm test` — 683/683 зелёные.
 
 **6.2 — заметки реализации.** Реальный выход сборки игры (6.1) —
 `games/tanks/dist/`, а не `dist/games/tanks/` из §2/6.1 — `GameCatalog` сканирует

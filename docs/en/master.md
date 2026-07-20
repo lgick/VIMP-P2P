@@ -85,9 +85,11 @@ startup) — no file artifacts or a separate export step are needed. How a
 host consumes the catalog — see [host.md](host.md#dynamic-maps).
 
 This single-game route predates `GameCatalog` (Stage 6.2) and is kept as a
-compat shim for the still-static engine↔game composition
-(`gameRegistry.static.js`); it's replaced by the per-game routes below once
-the client/host switch to dynamic plugin loading (Stage 6.3/6.4).
+compat shim: the client's join/create-server/`ClientPlugin`-loading flow
+switched to the per-game routes below in Stage 6.3, but the host role still
+fetches its room's map catalog from this legacy route — that part of
+`connectAsHost`/`host.worker.js` moves to `/games/:id/maps/*` in Stage 6.4
+(dynamic `HostPlugin` loading).
 
 ### GET /games/manifest.json, GET /games/:id/manifest.json, GET /games/:id/maps/\*
 

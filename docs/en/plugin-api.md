@@ -1,18 +1,22 @@
 # Plugin API (draft)
 
-> **Status: draft.** These contracts fix the target architecture of the
-> engine/game separation (see the ADR in [architecture.md](architecture.md#adr-the-engine-is-an-application-the-game-is-a-dynamic-plugin)).
-> The code is still a monolith (static composition through
-> `packages/engine/src/gameRegistry.static.js`); the contracts are
-> implemented incrementally by the migration plan (`PLAN.md`). Already in
-> the code: `ENGINE_API_VERSION` (`packages/engine/src/config/opcodes.js`);
-> the HostPlugin/ClientPlugin objects (`games/tanks/src/host/index.js`,
-> `games/tanks/src/client/index.js`), including `createCore`/
-> `createClientCore` (not yet called by the engine — planned for Stage
-> 6.3/6.4); the game build (`games/tanks/vite.config.js`) producing
+> **Status: draft, partially live.** These contracts fix the target
+> architecture of the engine/game separation (see the ADR in
+> [architecture.md](architecture.md#adr-the-engine-is-an-application-the-game-is-a-dynamic-plugin)).
+> The contracts are implemented incrementally by the migration plan
+> (`PLAN.md`). Already in the code: `ENGINE_API_VERSION`
+> (`packages/engine/src/config/opcodes.js`), enforced at load time; the
+> HostPlugin/ClientPlugin objects (`games/tanks/src/host/index.js`,
+> `games/tanks/src/client/index.js`); the game build
+> (`games/tanks/vite.config.js`) producing
 > `games/tanks/dist/{client,host}-<hash>.js`, a shared hashed `.wasm` asset,
-> `maps/*.json`, `sounds/*` and `manifest.json` (`npm run game:build`) —
-> not yet consumed by the master (Stage 6.2).
+> `maps/*.json`, `sounds/*` and `manifest.json` (`npm run game:build`),
+> consumed by the master's `GameCatalog` (Stage 6.2, `/games/*` routes). The
+> client (Stage 6.3) dynamically loads `ClientPlugin` from the active game's
+> manifest and calls `createClientCore` — `gameRegistry.static.js` now holds
+> only the **host** half of the static composition (`hostPlugin`, the
+> Worker-safe wasm glue), removed in Stage 6.4 when `host.worker.js` switches
+> to `entries.host`/`createCore`.
 
 The engine is an **application** (deployed once: master, transport, Worker
 infrastructure, meta mechanisms, client MVC framework, Rust framework). A

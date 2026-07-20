@@ -1,7 +1,6 @@
 import './style.css';
 import 'pixi.js/unsafe-eval';
 import { Application, Ticker } from 'pixi.js';
-import { loadClientCore } from '../gameRegistry.static.js';
 import InputListener from './InputListener.js';
 import AuthModel from './components/model/Auth.js';
 import AuthView from './components/view/Auth.js';
@@ -38,6 +37,7 @@ import WebRtcManager from './network/WebRtcManager.js';
 import HostController from './network/HostController.js';
 import HostConnectionManager from './network/HostConnectionManager.js';
 import LoopbackTransport from './network/LoopbackTransport.js';
+import { supportsModuleWorker } from './network/workerSupport.js';
 import LobbyModel from './components/model/Lobby.js';
 import LobbyView from './components/view/Lobby.js';
 import LobbyCtrl from './components/controller/Lobby.js';
@@ -45,16 +45,37 @@ import BakingProvider from './providers/BakingProvider.js';
 import DependencyProvider from './providers/DependencyProvider.js';
 import { HOT_FLAGS, SNAPSHOT_KEYS_BY_ID } from '../config/opcodes.js';
 import wsports from '../config/wsports.js';
-// временная статическая композиция движок+игра (до этапа 6 —
-// динамической загрузки ClientPlugin после выбора комнаты)
-import { authSchema, loadClientPlugin } from '../gameRegistry.static.js';
+import { fetchGamesManifest, loadClientPlugin } from '../lib/gamePlugin.js';
 import lobbyConfig from '../config/lobby.js';
 import clientDefaults from '../config/clientDefaults.js';
 
-// ClientPlugin игры: parts (рендеры сущностей), bakers (процедурные
-// текстуры), игровой CSS и хуки клиентского ядра
-const clientPlugin = await loadClientPlugin();
-const parts = clientPlugin.parts;
+// Динамическая загрузка игры по каталогу мастера (Этап 6.3): пока в каталоге
+// одна игра — активная берётся из первой записи, селектор в лобби скрыт
+// (§6 PLAN.md). ClientPlugin (parts, bakers, игровой CSS, хуки ядра) грузится
+// по entries.client её манифеста — движок больше не импортирует игру статически
+let activeGameManifest;
+let clientPlugin;
+let parts;
+
+try {
+  const gamesManifest = await fetchGamesManifest(lobbyConfig.gamesManifestUrl);
+
+  activeGameManifest = gamesManifest[0];
+
+  if (!activeGameManifest) {
+    throw new Error('master has no games in its catalog');
+  }
+
+  clientPlugin = await loadClientPlugin(activeGameManifest);
+  parts = clientPlugin.parts;
+
+  const gameStyle = document.createElement('style');
+  gameStyle.textContent = clientPlugin.styles;
+  document.head.append(gameStyle);
+} catch (e) {
+  document.body.textContent = `Failed to load the game: ${e.message}`;
+  throw e;
+}
 
 // PS (server ports): порты получения данные от сервера
 const PS_CONFIG_DATA = wsports.server.CONFIG_DATA;
@@ -148,10 +169,15 @@ socketMethods[PS_CONFIG_DATA] = async data => {
 
   // клиентское ядро: интерполяция + предикт + спавн выстрелов; конфиг
   // собирается из interpolation/prediction CONFIG_DATA (хост шлёт их
-  // через buildClientConfig в Worker'е)
-  const glue = await loadClientCore();
-  wasm = await glue.default();
-  clientCore = new glue.ClientCore(JSON.stringify(buildClientCoreConfig(data)));
+  // через buildClientConfig в Worker'е). wasmUrl — общий с host-плагином
+  // ассет из манифеста активной игры (entries.wasm)
+  const { core, memory } = await clientPlugin.createClientCore(
+    JSON.stringify(buildClientCoreConfig(data)),
+    { wasmUrl: activeGameManifest.entries.wasm },
+  );
+
+  clientCore = core;
+  wasm = { memory };
 
   // инициализация сущностей игры
   for (const entity of Object.keys(entitiesOnCanvas)) {
@@ -168,7 +194,14 @@ socketMethods[PS_CONFIG_DATA] = async data => {
 
   const bakedAssets = data.parts.bakedAssets || {};
   const componentDependencies = data.parts.componentDependencies || {};
-  soundData = data.parts.sounds || {};
+
+  // путь к звукам — из assetsBase манифеста активной игры (Этап 6.3), не из
+  // бандла движка: сборка игры кладёт свою копию звуков рядом с
+  // client/host-бандлами (games/tanks/dist/sounds)
+  soundData = {
+    ...(data.parts.sounds || {}),
+    path: `${activeGameManifest.assetsBase}sounds/`,
+  };
 
   // создание полотен игры: canvas-элементы генерируются из конфига
   // канвасов игры (в HTML их нет)
@@ -251,10 +284,11 @@ socketMethods[PS_AUTH_DATA] = data => {
     }
   });
 
-  // игровые валидаторы (isValidModel) — из бандла игры: код по проводу
-  // не передаётся (временная статическая композиция до этапа 6)
-  const clientValidator = authData =>
-    validateAuth(authData, params, authSchema.validators);
+  // клиент проверяет только движковые правила (isValidName): игровые
+  // валидаторы (isValidModel) не идут по проводу и не грузятся с
+  // ClientPlugin (HostPlugin.authSchema — только у хоста). Хост валидирует
+  // их авторитетно (host.worker.js) — рассинхрон вернётся в AUTH_RESULT
+  const clientValidator = authData => validateAuth(authData, params);
 
   const authModel = new AuthModel(clientValidator);
   const authView = new AuthView(authModel, elems);
@@ -942,6 +976,17 @@ function connectToHost(hostId) {
 // loopback, удалённые клиенты — по WebRTC (answerer). Клиентский код одинаков,
 // отличается лишь транспорт. Выход хоста = смерть комнаты — как у клиента
 async function connectAsHost(room) {
+  // фича-детект вместо classic-фолбэка (запретил бы ESM/инлайн WASM,
+  // см. PLAN.md риск №5): честная ошибка, join остаётся доступен
+  if (!supportsModuleWorker()) {
+    socketMethods[PS_TECH_INFORM_DATA](
+      'This browser cannot be a host: ES module Web Workers are ' +
+        'unsupported. You can still join existing rooms.',
+    );
+
+    return;
+  }
+
   if (!ensureWebRtcAvailable()) {
     return;
   }
@@ -1208,6 +1253,59 @@ async function fetchServers({ offset, limit, search }) {
   }
 }
 
+// заполняет форму создания комнаты дефолтами активной игры (Этап 6.3):
+// roomDefaults манифеста + список карт каталога
+function populateRoomForm(manifest) {
+  const { roomDefaults } = manifest;
+  const maxPlayersInput = document.getElementById(lobbyConfig.elems.maxPlayersId);
+  const roundTimeInput = document.getElementById(lobbyConfig.elems.roundTimeId);
+  const mapTimeInput = document.getElementById(lobbyConfig.elems.mapTimeId);
+  const friendlyFireInput = document.getElementById(
+    lobbyConfig.elems.friendlyFireId,
+  );
+  const mapSelect = document.getElementById(lobbyConfig.elems.mapId);
+  const gameSelect = document.getElementById(lobbyConfig.elems.gameId);
+
+  if (maxPlayersInput) {
+    maxPlayersInput.value = roomDefaults.maxPlayers;
+  }
+
+  if (roundTimeInput) {
+    roundTimeInput.value = roomDefaults.roundTime / 1000;
+  }
+
+  if (mapTimeInput) {
+    mapTimeInput.value = roomDefaults.mapTime / 1000;
+  }
+
+  if (friendlyFireInput) {
+    friendlyFireInput.checked = roomDefaults.friendlyFire;
+  }
+
+  if (mapSelect) {
+    mapSelect.textContent = '';
+
+    manifest.maps.list.forEach(name => {
+      const option = document.createElement('option');
+
+      option.value = name;
+      option.textContent = name;
+      option.selected = name === roomDefaults.map;
+      mapSelect.appendChild(option);
+    });
+  }
+
+  // один пункт: список игр появится с добавлением второй игры (§6 PLAN.md)
+  if (gameSelect) {
+    const option = document.createElement('option');
+
+    option.value = manifest.id;
+    option.textContent = manifest.title;
+    gameSelect.appendChild(option);
+    gameSelect.value = manifest.id;
+  }
+}
+
 // поднимает лобби после welcome от мастера (iceServers уже получены);
 // повторный welcome (reconnect сигналинга хоста) лобби не пересоздаёт
 function initLobby() {
@@ -1242,16 +1340,33 @@ function initLobby() {
   lobbyModel.publisher.on('join', connectToHost);
 
   // создание комнаты в этой же вкладке (хост-игрок через loopback)
+  populateRoomForm(activeGameManifest);
+
   const hostBtn = document.getElementById(lobbyConfig.elems.hostBtnId);
   const nameInput = document.getElementById(lobbyConfig.elems.nameId);
+  const maxPlayersInput = document.getElementById(lobbyConfig.elems.maxPlayersId);
+  const roundTimeInput = document.getElementById(lobbyConfig.elems.roundTimeId);
+  const mapTimeInput = document.getElementById(lobbyConfig.elems.mapTimeId);
+  const friendlyFireInput = document.getElementById(
+    lobbyConfig.elems.friendlyFireId,
+  );
+  const mapSelect = document.getElementById(lobbyConfig.elems.mapId);
 
   hostBtn?.addEventListener('click', () => {
     const name = (nameInput?.value || '').trim() || lobbyConfig.create.defaultName;
+    const { roomDefaults } = activeGameManifest;
 
     connectAsHost({
       name,
-      maxPlayers: lobbyConfig.create.maxPlayers,
       hostSocketId: lobbyConfig.create.hostSocketId,
+      maxPlayers: Number(maxPlayersInput?.value) || roomDefaults.maxPlayers,
+      roundTime:
+        (Number(roundTimeInput?.value) || roomDefaults.roundTime / 1000) * 1000,
+      mapTime: (Number(mapTimeInput?.value) || roomDefaults.mapTime / 1000) * 1000,
+      friendlyFire: friendlyFireInput
+        ? friendlyFireInput.checked
+        : roomDefaults.friendlyFire,
+      map: mapSelect?.value || roomDefaults.map,
     });
   });
 

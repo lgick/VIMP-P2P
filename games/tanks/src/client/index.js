@@ -10,8 +10,7 @@ import bakers from './bakers/index.js';
 // ClientPlugin танков: рендеры сущностей (parts), процедурные текстуры
 // (bakers) и игровые хуки клиентского ядра (ClientCore). default export
 // client-entry игры (games/tanks/vite.config.js --mode client, Этап 6.1);
-// пока подключается статически через gameRegistry.static.js (Этап 5) —
-// динамическая загрузка по GameManifest приедет в Этапе 6.3.
+// грузится динамически по GameManifest мастера (Этап 6.3, main.js).
 // Движок (main.js) не знает игровых методов ядра —
 // set_model/sync_panel/try_fire/cycle_weapon зовутся только отсюда.
 export default {

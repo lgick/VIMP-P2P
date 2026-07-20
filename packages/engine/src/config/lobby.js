@@ -5,6 +5,10 @@ export default {
   // REST-эндпоинт мастера со списком серверов (GET /servers)
   serversUrl: '/servers',
 
+  // каталог игр мастера (Этап 6.3, GameCatalog): roomDefaults формы создания
+  // комнаты и ClientPlugin берутся отсюда вместо статической композиции
+  gamesManifestUrl: '/games/manifest.json',
+
   // каталог карт мастера (Этап 5.1): комната хоста стартует на актуальных
   // картах, недоступность каталога — fallback на карты из бандла
   maps: {
@@ -42,12 +46,20 @@ export default {
     emptyId: 'lobby-empty',
     nameId: 'lobby-name',
     hostBtnId: 'lobby-host',
+    // селектор игры: скрыт, пока в каталоге мастера одна игра (§6, PLAN.md)
+    gameId: 'lobby-game',
+    maxPlayersId: 'lobby-max-players',
+    roundTimeId: 'lobby-round-time',
+    mapTimeId: 'lobby-map-time',
+    friendlyFireId: 'lobby-friendly-fire',
+    mapId: 'lobby-map',
   },
 
-  // создание комнаты (хост в этой же вкладке)
+  // создание комнаты (хост в этой же вкладке); лимит игроков/время
+  // раунда-карты/огонь по своим/карта по умолчанию — из roomDefaults
+  // манифеста активной игры (Этап 6.3), не бандлятся здесь
   create: {
     defaultName: 'My Server',
-    maxPlayers: 8,
 
     // период heartbeat/актуализации комнаты у мастера (мс); должен быть
     // меньше master.host.heartbeatTimeout (30 c), иначе комнату выметет
