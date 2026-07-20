@@ -30,9 +30,10 @@ Configuration — [packages/engine/src/config/master.js](../../packages/engine/s
 | `packages/engine/src/master/SignalingServer.js` | signaling WebSocket: connection lifecycle, WebRTC message routing, ping rate limiting |
 | `packages/engine/src/master/MapCatalog.js` | map catalog: an in-memory JSON representation of `games/tanks/src/data/maps` plus a content version hash; served to hosts without a rebuild |
 | `packages/engine/src/master/WorkerCatalog.js` | worker bundle catalog: a content version hash of `dist/assets/host.worker-*.js` plus its URL; hosts use it to detect a new code version and swap the Worker via a handoff |
+| `packages/engine/src/master/GameCatalog.js` | game-plugin catalog: scans `games/*/dist/manifest.json` (built by `npm run game:build`) and builds a per-game `MapCatalog` from `games/*/dist/maps/*.json`; in dev, `entries.client/host/wasm` are swapped for Vite `/@fs/` source URLs (HMR) — see [plugin-api.md](plugin-api.md#gamemanifest) |
 | `packages/engine/src/lib/rateLimiter.js` | a shared fixed-window rate limiter (event limit per key per interval) |
 
-`HostSession`: `hostId` (uuid), `name`, `maxPlayers` (clamped to `host.maxPlayersLimit`, the target room size — 8), `currentPlayers`, `mapName`, `region`, `ip`, `status` (`online`/`banned`), `reportCount` + `reporters` (a `Map` reporter → timestamp: report uniqueness and window), `reportReasons` (report reasons, an audit trail — never exposed, capped), `lastSeen`.
+`HostSession`: `hostId` (uuid), `name`, `maxPlayers` (clamped to `host.maxPlayersLimit`, the target room size — 8), `currentPlayers`, `mapName`, `region`, `ip`, `gameId`/`gameVersion` (which game plugin and manifest version the host declared at `register_host`; `null` until hosts send it — Stage 6.4), `status` (`online`/`banned`), `reportCount` + `reporters` (a `Map` reporter → timestamp: report uniqueness and window), `reportReasons` (report reasons, an audit trail — never exposed, capped), `lastSeen`.
 
 The region is determined from an Nginx/CDN header (`regionHeader`, `x-region` by default; e.g. `CF-IPCountry`) — chosen over `geoip-lite` for its low memory footprint. Without the header the region is `unknown`.
 
@@ -58,13 +59,16 @@ Banned rooms (`status !== 'online'`) are excluded from the results. Response:
       "mapName": "arena",
       "currentPlayers": 3,
       "maxPlayers": 8,
-      "region": "DE"
+      "region": "DE",
+      "gameId": "tanks"
     }
   ]
 }
 ```
 
-The host's IP and internal fields are never exposed.
+The host's IP and internal fields are never exposed. `gameId` is a placeholder for
+a future multi-game lobby filter (Stage 6.3+) — currently `null` for hosts
+that don't yet declare it in `register_host` (Stage 6.4).
 
 ### GET /maps/manifest.json and GET /maps/:name
 
@@ -79,6 +83,37 @@ rebuild):
 Maps are kept in memory (`MapCatalog` imports `games/tanks/src/data/maps/index.js` at
 startup) — no file artifacts or a separate export step are needed. How a
 host consumes the catalog — see [host.md](host.md#dynamic-maps).
+
+This single-game route predates `GameCatalog` (Stage 6.2) and is kept as a
+compat shim for the still-static engine↔game composition
+(`gameRegistry.static.js`); it's replaced by the per-game routes below once
+the client/host switch to dynamic plugin loading (Stage 6.3/6.4).
+
+### GET /games/manifest.json, GET /games/:id/manifest.json, GET /games/:id/maps/\*
+
+The `GameManifest` catalog (`GameCatalog`, Stage 6.2 — see
+[plugin-api.md](plugin-api.md#gamemanifest)):
+scans `games/*/dist/manifest.json` (built by `npm run game:build`) at master
+startup, one entry per game plugin.
+
+- `GET /games/manifest.json` → a JSON array of every known game's manifest.
+- `GET /games/:id/manifest.json` → one game's manifest; unknown id →
+  `404 { "error": "unknownGame" }`.
+- `GET /games/:id/maps/manifest.json` / `GET /games/:id/maps/:name` — the
+  same shape as the legacy `/maps/*` routes above, scoped per game (built
+  from `games/<id>/dist/maps/*.json`).
+- `GET /games/:id/*` — the game's built assets (`dist/`: hashed client/host
+  bundles, the shared hashed `.wasm`, sounds) are served as static files
+  under `assetsBase` (`/games/<id>/`).
+
+In dev, `entries.client`/`entries.host`/`entries.wasm` are rewritten to Vite
+`/@fs/` absolute source paths (`games/<id>/src/client/index.js` etc. and the
+`.wasm` under `core/pkg-web/`) so imports go through Vite's dev
+transform/HMR instead of the built bundle; everything else in the manifest
+(`maps`, `assetsBase`, `roomDefaults`, `version`) still comes from the built
+`dist/manifest.json` — a game must be built once (`npm run game:build`)
+before its first dev run, same requirement as `npm run core:build` for the
+WASM core.
 
 ### GET /worker/manifest.json
 
@@ -115,7 +150,7 @@ The client-side signaling counterpart — [packages/engine/src/client/network/Si
 
 | → to master | Response / effect |
 | --- | --- |
-| `register_host { name, maxPlayers, mapName }` | `host_registered { hostId, mapsVersion, codeVersion }`; region — from the header, IP — from the connection; `mapsVersion`/`codeVersion` — current versions of the map catalog and worker bundle (on re-register after a disconnect — a deploy restarts the master — the host compares them to its own: a map mismatch triggers a catalog re-read, a code mismatch triggers a Worker handoff). Errors: `alreadyRegistered`, `hostLimit` (a room from this IP already exists) |
+| `register_host { name, maxPlayers, mapName, gameId, gameVersion }` | `host_registered { hostId, gameId, mapsVersion, codeVersion }`; region — from the header, IP — from the connection; `gameId`/`gameVersion` — which game plugin/manifest version the host is running (stored on the session, echoed back; `null` until hosts declare it — Stage 6.4); `mapsVersion` — the declared game's `GameManifest.maps.version` via `GameCatalog` when `gameId` is known, otherwise the legacy single-game `MapCatalog` version; `codeVersion` — the engine worker-bundle version (on re-register after a disconnect — a deploy restarts the master — the host compares them to its own: a map mismatch triggers a catalog re-read, a code mismatch triggers a Worker handoff). Errors: `alreadyRegistered`, `hostLimit` (a room from this IP already exists) |
 | `update_host { currentPlayers, mapName }` | refreshes room data (also serves as a heartbeat) |
 | `heartbeat {}` | updates `lastSeen` |
 | `webrtc_answer { clientId, sdp }` | forwarded to the client as `webrtc_answer { hostId, sdp }` |
@@ -182,7 +217,7 @@ restart/room cleanup).
 
 ## Tests
 
-`tests/master/` (a node Vitest project): `HostRegistry.test.js` (registration, per-IP limit, heartbeat/cleanup, reports — including the required reason, all `GET /servers` selection logic), `SignalingServer.test.js` (connection lifecycle, routing of every signaling message on fake ws sockets, rate limiting, report membership checks, stale-host cleanup, `mapsVersion`/`codeVersion` in `host_registered`), `MapCatalog.test.js` (manifest, map serving, version stability), `WorkerCatalog.test.js` (bundle version hash and URL, empty catalog in dev, picking the newest of several). Rate limiter — `tests/lib/rateLimiter.test.js`.
+`tests/master/` (a node Vitest project): `HostRegistry.test.js` (registration, per-IP limit, heartbeat/cleanup, reports — including the required reason, all `GET /servers` selection logic, `gameId`/`gameVersion` storage), `SignalingServer.test.js` (connection lifecycle, routing of every signaling message on fake ws sockets, rate limiting, report membership checks, stale-host cleanup, `mapsVersion`/`codeVersion` in `host_registered`, per-game `mapsVersion` via a `gameCatalog` stub), `MapCatalog.test.js` (manifest, map serving, version stability), `WorkerCatalog.test.js` (bundle version hash and URL, empty catalog in dev, picking the newest of several), `GameCatalog.test.js` (scanning `games/*/dist/manifest.json`, per-game map catalogs, unbuilt/unknown games, dev `/@fs/` entry rewriting). Rate limiter — `tests/lib/rateLimiter.test.js`.
 
 ---
 

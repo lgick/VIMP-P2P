@@ -13,6 +13,10 @@ export default class SignalingServer {
     this._checkOrigin = options.checkOrigin;
     this._mapsVersion = options.mapsVersion ?? null;
     this._codeVersion = options.codeVersion ?? null;
+    // Этап 6.2: per-game mapsVersion — хост объявляет gameId в register_host,
+    // ответ несёт версию карт именно этой игры (GameCatalog); без gameId
+    // (хосты до Этапа 6.4) или без каталога — старый одноигровой mapsVersion
+    this._gameCatalog = options.gameCatalog ?? null;
 
     this._sessions = new Map(); // id соединения -> { id, ws, ip, region, hostId }
     this._hostSessions = new Map(); // hostId -> id соединения
@@ -103,7 +107,7 @@ export default class SignalingServer {
   }
 
   // хост сообщает о создании комнаты
-  _onRegisterHost(session, { name, maxPlayers, mapName }) {
+  _onRegisterHost(session, { name, maxPlayers, mapName, gameId, gameVersion }) {
     if (session.hostId) {
       this._sendError(session, 'alreadyRegistered');
       return;
@@ -119,6 +123,8 @@ export default class SignalingServer {
       name,
       maxPlayers,
       mapName,
+      gameId,
+      gameVersion,
       region: session.region,
       ip: session.ip,
     });
@@ -132,6 +138,11 @@ export default class SignalingServer {
     session.hostId = host.hostId;
     this._hostSessions.set(host.hostId, session.id);
 
+    // per-game mapsVersion (Этап 6.2) — из манифеста игры, объявленной
+    // хостом; без gameId/каталога — старый одноигровой fallback
+    const gameManifest = gameId ? this._gameCatalog?.getManifest(gameId) : null;
+    const mapsVersion = gameManifest?.maps.version ?? this._mapsVersion;
+
     // mapsVersion/codeVersion — актуальные версии каталога карт и
     // worker-бандла: при re-register после разрыва (деплой рестартует мастер)
     // хост сравнивает их со своими и при расхождении фетчит карты /
@@ -139,7 +150,8 @@ export default class SignalingServer {
     this._send(session, {
       type: 'host_registered',
       hostId: host.hostId,
-      mapsVersion: this._mapsVersion,
+      gameId: host.gameId,
+      mapsVersion,
       codeVersion: this._codeVersion,
     });
   }

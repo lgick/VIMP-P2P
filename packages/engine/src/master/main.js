@@ -10,6 +10,7 @@ import { gameMaps as maps } from '../gameRegistry.static.js';
 import config from '../lib/config.js';
 import RateLimiter from '../lib/rateLimiter.js';
 import security from '../lib/security.js';
+import GameCatalog from './GameCatalog.js';
 import HostRegistry from './HostRegistry.js';
 import MapCatalog from './MapCatalog.js';
 import WorkerCatalog from './WorkerCatalog.js';
@@ -66,6 +67,14 @@ const workerCatalog = new WorkerCatalog(
   isProduction ? path.resolve('dist', 'assets') : null,
 );
 
+// каталог игр-плагинов (Этап 6.2): сканирует games/*/dist/manifest.json
+// (продукт `npm run game:build`); в dev entries указывают на Vite-исходники
+// (HMR), maps/assetsBase — из уже собранного dist (как и WorkerCatalog,
+// требует сборки игры один раз перед первым запуском)
+const gameCatalog = new GameCatalog(path.resolve('..', '..', 'games'), {
+  dev: !isProduction,
+});
+
 const signaling = new SignalingServer(registry, {
   iceServers: config.get('master:iceServers'),
   regionHeader: config.get('master:regionHeader'),
@@ -73,6 +82,7 @@ const signaling = new SignalingServer(registry, {
   pingLimiter: new RateLimiter(config.get('master:pingRateLimit')),
   mapsVersion: mapCatalog.version,
   codeVersion: workerCatalog.version,
+  gameCatalog,
   checkOrigin: security.createOriginValidator({
     protocol: config.get('master:protocol'),
     domain: config.get('master:domain'),
@@ -128,6 +138,52 @@ app.get('/maps/:name', (req, res) => {
 app.get('/worker/manifest.json', (req, res) => {
   res.type('application/json').send(workerCatalog.manifest);
 });
+
+// REST API: GameManifest игр-плагинов (Этап 6.2 — динамическая загрузка игры)
+app.get('/games/manifest.json', (req, res) => {
+  res.type('application/json').send(gameCatalog.manifestList);
+});
+
+app.get('/games/:id/manifest.json', (req, res) => {
+  const manifest = gameCatalog.getManifest(req.params.id);
+
+  if (!manifest) {
+    res.status(404).json({ error: 'unknownGame' });
+    return;
+  }
+
+  res.json(manifest);
+});
+
+// per-game каталог карт (замена одноигрового /maps/* выше в Этапе 6.3)
+app.get('/games/:id/maps/manifest.json', (req, res) => {
+  const catalog = gameCatalog.getMapCatalog(req.params.id);
+
+  if (!catalog) {
+    res.status(404).json({ error: 'unknownGame' });
+    return;
+  }
+
+  res.type('application/json').send(catalog.manifest);
+});
+
+app.get('/games/:id/maps/:name', (req, res) => {
+  const json = gameCatalog.getMapCatalog(req.params.id)?.get(req.params.name);
+
+  if (!json) {
+    res.status(404).json({ error: 'unknownMap' });
+    return;
+  }
+
+  res.type('application/json').send(json);
+});
+
+// статика игры (хешированные бандлы/wasm/звуки из GameManifest.assetsBase);
+// в dev entries манифеста указывают на Vite-исходники напрямую, но
+// assetsBase-содержимое (карты/звуки) всё равно раздаётся отсюда из dist
+for (const id of gameCatalog.ids) {
+  app.use(`/games/${id}`, express.static(path.join('..', '..', 'games', id, 'dist')));
+}
 
 // в продакшене обычный HTTP сервер, Nginx будет обрабатывать HTTPS
 // для разработки HTTPS сервер с локальными сертификатами

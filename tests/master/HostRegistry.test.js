@@ -354,11 +354,37 @@ describe('HostRegistry.getList', () => {
 
     expect(Object.keys(server).sort()).toEqual([
       'currentPlayers',
+      'gameId',
       'hostId',
       'mapName',
       'maxPlayers',
       'name',
       'region',
     ]);
+  });
+});
+
+describe('HostRegistry.add — gameId/gameVersion', () => {
+  it('сохраняет gameId/gameVersion и выставляет gameId в публичный список', () => {
+    const host = registry.add({
+      name: 'a',
+      ip: '1.1.1.1',
+      gameId: 'tanks',
+      gameVersion: 'abc123',
+    });
+
+    expect(host.gameId).toBe('tanks');
+    expect(host.gameVersion).toBe('abc123');
+
+    const [server] = registry.getList({}).servers;
+
+    expect(server.gameId).toBe('tanks');
+  });
+
+  it('без gameId/gameVersion — null (хосты до Этапа 6.4)', () => {
+    const host = registry.add({ name: 'a', ip: '1.1.1.1' });
+
+    expect(host.gameId).toBeNull();
+    expect(host.gameVersion).toBeNull();
   });
 });

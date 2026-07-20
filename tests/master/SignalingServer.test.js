@@ -184,6 +184,59 @@ describe('register_host', () => {
 
     expect(second.ws.lastSent()).toEqual({ type: 'error', code: 'hostLimit' });
   });
+
+  it('gameId/gameVersion сохраняются и эхо gameId идёт в host_registered', async () => {
+    const { ws } = await connect({ ip: '2.2.2.2' });
+
+    ws.message({
+      type: 'register_host',
+      name: 'Room',
+      gameId: 'tanks',
+      gameVersion: 'v9',
+    });
+
+    const reply = ws.lastSent();
+
+    expect(reply.gameId).toBe('tanks');
+    expect(registry.get(reply.hostId)).toMatchObject({
+      gameId: 'tanks',
+      gameVersion: 'v9',
+    });
+  });
+
+  it('с gameCatalog — mapsVersion берётся из манифеста объявленной игры', async () => {
+    const withCatalog = new SignalingServer(registry, {
+      iceServers: ICE_SERVERS,
+      regionHeader: 'x-region',
+      heartbeatTimeout: 1000,
+      pingLimiter: new RateLimiter({ limit: 2, windowMs: 1000 }),
+      checkOrigin: allowAllOrigins,
+      mapsVersion: 'fallback-version',
+      codeVersion: 'code-test',
+      gameCatalog: {
+        getManifest: id =>
+          id === 'tanks' ? { maps: { version: 'tanks-maps-v2' } } : undefined,
+      },
+    });
+
+    const ws = new FakeWs();
+
+    withCatalog.handleConnection(ws, {
+      headers: { origin: 'https://localhost:3001', 'x-region': 'EU' },
+      socket: { remoteAddress: '3.3.3.3' },
+    });
+    await nextTick();
+
+    ws.message({ type: 'register_host', name: 'Room', gameId: 'tanks' });
+
+    expect(ws.lastSent().mapsVersion).toBe('tanks-maps-v2');
+  });
+
+  it('без gameId или для неизвестной игры — fallback на статичный mapsVersion', async () => {
+    const { ws } = await connectHost();
+
+    expect(ws.lastSent().mapsVersion).toBe('v-test');
+  });
 });
 
 describe('update_host / heartbeat', () => {

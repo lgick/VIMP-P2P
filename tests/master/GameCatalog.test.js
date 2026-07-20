@@ -1,0 +1,132 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import GameCatalog from '../../packages/engine/src/master/GameCatalog.js';
+
+// Каталог игр-плагинов мастера (Этап 6.2): сканирует games/*/dist/manifest.json
+// (продукт `npm run game:build`) + per-game карты dist/maps/*.json; в dev
+// подменяет entries на Vite '/@fs/' исходники для HMR.
+
+let gamesDir;
+
+const writeManifest = (id, manifest) => {
+  const distDir = path.join(gamesDir, id, 'dist');
+
+  fs.mkdirSync(distDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(distDir, 'manifest.json'),
+    JSON.stringify(manifest),
+  );
+};
+
+const writeMap = (id, name, data) => {
+  const mapsDir = path.join(gamesDir, id, 'dist', 'maps');
+
+  fs.mkdirSync(mapsDir, { recursive: true });
+  fs.writeFileSync(path.join(mapsDir, `${name}.json`), JSON.stringify(data));
+};
+
+const fixtureManifest = {
+  id: 'tanks',
+  engineApi: 1,
+  version: 'abc123',
+  title: 'VIMP Tanks',
+  entries: {
+    client: '/games/tanks/client-Xyz.js',
+    host: '/games/tanks/host-Xyz.js',
+    wasm: '/games/tanks/assets/core_bg-Xyz.wasm',
+  },
+  assetsBase: '/games/tanks/',
+  maps: { version: 'maps123', list: ['arena'] },
+  roomDefaults: { maxPlayers: 8, roundTime: 120000, mapTime: 600000, friendlyFire: false, map: 'arena' },
+};
+
+beforeEach(() => {
+  gamesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'game-catalog-'));
+});
+
+afterEach(() => {
+  fs.rmSync(gamesDir, { recursive: true, force: true });
+});
+
+describe('GameCatalog', () => {
+  it('сканирует games/*/dist/manifest.json и собирает список манифестов', () => {
+    writeManifest('tanks', fixtureManifest);
+    writeMap('tanks', 'arena', { setId: 'c1', step: 32, layers: {} });
+
+    const catalog = new GameCatalog(gamesDir);
+
+    expect(catalog.ids).toEqual(['tanks']);
+    expect(catalog.getManifest('tanks')).toEqual(fixtureManifest);
+    expect(JSON.parse(catalog.manifestList)).toEqual([fixtureManifest]);
+  });
+
+  it('per-game MapCatalog отдаёт карты игры', () => {
+    writeManifest('tanks', fixtureManifest);
+    writeMap('tanks', 'arena', { setId: 'c1', step: 32, layers: {} });
+
+    const catalog = new GameCatalog(gamesDir);
+    const mapCatalog = catalog.getMapCatalog('tanks');
+
+    expect(JSON.parse(mapCatalog.manifest).maps).toEqual(['arena']);
+    expect(JSON.parse(mapCatalog.get('arena'))).toEqual({
+      setId: 'c1',
+      step: 32,
+      layers: {},
+    });
+  });
+
+  it('неизвестная игра — undefined, каталог без директорий — пустой', () => {
+    const empty = new GameCatalog(path.join(gamesDir, 'missing'));
+
+    expect(empty.ids).toEqual([]);
+    expect(empty.getManifest('tanks')).toBeUndefined();
+    expect(empty.getMapCatalog('tanks')).toBeUndefined();
+    expect(JSON.parse(empty.manifestList)).toEqual([]);
+  });
+
+  it('игра без dist/manifest.json (не собрана) пропускается', () => {
+    fs.mkdirSync(path.join(gamesDir, 'unbuilt'), { recursive: true });
+    writeManifest('tanks', fixtureManifest);
+
+    const catalog = new GameCatalog(gamesDir);
+
+    expect(catalog.ids).toEqual(['tanks']);
+  });
+
+  it('dev: entries указывают на Vite /@fs/ исходники, остальное — из манифеста', () => {
+    writeManifest('tanks', fixtureManifest);
+
+    const catalog = new GameCatalog(gamesDir, { dev: true });
+    const manifest = catalog.getManifest('tanks');
+
+    const gameDir = path.join(gamesDir, 'tanks');
+
+    expect(manifest.entries.client).toBe(
+      `/@fs/${path.join(gameDir, 'src', 'client/index.js')}`,
+    );
+    expect(manifest.entries.host).toBe(
+      `/@fs/${path.join(gameDir, 'src', 'host/index.js')}`,
+    );
+    // core/pkg-web не собран в фикстуре — wasm остаётся из манифеста
+    expect(manifest.entries.wasm).toBe(fixtureManifest.entries.wasm);
+    expect(manifest.maps).toEqual(fixtureManifest.maps);
+    expect(manifest.assetsBase).toBe(fixtureManifest.assetsBase);
+  });
+
+  it('dev: entries.wasm — Vite /@fs/ путь до собранного core/pkg-web/*_bg.wasm', () => {
+    writeManifest('tanks', fixtureManifest);
+
+    const pkgWebDir = path.join(gamesDir, 'tanks', 'core', 'pkg-web');
+
+    fs.mkdirSync(pkgWebDir, { recursive: true });
+    fs.writeFileSync(path.join(pkgWebDir, 'vimp_tanks_core_bg.wasm'), 'wasm');
+
+    const catalog = new GameCatalog(gamesDir, { dev: true });
+
+    expect(catalog.getManifest('tanks').entries.wasm).toBe(
+      `/@fs/${path.join(pkgWebDir, 'vimp_tanks_core_bg.wasm')}`,
+    );
+  });
+});

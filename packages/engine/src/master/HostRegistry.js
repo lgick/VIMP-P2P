@@ -34,7 +34,7 @@ export default class HostRegistry {
   }
 
   // регистрирует комнату; null — если с этого IP комната уже создана
-  add({ name, maxPlayers, mapName, region, ip }, now = Date.now()) {
+  add({ name, maxPlayers, mapName, region, ip, gameId, gameVersion }, now = Date.now()) {
     if (this.getByIp(ip)) {
       return null;
     }
@@ -48,6 +48,12 @@ export default class HostRegistry {
       currentPlayers: 0,
       mapName: sanitizeMessage(mapName) || 'unknown',
       region: sanitizeMessage(region) || 'unknown',
+      // какую игру и версию её манифеста хост поднял (Этап 6.2 плана
+      // отделения) — задел под фильтр по игре в лобби (6.3) и per-game
+      // сверку версий при эстафете (6.5); хосты до Этапа 6.4 (статическая
+      // композиция) их не присылают — null
+      gameId: gameId ?? null,
+      gameVersion: gameVersion ?? null,
       ip,
       status: 'online',
       reportCount: 0,
@@ -225,8 +231,8 @@ export default class HostRegistry {
   }
 
   // публичное представление комнаты (без ip и служебных полей)
-  _toPublic({ hostId, name, mapName, currentPlayers, maxPlayers, region }) {
-    return { hostId, name, mapName, currentPlayers, maxPlayers, region };
+  _toPublic({ hostId, name, mapName, currentPlayers, maxPlayers, region, gameId }) {
+    return { hostId, name, mapName, currentPlayers, maxPlayers, region, gameId };
   }
 
   _sanitizeName(name) {

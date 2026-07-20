@@ -288,10 +288,38 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 | PR | Задача |
 | --- | --- |
 | 6.1 ✅ | **Сборка игры**: `games/tanks/vite.config.js` — два независимых build-прогона (client-entry, host-entry worker-safe) в общий `dist/games/tanks/`; wasm — hashed asset (общий у обоих entry; URL — `entries.wasm` манифеста); пост-шаги: `maps:export` → `dist/games/tanks/maps/*.json`, звуки → `dist/games/tanks/sounds/`, генерация `manifest.json` (хеш-версии). Проверка: host-бандл не содержит DOM-кода |
-| 6.2 | **Мастер**: `GameCatalog` (`packages/engine/src/master/GameCatalog.js`, по образцу `WorkerCatalog`) — сканирует `dist/games/*/manifest.json`; REST `/games/manifest.json`, `/games/:id/manifest.json`, `/games/:id/maps/*` (per-game `MapCatalog`); `HostRegistry` + `GET /servers` + `register_host`/`host_registered` — поля `gameId`/`gameVersion`. Dev-режим: манифест с Vite-URL исходников (`/@fs/…/games/tanks/src/client/index.js` — трансформация и HMR штатные), `entries.wasm` — Vite-URL `.wasm` из `pkg-web`; ассеты (звуки, карты из `games/tanks/src/data`) — `express.static`-mount `/games/:id/` на мастере |
+| 6.2 ✅ | **Мастер**: `GameCatalog` (`packages/engine/src/master/GameCatalog.js`, по образцу `WorkerCatalog`) — сканирует `dist/games/*/manifest.json`; REST `/games/manifest.json`, `/games/:id/manifest.json`, `/games/:id/maps/*` (per-game `MapCatalog`); `HostRegistry` + `GET /servers` + `register_host`/`host_registered` — поля `gameId`/`gameVersion`. Dev-режим: манифест с Vite-URL исходников (`/@fs/…/games/tanks/src/client/index.js` — трансформация и HMR штатные), `entries.wasm` — Vite-URL `.wasm` из `pkg-web`; ассеты (звуки, карты из `games/tanks/src/data`) — `express.static`-mount `/games/:id/` на мастере |
 | 6.3 | **Клиент**: лобби — `roomDefaults` из манифеста в форму создания комнаты (селект игры скрыт, пока игра одна); «Создать сервер» — фича-детект module worker + dynamic import с внятной ошибкой («браузер не может быть хостом»; join не блокируется); join: `GET /games/:id/manifest.json` → `import(entries.client)` → проверка `engineApi` → подключение; `sounds.path` от `assetsBase`; удалить клиентскую половину `gameRegistry.static.js` |
 | 6.4 | **Worker**: `init`-сообщение несёт `room.game = {id, version, hostEntryUrl, wasmUrl}`; `host.worker.js` → `await import(hostEntryUrl)` → `plugin.createCore(coreConfigJson, { wasmUrl })`; `applyRoomOverrides` валидирует по `roomDefaults`; удалить `gameRegistry.static.js` целиком |
 | 6.5 | **Эстафета**: составной `codeVersion` (движок+игра), `HANDOFF_VERSION=2` (+gameId/gameVersion), при свопе новый Worker получает свежий `hostEntryUrl`; сбой → существующий `resume`-путь |
+
+**6.2 — заметки реализации.** Реальный выход сборки игры (6.1) —
+`games/tanks/dist/`, а не `dist/games/tanks/` из §2/6.1 — `GameCatalog` сканирует
+`<gamesDir>/*/dist/manifest.json` (`gamesDir` = `games/`, вычисляется от cwd
+мастера `path.resolve('..', '..', 'games')`, симметрично `WorkerCatalog`'овскому
+`path.resolve('dist', 'assets')`), а не `dist/games/*/manifest.json`. Мастер
+по-прежнему не исполняет код игры: `GameCatalog` читает только уже собранный
+JSON (`dist/manifest.json` + `dist/maps/*.json`), никаких `import` игровых
+модулей. Старые одноигровые `/maps/manifest.json`/`/maps/:name` (на
+`gameMaps` из `gameRegistry.static.js`) оставлены как есть — совместимость
+для ещё статической композиции движок↔игра; заменяются `/games/:id/maps/*`
+в 6.3/6.4, когда клиент/хост перейдут на `GameManifest`. Dev-режим — не
+отдельная генерация манифеста «на лету» из исходников (как в первом чтении
+пункта плана), а тот же собранный `dist/manifest.json` с точечной подменой
+`entries.client`/`entries.host`/`entries.wasm` на `/@fs/`-пути (Vite отдаёт
+их из исходников с HMR, `wasm` — из уже собранного `core/pkg-web/*_bg.wasm`,
+поиск по суффиксу); `maps`/`assetsBase`/`roomDefaults`/`version` остаются
+из dist — по аналогии с `WorkerCatalog`, `npm run game:build` нужен один раз
+перед первым dev-запуском (как `core:build` для WASM-ядра). Все `dist/`-ассеты
+(звуки/карты/хешированные бандлы) раздаются одним `express.static`-mount'ом
+на `/games/:id/` (общий для dev и prod — в dev его использует только
+`assetsBase`-контент, entries идут напрямую через Vite). `HostRegistry`/
+`SignalingServer`: `register_host`/`host_registered`/публичный `GET /servers`
+несут `gameId` (и внутренний `gameVersion` в реестре, наружу не отдаётся);
+`mapsVersion` в `host_registered` — per-game (`GameCatalog.getManifest(gameId).maps.version`),
+если хост объявил `gameId`, иначе прежний одноигровой fallback (хосты до
+Этапа 6.4 `gameId` не шлют). Полный составной `codeVersion` `{engine, game}`
+и `HANDOFF_VERSION=2` — по плану остаются задачей 6.5, не трогались.
 
 **6.1 — заметки реализации.** `games/tanks/vite.config.js` собирает `--mode client|host` двумя прогонами `vite build` в общий `games/tanks/dist/` (`emptyOutDir: false`); верхнеуровневый `npm -w @vimp/tanks run build` чистит `dist/` один раз перед обоими прогонами. Обнаружено два грабля Vite при генерации плагинового ESM без `index.html`: (1) для non-lib билда Vite ставит `preserveEntrySignatures: false` и выбрасывает `export default` entry-модуля как "неиспользуемый" — фикс: `rollupOptions.preserveEntrySignatures: 'strict'`; (2) `build.lib` (альтернатива для (1)) инлайнит ЛЮБОЙ ассет как base64 независимо от `assetsInlineLimit` (`shouldInline()`: `if (build.lib) return true`) — вернули бы 2MB base64 wasm в JS вместо hashed-ассета (риск #3), поэтому lib-режим не используется вовсе. `assetsInlineLimit: 0` + `inlineDynamicImports: true` — по одному файлу на entry, `.wasm` остаётся отдельным hashed-ассетом (общий у client/host: контент идентичен → Rollup даёт одинаковое имя в обоих прогонах). `HostPlugin.createCore`/`ClientPlugin.createClientCore` (контракт §3.2/3.3) добавлены в `games/tanks/src/host/index.js`/`client/index.js` — иначе entry не ссылался бы на wasm-glue и ассет не попал бы в сборку; вызовы `plugin.createCore/createClientCore` в `host.worker.js`/`main.js` — ещё впереди (6.3/6.4), сейчас подключение статическое через `gameRegistry.static.js` (Этап 5), как и раньше для остальных полей контракта. `ClientPlugin.styles` — `tanks.css?inline` (строка вместо auto-inject `<link>`, которого не будет без `index.html`). Новые скрипты: `scripts/copy-game-sounds.js` (копия уже обработанных `audio:process`-звуков в `dist/games/tanks/sounds/` — повторный ffmpeg не нужен), `scripts/build-game-manifest.js` (хеш-версии `client`/`host`/`wasm`/`maps`, `roomDefaults` из `hostDefaults.timers` + `games/tanks/src/config/game.js`). `maps:export` переехал на `dist/games/tanks/maps/` (старое `games/tanks/src/data/maps/json/` ничем не потреблялось). Корневой `npm run game:build` = `audio:process` + `npm -w @vimp/tanks run build`; в общий `npm run build` пока не встроен (мастер не читает `dist/games/tanks/` до Этапа 6.2) — движковый build/dev не затронуты.
 
