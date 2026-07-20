@@ -47,6 +47,7 @@ npm run core:build        # WASM core, both targets (web + nodejs)
 npm run core:build:node   # nodejs target only (for tests/core)
 npm run core:test         # Rust core tests (cargo test)
 npm run maps:export       # export maps to JSON
+npm run game:build        # build @vimp/tanks plugin bundle -> games/tanks/dist/
 ```
 
 Dev requires local HTTPS certs (`mkcert`, see `docs/en/getting-started.md`)

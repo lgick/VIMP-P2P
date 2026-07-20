@@ -31,7 +31,8 @@
     "core:build:web": "wasm-pack build games/tanks/core --release --target web --out-dir pkg-web",
     "core:build:node": "wasm-pack build games/tanks/core --release --target nodejs --out-dir pkg-node",
     "core:test": "cargo test --workspace",
-    "maps:export": "node scripts/export-maps.js"
+    "maps:export": "node scripts/export-maps.js",
+    "game:build": "npm run audio:process && npm -w @vimp/tanks run build"
   },
   "devDependencies": {
     "@eslint/js": "^9.37.0",

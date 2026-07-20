@@ -47,7 +47,8 @@ npm run build          # прод-сборка (WASM-ядро + обработк
 npm run build:app      # сборка без ядра (аудио + Vite; ядро уже собрано)
 npm run core:build     # сборка Rust-ядра в WASM (web + nodejs; нужен Rust-тулчейн)
 npm run core:test      # Rust-тесты ядра (cargo test)
-npm run maps:export    # экспорт карт в JSON (games/tanks/src/data/maps/json/) для ядра
+npm run maps:export    # экспорт карт в JSON (games/tanks/dist/maps/) для мастера/ядра
+npm run game:build     # сборка плагина @vimp/tanks (games/tanks/dist/, включая manifest.json)
 npx eslint .           # линтер
 npm test               # тесты (Vitest), одиночный прогон
 npm run test:watch     # тесты в watch-режиме

@@ -47,7 +47,8 @@ npm run build           # production build (WASM core + audio processing + Vite 
 npm run build:app       # build without the core (audio + Vite; core already built)
 npm run core:build      # build the Rust core to WASM (web + nodejs; needs the Rust toolchain)
 npm run core:test       # Rust core tests (cargo test)
-npm run maps:export     # export maps to JSON (games/tanks/src/data/maps/json/) for the core
+npm run maps:export     # export maps to JSON (games/tanks/dist/maps/) for the master/core
+npm run game:build      # build the @vimp/tanks plugin bundle (games/tanks/dist/, incl. manifest.json)
 npx eslint .             # linter
 npm test                 # tests (Vitest), single run
 npm run test:watch       # tests in watch mode

@@ -2,9 +2,17 @@
 
 > **Статус: черновик.** Контракты фиксируют целевую архитектуру отделения
 > движка от игры (см. ADR в [architecture.md](architecture.md#adr-движок--приложение-игра--динамический-плагин)).
-> Код пока монолитен; контракты реализуются поэтапно по плану миграции
-> (`PLAN.md`). В коде уже существует только константа `ENGINE_API_VERSION`
-> в `packages/engine/src/config/opcodes.js`.
+> Код пока монолитен (статическая композиция через
+> `packages/engine/src/gameRegistry.static.js`); контракты реализуются
+> поэтапно по плану миграции (`PLAN.md`). В коде уже есть: константа
+> `ENGINE_API_VERSION` (`packages/engine/src/config/opcodes.js`); объекты
+> HostPlugin/ClientPlugin (`games/tanks/src/host/index.js`,
+> `games/tanks/src/client/index.js`), включая `createCore`/
+> `createClientCore` (движок их пока не зовёт — приедет в Этапе 6.3/6.4);
+> сборка игры (`games/tanks/vite.config.js`), выпускающая
+> `games/tanks/dist/{client,host}-<hash>.js`, общий хешированный `.wasm`,
+> `maps/*.json`, `sounds/*` и `manifest.json` (`npm run game:build`) —
+> мастер её пока не читает (Этап 6.2).
 
 Движок — **приложение** (деплоится один раз: мастер, транспорт,
 Worker-инфраструктура, мета-механизмы, MVC-каркас клиента, Rust-каркас).
