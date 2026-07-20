@@ -202,7 +202,8 @@ services)` (у танков не используется — `onCoreEvent` не
 predicted-хвост рендер-тика. `export_client_core_abi!` генерирует
 движковый минимум методов ниже (кроме
 `set_model`/`try_fire`/`cycle_weapon`/`sync_panel` — они остаются
-рукописными в `games/tanks/core/src/lib.rs`, т.к. их форма игровая).
+рукописными в `games/tanks/core/src/lib.rs`, т.к. их форма игровая; внутри
+трейта эти хуки носят нейтральные имена — `try_action`/`cycle_item`).
 Форма трейта валидирована фикстурным вторым клиентом (`TestClient`, тесты в
 `packages/engine/core/src/client/game.rs`) до появления настоящей второй
 игры. Конфиг собирает [packages/engine/src/lib/clientCoreConfig.js](../../packages/engine/src/lib/clientCoreConfig.js) из

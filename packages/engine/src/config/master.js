@@ -1,3 +1,9 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// корень репозитория — якорь от расположения файла, не от cwd
+const rootDir = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..', '..', '..');
+
 export default {
   name: 'VIMP Master Server',
   protocol: 'https:',
@@ -6,10 +12,10 @@ export default {
   port: 3002,
 
   // сертификаты для локальной разработки — в .certs корня репозитория
-  // (dev запускается с cwd packages/engine; в продакшене обычный HTTP за Nginx)
+  // (в продакшене обычный HTTP за Nginx)
   httpsOptions: {
-    key: '../../.certs/key.pem',
-    cert: '../../.certs/cert.pem',
+    key: path.join(rootDir, '.certs', 'key.pem'),
+    cert: path.join(rootDir, '.certs', 'cert.pem'),
   },
 
   // список серверов (GET /servers)

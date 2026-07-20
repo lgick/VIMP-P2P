@@ -120,6 +120,11 @@ Describes the scoreboard columns. Per parameter:
 Current columns: `name` (0), `status` (1), `score` (2), `deaths` (3),
 `latency` (4).
 
+The schema declares which columns exist: engine-side writes
+(`name`/`status`/`score`/`deaths`/`latency` from RoundManager/RTTManager)
+into columns the schema does not declare are silently ignored, so a game
+may omit any of them.
+
 ### HUD panel (`panel`)
 
 The panel schema: `fields` — fields with string keys and default player

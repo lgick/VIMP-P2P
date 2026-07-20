@@ -81,11 +81,14 @@ pub trait GameClientDef: Sized {
     fn set_map(&mut self, map_json: &str) -> Result<(), String>;
     fn sync_panel(&mut self, items: &[String]);
     fn reset(&mut self);
-    fn cycle_weapon(&mut self, back: bool);
 
-    /// Локальный визуальный выстрел (гейты внутри — предикт активен, свой
-    /// актор жив). JSON спавна либо `None`.
-    fn try_fire(&mut self, my_game_id: Option<u32>, local_now: f64) -> Option<String>;
+    /// Циклический выбор активного предмета/режима актора (нейтральный
+    /// аналог смены оружия — конкретный смысл определяет игра).
+    fn cycle_item(&mut self, back: bool);
+
+    /// Локальное визуальное действие актора (выстрел и т.п.; гейты внутри —
+    /// предикт активен, свой актор жив). JSON спавна либо `None`.
+    fn try_action(&mut self, my_game_id: Option<u32>, local_now: f64) -> Option<String>;
 }
 
 // приводит любое поле строки к f32 для плоского hot-буфера
@@ -247,12 +250,12 @@ impl<G: GameClientDef> ClientState<G> {
         self.game.apply_input(action, key_name, local_now);
     }
 
-    pub fn try_fire(&mut self, local_now: f64) -> Option<String> {
-        self.game.try_fire(self.my_game_id, local_now)
+    pub fn try_action(&mut self, local_now: f64) -> Option<String> {
+        self.game.try_action(self.my_game_id, local_now)
     }
 
-    pub fn cycle_weapon(&mut self, back: bool) {
-        self.game.cycle_weapon(back);
+    pub fn cycle_item(&mut self, back: bool) {
+        self.game.cycle_item(back);
     }
 
     pub fn set_model(&mut self, model_name: &str) {
@@ -498,9 +501,9 @@ mod fixture {
             self.last_update = None;
         }
 
-        fn cycle_weapon(&mut self, _back: bool) {}
+        fn cycle_item(&mut self, _back: bool) {}
 
-        fn try_fire(&mut self, _my_game_id: Option<u32>, _local_now: f64) -> Option<String> {
+        fn try_action(&mut self, _my_game_id: Option<u32>, _local_now: f64) -> Option<String> {
             None
         }
     }

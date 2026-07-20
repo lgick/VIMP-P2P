@@ -1305,45 +1305,75 @@ async function fetchServers({ offset, limit, search }) {
   }
 }
 
-// заполняет форму создания комнаты дефолтами активной игры (Этап 6.3):
-// roomDefaults манифеста + список карт каталога
+// поля формы комнаты, сгенерированные по roomDefaults: key -> input
+const roomFormFields = new Map();
+
+// 'friendlyFire' -> 'Friendly fire' (подпись поля из ключа roomDefaults)
+function roomFieldLabel(key) {
+  const text = key.replace(/([A-Z])/g, ' $1').toLowerCase();
+
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// генерирует форму создания комнаты по ключам roomDefaults манифеста (Д7):
+// движок не знает игровых полей — контрол выводится из типа значения
+// (boolean → checkbox, number → number, 'map' → select карт каталога)
 function populateRoomForm(manifest) {
   const { roomDefaults } = manifest;
-  const maxPlayersInput = document.getElementById(lobbyConfig.elems.maxPlayersId);
-  const roundTimeInput = document.getElementById(lobbyConfig.elems.roundTimeId);
-  const mapTimeInput = document.getElementById(lobbyConfig.elems.mapTimeId);
-  const friendlyFireInput = document.getElementById(
-    lobbyConfig.elems.friendlyFireId,
-  );
-  const mapSelect = document.getElementById(lobbyConfig.elems.mapId);
+  const container = document.getElementById(lobbyConfig.elems.fieldsId);
   const gameSelect = document.getElementById(lobbyConfig.elems.gameId);
+  const { secondsKeys, attrs } = lobbyConfig.form;
 
-  if (maxPlayersInput) {
-    maxPlayersInput.value = roomDefaults.maxPlayers;
-  }
+  roomFormFields.clear();
 
-  if (roundTimeInput) {
-    roundTimeInput.value = roomDefaults.roundTime / 1000;
-  }
+  if (container) {
+    container.textContent = '';
 
-  if (mapTimeInput) {
-    mapTimeInput.value = roomDefaults.mapTime / 1000;
-  }
+    Object.entries(roomDefaults).forEach(([key, defaultValue]) => {
+      const label = document.createElement('label');
+      let input;
 
-  if (friendlyFireInput) {
-    friendlyFireInput.checked = roomDefaults.friendlyFire;
-  }
+      if (key === 'map') {
+        input = document.createElement('select');
 
-  if (mapSelect) {
-    mapSelect.textContent = '';
+        manifest.maps.list.forEach(name => {
+          const option = document.createElement('option');
 
-    manifest.maps.list.forEach(name => {
-      const option = document.createElement('option');
+          option.value = name;
+          option.textContent = name;
+          option.selected = name === defaultValue;
+          input.appendChild(option);
+        });
+      } else if (typeof defaultValue === 'boolean') {
+        input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = defaultValue;
+      } else {
+        const isSeconds = secondsKeys.includes(key);
 
-      option.value = name;
-      option.textContent = name;
-      option.selected = name === roomDefaults.map;
-      mapSelect.appendChild(option);
+        input = document.createElement('input');
+        input.type = 'number';
+        input.value = isSeconds ? defaultValue / 1000 : defaultValue;
+
+        Object.entries(attrs[key] || {}).forEach(([attr, attrValue]) => {
+          input.setAttribute(attr, attrValue);
+        });
+      }
+
+      const span = document.createElement('span');
+
+      span.textContent =
+        roomFieldLabel(key) + (secondsKeys.includes(key) ? ' (s)' : '');
+
+      // checkbox — слева от подписи, остальные контролы — справа
+      if (input.type === 'checkbox') {
+        label.append(input, span);
+      } else {
+        label.append(span, input);
+      }
+
+      container.appendChild(label);
+      roomFormFields.set(key, input);
     });
   }
 
@@ -1396,29 +1426,35 @@ function initLobby() {
 
   const hostBtn = document.getElementById(lobbyConfig.elems.hostBtnId);
   const nameInput = document.getElementById(lobbyConfig.elems.nameId);
-  const maxPlayersInput = document.getElementById(lobbyConfig.elems.maxPlayersId);
-  const roundTimeInput = document.getElementById(lobbyConfig.elems.roundTimeId);
-  const mapTimeInput = document.getElementById(lobbyConfig.elems.mapTimeId);
-  const friendlyFireInput = document.getElementById(
-    lobbyConfig.elems.friendlyFireId,
-  );
-  const mapSelect = document.getElementById(lobbyConfig.elems.mapId);
 
   hostBtn?.addEventListener('click', () => {
     const name = (nameInput?.value || '').trim() || lobbyConfig.create.defaultName;
     const { roomDefaults } = activeGameManifest;
+    const { secondsKeys } = lobbyConfig.form;
+
+    // дефолты манифеста перекрываются значениями сгенерированных полей
+    const overrides = { ...roomDefaults };
+
+    for (const [key, input] of roomFormFields) {
+      const defaultValue = roomDefaults[key];
+
+      if (typeof defaultValue === 'boolean') {
+        overrides[key] = input.checked;
+      } else if (typeof defaultValue === 'number') {
+        const isSeconds = secondsKeys.includes(key);
+        const fallback = isSeconds ? defaultValue / 1000 : defaultValue;
+        const value = Number(input.value) || fallback;
+
+        overrides[key] = isSeconds ? value * 1000 : value;
+      } else {
+        overrides[key] = input.value || defaultValue;
+      }
+    }
 
     connectAsHost({
       name,
       hostSocketId: lobbyConfig.create.hostSocketId,
-      maxPlayers: Number(maxPlayersInput?.value) || roomDefaults.maxPlayers,
-      roundTime:
-        (Number(roundTimeInput?.value) || roomDefaults.roundTime / 1000) * 1000,
-      mapTime: (Number(mapTimeInput?.value) || roomDefaults.mapTime / 1000) * 1000,
-      friendlyFire: friendlyFireInput
-        ? friendlyFireInput.checked
-        : roomDefaults.friendlyFire,
-      map: mapSelect?.value || roomDefaults.map,
+      ...overrides,
     });
   });
 

@@ -205,7 +205,7 @@ impl GameClientDef for TanksClient {
         self.shot.reset();
     }
 
-    fn cycle_weapon(&mut self, back: bool) {
+    fn cycle_item(&mut self, back: bool) {
         if self.alive_with_state() {
             self.shot.cycle_weapon(back);
         }
@@ -213,7 +213,7 @@ impl GameClientDef for TanksClient {
 
     /// Локальный выстрел (гейт: предикт активен, свой танк жив).
     /// JSON спавна для applyGameData либо None.
-    fn try_fire(&mut self, my_game_id: Option<u32>, local_now: f64) -> Option<String> {
+    fn try_action(&mut self, my_game_id: Option<u32>, local_now: f64) -> Option<String> {
         if !self.alive_with_state() {
             return None;
         }
@@ -496,19 +496,19 @@ mod tests {
         state.set_active(true);
 
         // без кадров (нет meta) выстрел невозможен
-        assert!(state.try_fire(0.0).is_none());
+        assert!(state.try_action(0.0).is_none());
 
         state.push_frame(&frame_bytes(1000.0, 1, 10.0, 3, true, false), 1000.0);
         state.sample(1150.0);
 
-        let spawn = state.try_fire(1200.0).unwrap();
+        let spawn = state.try_action(1200.0).unwrap();
 
         assert!(spawn.contains("\"w1\""));
 
         // уничтоженный танк (condition 0) стрелять не может
         state.push_frame(&frame_bytes(1200.0, 2, 10.0, 0, true, false), 1200.0);
         state.sample(1350.0);
-        assert!(state.try_fire(2000.0).is_none());
+        assert!(state.try_action(2000.0).is_none());
     }
 
     #[test]

@@ -7,7 +7,9 @@ between clients and hosts. **It carries no game logic** — only connection
 coordination.
 
 `packages/engine/src/master/main.js` is the **project's entry point** (the legacy
-authoritative game server has been fully removed).
+authoritative game server has been fully removed). Filesystem paths
+(`games/*/dist`, `dist/assets`) are anchored to the module's location via
+`import.meta.url`, so the master can be started from any working directory.
 
 ## Running
 

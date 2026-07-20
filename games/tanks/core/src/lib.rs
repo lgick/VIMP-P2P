@@ -91,12 +91,12 @@ impl ClientCore {
     /// Локальный визуальный выстрел: гейты (кулдаун/патроны/pending-бомба/
     /// жив/активен) внутри. JSON спавна для applyGameData либо None.
     pub fn try_fire(&mut self, local_now: f64) -> Option<String> {
-        self.state.try_fire(local_now)
+        self.state.try_action(local_now)
     }
 
     /// Локальный цикл смены оружия (авторитетное подтверждение — панелью).
     pub fn cycle_weapon(&mut self, back: bool) {
-        self.state.cycle_weapon(back);
+        self.state.cycle_item(back);
     }
 
     /// Модель танка пользователя (известна при авторизации).

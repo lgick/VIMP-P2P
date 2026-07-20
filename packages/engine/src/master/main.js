@@ -2,6 +2,7 @@ import fs from 'fs';
 import http from 'http';
 import https from 'https';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import express from 'express';
 import ViteExpress from 'vite-express';
 import { WebSocketServer } from 'ws';
@@ -14,6 +15,11 @@ import WorkerCatalog from './WorkerCatalog.js';
 import SignalingServer from './SignalingServer.js';
 
 config.set('master', (await import('../config/master.js')).default);
+
+// пути мастера якорятся от расположения этого файла, а не от cwd —
+// сервер можно запускать из любой директории
+const engineDir = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
+const gamesDir = path.resolve(engineDir, '..', '..', 'games');
 
 const env = process.env;
 const isProduction = env.NODE_ENV === 'production';
@@ -40,7 +46,7 @@ if (isProduction) {
 // (продукт `npm run game:build`); в dev entries указывают на Vite-исходники
 // (HMR), maps/assetsBase — из уже собранного dist (как и WorkerCatalog,
 // требует сборки игры один раз перед первым запуском)
-const gameCatalog = new GameCatalog(path.resolve('..', '..', 'games'), {
+const gameCatalog = new GameCatalog(gamesDir, {
   dev: !isProduction,
 });
 
@@ -75,7 +81,7 @@ const registry = new HostRegistry({
 // каталог worker-бандла (Этап 5.2): версия кода комнаты для эстафеты
 // Worker'ов; в dev Worker раздаёт Vite из исходников — каталог пуст
 const workerCatalog = new WorkerCatalog(
-  isProduction ? path.resolve('dist', 'assets') : null,
+  isProduction ? path.join(engineDir, 'dist', 'assets') : null,
 );
 
 const signaling = new SignalingServer(registry, {
@@ -168,7 +174,7 @@ app.get('/games/:id/maps/:name', (req, res) => {
 // в dev entries манифеста указывают на Vite-исходники напрямую, но
 // assetsBase-содержимое (карты/звуки) всё равно раздаётся отсюда из dist
 for (const id of gameCatalog.ids) {
-  app.use(`/games/${id}`, express.static(path.join('..', '..', 'games', id, 'dist')));
+  app.use(`/games/${id}`, express.static(path.join(gamesDir, id, 'dist')));
 }
 
 // в продакшене обычный HTTP сервер, Nginx будет обрабатывать HTTPS

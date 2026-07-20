@@ -56,11 +56,22 @@ export default {
     hostBtnId: 'lobby-host',
     // селектор игры: скрыт, пока в каталоге мастера одна игра (§6, PLAN.md)
     gameId: 'lobby-game',
-    maxPlayersId: 'lobby-max-players',
-    roundTimeId: 'lobby-round-time',
-    mapTimeId: 'lobby-map-time',
-    friendlyFireId: 'lobby-friendly-fire',
-    mapId: 'lobby-map',
+    // контейнер полей комнаты: генерируются по ключам roomDefaults
+    // манифеста активной игры (Д7) — движок не знает игровых полей
+    fieldsId: 'lobby-fields',
+  },
+
+  // движковые подсказки генератору формы комнаты (только движковые ключи
+  // roomDefaults; игровые поля выводятся из типа значения)
+  form: {
+    // тайм-ключи движка: в roomDefaults хранятся в мс, в форме — секунды
+    secondsKeys: ['roundTime', 'mapTime'],
+    // атрибуты числовых полей (в единицах формы)
+    attrs: {
+      maxPlayers: { min: 1 },
+      roundTime: { min: 10, max: 3600 },
+      mapTime: { min: 10, max: 3600 },
+    },
   },
 
   // создание комнаты (хост в этой же вкладке); лимит игроков/время

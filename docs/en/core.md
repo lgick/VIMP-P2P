@@ -204,7 +204,8 @@ the hot-buffer write (`ClientState<G>` in `packages/engine/core/src/client/game.
 tracking, and the predicted render overlay. `export_client_core_abi!`
 generates the engine-minimum wasm-bindgen methods below (all but
 `set_model`/`try_fire`/`cycle_weapon`/`sync_panel`, which stay hand-written
-in `games/tanks/core/src/lib.rs` since their shape is game-specific). The
+in `games/tanks/core/src/lib.rs` since their shape is game-specific; inside
+the trait these hooks carry neutral names — `try_action`/`cycle_item`). The
 trait's shape is validated by a fixture second client (`TestClient`, tests
 in `packages/engine/core/src/client/game.rs`) before any real second game
 exists. Its config is assembled by

@@ -129,6 +129,13 @@ class Stat {
     for (const p in data) {
       if (Object.hasOwn(data, p)) {
         const conf = this._config[p];
+
+        // колонки объявляет схема игры (Д7): движковые записи
+        // (status/score/deaths/latency) в необъявленные колонки игнорируются
+        if (!conf) {
+          continue;
+        }
+
         const method = conf.bodyMethod;
         const value = data[p];
 
@@ -154,6 +161,12 @@ class Stat {
   updateHead(teamId, param, value) {
     const stat = this._head[teamId];
     const conf = this._config[param];
+
+    // необъявленная схемой колонка — запись игнорируется (Д7)
+    if (!conf) {
+      return;
+    }
+
     const method = conf.headMethod;
     const key = conf.key;
 

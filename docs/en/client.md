@@ -147,16 +147,20 @@ build, since the lobby happens before connecting to a host). The ping
 measurement is **approximate** (client→master→host, not P2P RTT) and shown
 as such in the UI.
 
-The "Create server" form is pre-filled from the active game manifest's
-`roomDefaults` (`populateRoomForm` in `main.js`): max players, round/map time
-(seconds in the UI, milliseconds on the wire), friendly fire, and a map
-picker built from `manifest.maps.list`. The game picker (`#lobby-game`)
-stays hidden while the master's catalog has a single game. On submit the
-overrides are sent as the room object to `connectAsHost` →
-`HostController` → the Worker, where `applyRoomOverrides`
-(`packages/engine/src/lib/applyRoomOverrides.js`) already reads `maxPlayers`/`roundTime`/`mapTime`/
-`friendlyFire`/`map` (these fields predate stage 6.3 — only the client-side
-form that fills them is new).
+The "Create server" form is **generated** from the keys of the active game
+manifest's `roomDefaults` (`populateRoomForm` in `main.js`) — the engine
+knows no game-specific fields. The control type is inferred from the
+default value: `boolean` → checkbox, `number` → number input, the special
+key `map` → a select built from `manifest.maps.list`; the label comes from
+the camelCase key (`friendlyFire` → "Friendly fire"). Engine-owned keys get
+hints from `lobbyConfig.form`: `secondsKeys` (`roundTime`/`mapTime` are
+stored in milliseconds but shown in seconds) and `attrs` (min/max for
+number inputs). The game picker (`#lobby-game`) stays hidden while the
+master's catalog has a single game. On submit every `roomDefaults` key
+(defaults overridden by the form values) is sent as the room object to
+`connectAsHost` → `HostController` → the Worker, where `applyRoomOverrides`
+(`packages/engine/src/lib/applyRoomOverrides.js`) reads `maxPlayers`/`roundTime`/`mapTime`/
+`friendlyFire`/`map`.
 
 The Publisher pattern within a triplet:
 
