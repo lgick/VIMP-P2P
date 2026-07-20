@@ -515,12 +515,62 @@ CI (`.github/workflows/test.yml`) — четыре независимых job в
 явной сборкой обоих таргетов там, где они нужны (проверено локально —
 временным перемещением `pkg-node`/`pkg-web`).
 
-### Этап 8. Сборка, деплой, документация, финал (L, 2–3 PR)
+### Этап 8. Сборка, деплой, документация, финал (L, 2–3 PR) — частично выполнен
 
 - Dockerfile: rust-стадия — `wasm-pack build games/*/core`; node-стадия — движок + игры (`dist/` + `dist/games/*`); runner — `dist/`, `public/`, `packages/engine/src/{config,lib,master}` (каталог `src/data` из runner-а исчезает — карты в `dist/games/*/maps`). `deploy.yml` — без сущностных изменений.
 - Документация `docs/{en,ru}`: реструктуризация — движковые страницы (architecture, master, host, client, core, network, configuration, deployment) + `plugin-api.md` + страница игры (`games/tanks.md`: правила, баланс, карты/оружие/звуки из текущих gameplay/extending); переписать CLAUDE.md (структура, команды, границы, таблица актуализации доков).
 - Чек-лист выноса `games/tanks` в отдельный репозиторий: публикация `@vimp/engine` (npm/архив) + `vimp-engine-core` (git/crates-зависимость), CI игры, политика `engineApi`.
 - Финальный ручной smoke: две вкладки (движение/выстрелы/респаун/смена карты/боты/голосования/чат/панель/стата), эстафета Worker'ов, `/ban`, прод-развёртывание на VPS.
+
+**Заметки реализации.** `Dockerfile` был фактически сломан относительно
+текущей структуры репозитория (написан ещё для монолита до Этапа 5/6) —
+`core-builder` собирал несуществующий `core/` вместо `games/tanks/core`
+(cdylib, тянет `packages/engine/core` как path-зависимость через корневой
+`Cargo.toml`), а runner копировал уже удалённый в 6.4
+`packages/engine/src/gameRegistry.static.js` и статические данные
+`games/tanks/src` — на текущем коде образ вообще не собрался бы. Починено:
+`core-builder` копирует корневой `Cargo.toml` + оба crate и собирает
+`wasm-pack build games/tanks/core --release --target web --out-dir
+pkg-web`; node-стадия `builder` после `npm ci` и копирования `pkg-web`
+выполняет `npm run game:build && npm run build:app` (сборка
+игры-плагина — client/host-бандлы, wasm-ассет, карты, звуки,
+`manifest.json`, в `games/tanks/dist/` — и следом движка); `runner`
+копирует `packages/engine/{dist,public,src/config,src/lib,src/master}` +
+целиком `games/tanks/dist` (мастер читает плагин только через
+`GameCatalog`, т.е. уже собранный `dist/manifest.json` +
+`dist/maps/*.json` — исходники `games/tanks/src` раннеру не нужны, как и
+`gameRegistry.static.js`, которого больше не существует).
+`.dockerignore` синхронизирован с новыми путями Rust-артефактов
+(`packages/engine/core/target`, `games/tanks/core/{target,pkg-web,pkg-node}`
+вместо старого `core/*`). `deploy.yml` изменений не потребовал — уже был
+game-агностичен. `docs/{en,ru}/deployment.md` — снят устаревший коллбэк
+«Docker-образ пока не собирает игру (отложено на Этап 8)», описана
+реальная сборка; `docs/{en,ru}/extending.md` — поправлены осиротевшие
+пути `core/src/*` (остались от единого crate до 4b) на
+`packages/engine/core/src/*` (движковое: `snapshot.rs`,
+`client/unpack.rs`) и `games/tanks/core/src/*` (игровое: `tanks.rs`,
+`tank.rs`, `bomb.rs`, `client/shot.rs`); туда же добавлен раздел «Вынос
+`games/tanks` в отдельный репозиторий» — чек-лист из 6 пунктов (публикация
+`@vimp/engine`, `git`-зависимость на `vimp-engine-core` вместо
+`path`-зависимости, отдельный CI по образцу job'ов `tanks`/`integration`,
+отдельная сборка/доставка `dist/` для `GameCatalog`, `ENGINE_API_VERSION`
+как semver-контракт между релизными линиями, снятие `games/tanks` из
+корневого workspace/`Cargo.toml` members). `CLAUDE.md` уже был
+реструктурирован по требуемому формату (движок/игра, таблица докстраниц,
+границы) в одном из предыдущих PR — правок не потребовалось; страница
+`games/tanks.md` (объединение gameplay.md/extending.md в одну
+игровую страницу) не создавалась — `gameplay.md`/`extending.md` уже
+целиком про игру и перечислены как таковые в README ToC, реструктуризация
+ToC признана некритичной и оставлена вне объёма этого прохода.
+`npx eslint .` и `npm test` — 72 файла / 702 теста, зелёные.
+
+**Не выполнено в этом проходе (осталось человеку):** реальная сборка
+Docker-образа (`docker build`) — недоступен Docker в среде выполнения,
+проверено только логическим разбором путей/скриптов; финальный ручной
+smoke (два реальных браузерных таба: движение/выстрелы/респаун/смена
+карты/боты/голосования/чат/панель/стата, эстафета Worker'ов, `/ban`) и
+прод-развёртывание на VPS — недоступны без HTTPS-сертификатов/браузера в
+этой среде.
 
 Критический путь: 1 → 2 → 3 → 5 → 6 → 8; этап 4 параллелен 3 (синхронизация: 4a до 5); 7 — после 5.
 

@@ -12,17 +12,19 @@ Docker image and publishes it to GHCR → SSHes into every server in
 container. On the VPS, Nginx terminates HTTPS and proxies to the app port
 (the master listens on `3002` inside the container).
 
-> **Rust toolchain in the build.** The browser host's Worker loads the
-> WASM core (`core/pkg-web/`), so [Dockerfile](../../Dockerfile) builds it
-> in a separate `core-builder` stage (`rust:slim` + `wasm-pack`), and the
-> node stage runs `npm run build:app` (audio + Vite) with `pkg-web`
-> already in place. A local `npm run build` also builds the
-> `@vimp/tanks` game plugin bundle (`npm run game:build`, required for
-> `GameCatalog` — see [getting-started.md](getting-started.md#rust-toolchain-the-core-core));
-> the Docker image does not build it yet (deferred to Stage 8 of the
-> engine/game split), so a production container currently needs the game
-> bundle supplied by another means (baked in separately, or a future
-> Docker stage).
+> **Rust toolchain in the build.** The game's WASM core
+> (`games/tanks/core/`) is a cdylib built by `wasm-pack`, with the engine
+> half (`packages/engine/core/`, a plain rlib) pulled in as a path
+> dependency — [Dockerfile](../../Dockerfile) builds it in a separate
+> `core-builder` stage (`rust:slim` + `wasm-pack build games/tanks/core`).
+> The node stage then runs `npm run game:build` (builds the `@vimp/tanks`
+> plugin bundle — client/host entries, the WASM asset, maps, sounds,
+> `manifest.json` — into `games/tanks/dist/`) followed by `npm run
+> build:app` (audio + engine Vite build), with `pkg-web` already in
+> place. The runner stage copies both `packages/engine/dist/` and
+> `games/tanks/dist/`; the master reads the plugin only through
+> `GameCatalog` (`dist/manifest.json` + `dist/maps/*.json`) — it never
+> imports game source, so `games/tanks/src/` isn't shipped in the image.
 
 ## 📋 Prerequisites
 

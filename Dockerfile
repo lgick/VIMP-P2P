@@ -1,5 +1,5 @@
 # ============================================================
-# 1. CORE-BUILDER — Rust-ядро симуляции (WASM для браузера)
+# 1. CORE-BUILDER — Rust-ядро игры (WASM для браузера)
 # ============================================================
 
 FROM rust:slim AS core-builder
@@ -10,12 +10,17 @@ RUN rustup target add wasm32-unknown-unknown \
 
 WORKDIR /app
 
-COPY core ./core
+# cargo workspace: движковый rlib (vimp-engine-core) + игровой cdylib
+# (vimp-tanks-core); wasm-pack собирает игровой crate, движковый тянется
+# как path-зависимость
+COPY Cargo.toml ./Cargo.toml
+COPY packages/engine/core ./packages/engine/core
+COPY games/tanks/core ./games/tanks/core
 
-RUN wasm-pack build core --release --target web --out-dir pkg-web
+RUN wasm-pack build games/tanks/core --release --target web --out-dir pkg-web
 
 # ============================================================
-# 2. BUILDER — фронтенд, обработка аудио
+# 2. BUILDER — сборка игры-плагина и движка, обработка аудио
 # ============================================================
 
 FROM node:20-slim AS builder
@@ -39,14 +44,16 @@ RUN npm ci
 # копирование проекта
 COPY . .
 
-# WASM-ядро из core-builder (бандлится в host.worker при vite build)
-COPY --from=core-builder /app/core/pkg-web ./core/pkg-web
+# WASM-ядро игры из core-builder (бандлится в games/tanks/dist при сборке
+# плагина; и в host-, и в client-бандл ссылается на один hashed .wasm)
+COPY --from=core-builder /app/games/tanks/core/pkg-web ./games/tanks/core/pkg-web
 
 # переменная окружения для Vite
 ENV NODE_ENV=production
 
-# запуск обработки аудио и сборки фронтенда (ядро уже собрано)
-RUN npm run build:app
+# сборка игры-плагина (client/host-бандлы, wasm, карты, звуки, manifest.json
+# → games/tanks/dist/) и движка (audio + vite build → packages/engine/dist/)
+RUN npm run game:build && npm run build:app
 
 # ============================================================
 # 3. RUNNER — Production Image
@@ -63,7 +70,7 @@ COPY games/tanks/package.json ./games/tanks/
 
 RUN npm ci --omit=dev
 
-# фронтенд (vite build движка; public копируется Vite внутрь dist)
+# фронтенд движка (vite build; public копируется Vite внутрь dist)
 COPY --from=builder /app/packages/engine/dist ./packages/engine/dist
 COPY --from=builder /app/packages/engine/public ./packages/engine/public
 
@@ -71,14 +78,16 @@ COPY --from=builder /app/packages/engine/public ./packages/engine/public
 COPY --from=builder /app/packages/engine/src/config ./packages/engine/src/config
 COPY --from=builder /app/packages/engine/src/lib ./packages/engine/src/lib
 COPY --from=builder /app/packages/engine/src/master ./packages/engine/src/master
-COPY --from=builder /app/packages/engine/src/gameRegistry.static.js ./packages/engine/src/gameRegistry.static.js
 
-# данные игры (мастер импортирует карты через gameRegistry → @vimp/tanks)
-COPY --from=builder /app/games/tanks/src ./games/tanks/src
+# собранный бандл игры-плагина (мастер читает только dist/manifest.json +
+# dist/maps/*.json через GameCatalog — исходники games/tanks/src раннеру
+# не нужны, статической композиции движок↔игра больше нет)
+COPY --from=builder /app/games/tanks/dist ./games/tanks/dist
 
 ENV NODE_ENV=production
 
-# запуск мастер-сервера (cwd — пакет движка: dist/assets для WorkerCatalog)
+# запуск мастер-сервера (cwd — пакет движка: dist/assets для WorkerCatalog,
+# ../../games — для GameCatalog)
 WORKDIR /app/packages/engine
 
 CMD ["node", "src/master/main.js"]

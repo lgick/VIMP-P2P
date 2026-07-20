@@ -26,11 +26,11 @@
 Шаги:
 
 1. Определите оружие в [games/tanks/src/data/weapons.js](../../games/tanks/src/data/weapons.js) (тип, урон, кулдаун, расход и т.д.) — эти данные уходят и в ядро (`buildCoreConfig`), и клиенту.
-2. Реализуйте авторитетную часть в Rust-ядре (`core/src/`: `game.rs`, `tank.rs`, при необходимости своя сущность по образцу `bomb.rs`; упаковка блока — `snapshot.rs`) по аналогии с существующим оружием того же типа.
+2. Реализуйте авторитетную часть в игровом Rust-крейте (`games/tanks/core/src/`: `tanks.rs`, `tank.rs`, при необходимости своя сущность по образцу `bomb.rs`) по аналогии с существующим оружием того же типа. Упаковка блока (`SnapshotPacker`) — в движковом крейте (`packages/engine/core/src/snapshot.rs`), игра лишь поставляет строки по своей схеме `SnapshotConfig`.
 3. Создайте клиентский рендеринг в `games/tanks/src/client/parts/`.
 4. Зарегистрируйте сущность в `games/tanks/src/config/client.js`: `parts.gameSets` (snapshot-ключ → классы) и `parts.entitiesOnCanvas` (класс → полотно).
-5. Зарегистрируйте snapshot-ключи оружия (и его эффектов) в `SNAPSHOT_KEYS` в [packages/engine/src/config/opcodes.js](../../packages/engine/src/config/opcodes.js) — незарегистрированный ключ уронит упаковку кадра. Если существующие `kind` не подходят под формат данных — добавьте новую раскладку блока в `core/src/snapshot.rs` и зеркально в клиентский декодер `core/src/client/unpack.rs`, подняв версию формата.
-6. Последним элементом данных события/сущности передавайте **id автора** (как `shooterId` у `w1` и `ownerId` у `w2`) — по нему клиентское ядро (`core/src/client/shot.rs`) подавляет авторитетные дубли клиентского спавна; типы `hitscan`/`explosive` оно поддерживает автоматически по конфигу оружия.
+5. Зарегистрируйте snapshot-ключи оружия (и его эффектов) в `SNAPSHOT_KEYS` в [packages/engine/src/config/opcodes.js](../../packages/engine/src/config/opcodes.js) — незарегистрированный ключ уронит упаковку кадра. Если существующие `kind` не подходят под формат данных — добавьте новую раскладку блока в движковый `packages/engine/core/src/snapshot.rs` и зеркально в клиентский декодер `packages/engine/core/src/client/unpack.rs`, подняв версию формата.
+6. Последним элементом данных события/сущности передавайте **id автора** (как `shooterId` у `w1` и `ownerId` у `w2`) — по нему игровое клиентское ядро (`games/tanks/core/src/client/shot.rs`) подавляет авторитетные дубли клиентского спавна; типы `hitscan`/`explosive` оно поддерживает автоматически по конфигу оружия.
 7. Добавьте боезапас в `games/tanks/src/config/game.js` (`panel`) и ключ панели в `client.js` (`modules.panel`).
 
 ## Новый звук
@@ -51,6 +51,17 @@
 ## Тесты
 
 Новый код покрывается тестами в `tests/` (структура зеркалит `packages/engine/src/` и `games/tanks/src/`). Паттерны — в CLAUDE.md (раздел Testing): синглтоны через `vi.resetModules()` + динамический import; логика ядра — Rust-тесты (`cargo test`) + JS↔WASM харнесс `tests/core/`; интеграция host-фасада — `tests/host/HostGame.test.js` поверх реального `pkg-node`. При изменении модели движения танка обязателен прогон cargo-паритета реплики предикта (`npm run core:test`).
+
+## Вынос `games/tanks` в отдельный репозиторий
+
+Сегодня не требуется — `games/tanks` общается с движком только через контракты плагина из [plugin-api.md](plugin-api.md), поэтому распил механический и делается тогда, когда появится вторая игра или отдельный релизный цикл. Чек-лист на этот случай:
+
+1. **Опубликовать `@vimp/engine`.** Игра импортирует его только через публичный `exports` ([packages/engine/package.json](../../packages/engine/package.json): `./lib/*`, `./config/*`). Либо опубликовать в реестр (npm, GitHub Packages), либо подключить как Git-зависимость с тегом; в обоих случаях — зафиксировать версию вместо текущего workspace-диапазона `"*"` в [games/tanks/package.json](../../games/tanks/package.json).
+2. **Опубликовать `vimp-engine-core`.** Сейчас `games/tanks/core/Cargo.toml` подключает его как относительную `path`-зависимость (`../../../packages/engine/core`); перевести на `git`-зависимость с тегом/rev (crates.io — только если движок задуман как публично переиспользуемый вне этого проекта).
+3. **Завести отдельный CI игры.** Продублировать джобы `tanks`/`integration` из [.github/workflows/test.yml](../../.github/workflows/test.yml) (`cargo test -p vimp-tanks-core`, `core:build:web`, `vitest --project tanks`) в репозитории игры, собирая против зафиксированной версии движка из пунктов 1–2.
+4. **Завести отдельные сборку/деплой игры.** `npm run game:build` у игры не меняется — он уже даёт самодостаточный `games/tanks/dist/manifest.json` + бандлы; `Dockerfile`/`deploy.yml` движка перестают собирать игру и вместо этого должны получать её откуда-то, где `GameCatalog` (см. `master.md`) сможет забрать `dist/` — загрузка артефакта сборки, CDN или общий том, в зависимости от выбранной на тот момент топологии деплоя.
+5. **`ENGINE_API_VERSION` становится реальным контрактом совместимости.** Сейчас он проверяется в процессе при загрузке плагина (`assertEngineApiCompatible` на клиенте, `host.worker.js` на хосте); когда игра начнёт поставляться отдельно — относиться к нему как к semver между двумя релизными линиями: поднимать осознанно, документировать breaking changes в `plugin-api.md` и, если несколько версий игры должны сосуществовать против одного мастера, держать окно на приём старых значений `engineApi`.
+6. **Убрать `games/tanks` из корневого workspace** (`workspaces` в `package.json`, `members` в корневом `Cargo.toml`) — ESLint-граница `no-restricted-imports` на стороне движка станет не нужна (репозиторий игры вместо неё сам следит за дисциплиной «импортировать только публичную поверхность `@vimp/engine`»).
 
 ---
 
