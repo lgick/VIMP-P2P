@@ -75,7 +75,7 @@ describe('HostGame (фикстура — без Rust-артефактов игр
     host.pushMessage(gameId, '/spawn 1');
     tick(host, 1);
 
-    const bots = host._bots.getBots();
+    const bots = host._scripted.getScripted();
 
     expect(bots).toHaveLength(1);
     expect(bots[0].team).toBe('team1');

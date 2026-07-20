@@ -1,5 +1,5 @@
 import HumanParticipant from './HumanParticipant.js';
-import BotParticipant from './BotParticipant.js';
+import ScriptedParticipant from './ScriptedParticipant.js';
 
 // Единый источник истины об участниках игры (люди + scripted-участники).
 // Владеет реестром, размерами команд, списком активных игроков,
@@ -21,7 +21,7 @@ class ParticipantManager {
     this.resetTeamSizes();
   }
 
-  // наименьший свободный числовой id (единое пространство людей и ботов)
+  // наименьший свободный числовой id (единое пространство людей и scripted)
   _nextGameId() {
     let counter = 0;
 
@@ -59,7 +59,7 @@ class ParticipantManager {
     const name = this.checkName(`${this._scripted.namePrefix}${gameId}`);
     const teamId = this._teams[team];
 
-    const participant = new BotParticipant({
+    const participant = new ScriptedParticipant({
       gameId,
       name,
       model: model ?? this._scripted.defaultModel,
@@ -103,7 +103,7 @@ class ParticipantManager {
       return null;
     }
 
-    const participant = new BotParticipant({
+    const participant = new ScriptedParticipant({
       gameId,
       name,
       model,

@@ -179,18 +179,17 @@ Implements the physics/bots/packing surface consumed by
 scripted module: a thin bot manager registering participants and linking
 them to `Stat`/`Panel` (AI, navigation, and the spatial grid live in the
 core). It's built by the `createModules(ctx)` factory
-(`games/tanks/src/host/createModules.js` — the future
-`HostPlugin.createModules`); the engine calls the scripted-module contract:
-`createMap`, `createBots(count, team?)`, `removeBots(team?)`,
-`removeOneBotForPlayer(team)`, `getBots`, `getBotCount`,
-`getBotCountsPerTeam`. Parameters come from the game config's `scripted`
-(`namePrefix`, `defaultModel`).
+(`games/tanks/src/host/createModules.js` returns `{ scripted }`); the
+engine calls the scripted-module contract: `createMap`,
+`createScripted(count, team?)`, `removeScripted(team?)`,
+`removeOneForHuman(team)`, `getCount`, `getCountsPerTeam`. Parameters come
+from the game config's `scripted` (`namePrefix`, `defaultModel`).
 
 **The tanks HostPlugin** (`games/tanks/src/host/index.js`, the default export
 of the game's host-entry bundle) — the whole game half of the host as a
 single object: `id`, `engineApi`, `createCore(coreConfigJson, { wasmUrl })`,
 `gameConfig`, `authSchema`, `chatCommands` (`/bot`), `systemMessages` (the
-`b:*` group), `createModules` (the bots scripted module),
+`b:*` group), `createModules` (returns the scripted module),
 `buildClientGameConfig()` (the game half of CONFIG_DATA); optionally
 `onCoreEvent` for game-specific `custom` core events (tanks doesn't set it).
 `host.worker.js` loads it with a dynamic `import(room.game.hostEntryUrl)` on
@@ -214,7 +213,7 @@ participants/bots):
 - `Participant` classes (base: `gameId`, `name`, `model`, `team`, `teamId`,
   `status`) → `HumanParticipant` (`socketId`, `isReady`, `currentMap`,
   `isWatching`, `watchedGameId`, `forceCameraReset`, `pendingShake`,
-  `lastActionTime`, `lastInputSeq`) and `BotParticipant`;
+  `lastActionTime`, `lastInputSeq`) and `ScriptedParticipant`;
 - scripted vs. human is told apart with `isScripted`/`isNetworked` getters,
   **not** by id shape: humans and scripted participants share a single numeric id
   space (the generator picks the lowest free id);
@@ -463,12 +462,13 @@ code updates are disabled, the Worker is bundled.
    clients get the usual `sendClear`/respawn/round start (`sendSoundCue`+`sendGameInform`).
 
 **Handoff meta** (`HostGame._collectHandoff`, a versioned format —
-`HANDOFF_VERSION = 2` as of Stage 6.5, which added `gameId`/`gameVersion`):
+`HANDOFF_VERSION = 3` as of Stage D3, which renamed the `bots` field to
+`scripted`; v2 of Stage 6.5 added `gameId`/`gameVersion`):
 the loaded `HostPlugin`'s `id` and the room's `gameVersion` (so a restore
 into a mismatched game — should that ever happen — fails loudly instead of
 restoring bogus state), human participants with `isReady` (gameId/socketId/
-name/model/team) and bots (with their original gameId — the single numeric
-id space is preserved), the entire `Stat` score, the current map plus its
+name/model/team) and scripted participants (with their original gameId —
+the single numeric id space is preserved), the entire `Stat` score, the current map plus its
 remaining time, the frame `seq` (snapshot numbering continues — clients'
 interpolators aren't disturbed). **Deliberately not carried over**: chat
 history, active votes and cooldowns, RTT stats, panel (health/ammo live in

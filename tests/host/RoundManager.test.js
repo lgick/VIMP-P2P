@@ -24,7 +24,7 @@ const makeRm = (overrides = {}) =>
     chat: overrides.chat || {},
     socketManager: overrides.socketManager || {},
     timerManager: overrides.timerManager || {},
-    bots: overrides.bots || {},
+    scripted: overrides.scripted || {},
     voteCoordinator: overrides.voteCoordinator || {},
     snapshotManager: overrides.snapshotManager || {},
     teams: overrides.teams || { red: 1, blue: 2, spec: 3 },

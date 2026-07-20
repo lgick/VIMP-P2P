@@ -1,14 +1,14 @@
 // Игровой scripted-модуль танков: тонкий менеджер ботов поверх ядра.
 // ИИ, навигация и пространственная сетка живут в Rust-ядре
 // (spawn_scripted_actor создаёт танк + контроллер) — здесь только
-// регистрация участников и связка со
-// Stat/Panel. Контракт scripted-модуля (дергает движок — RoundManager,
-// HostGame, чат-команда /bot): createMap, createBots, removeBots,
-// removeOneBotForPlayer, getBots, getBotCount, getBotCountsPerTeam.
-// Worker-safe: только изоморфные API.
+// регистрация участников и связка со Stat/Panel. Контракт scripted-модуля
+// (дергает движок — RoundManager, HostGame): createMap,
+// createScripted(count, team?), removeScripted(team?), removeOneForHuman(team),
+// getCount(), getCountsPerTeam(). Остальные методы — внутриигровые
+// (чат-команда /bot). Worker-safe: только изоморфные API.
 export default class TanksBotManager {
   /**
-   * @param {Object} ctx - контекст движка (в этапе 6 — из createModules):
+   * @param {Object} ctx - контекст движка (HostPlugin.createModules):
    *   participants (единый реестр), coreAdapter (спавн/удаление танка),
    *   panel, stat, scripted ({ namePrefix, defaultModel } из конфига игры).
    */
@@ -22,13 +22,6 @@ export default class TanksBotManager {
     this._respawns = null; // данные респаунов текущей карты
   }
 
-  // ИИ ботов исполняется внутри ядра на step() — на JS-стороне тика нет работы
-  updateBots() {}
-
-  // очистка/заполнение пространственной сетки — забота ядра
-  buildSpatialGrid() {}
-  clearSpatialGrid() {}
-
   // запоминает респауны карты (для распределения ботов по командам)
   createMap(mapData) {
     this._respawns = mapData.respawns;
@@ -36,7 +29,7 @@ export default class TanksBotManager {
 
   // создаёт заданное количество ботов-участников (танки в ядре — на старте
   // раунда через RoundManager → coreAdapter.createPlayer → core.spawn_scripted_actor)
-  createBots(count, teamName = null) {
+  createScripted(count, teamName = null) {
     if (!this._respawns) {
       return 0;
     }
@@ -90,7 +83,7 @@ export default class TanksBotManager {
   }
 
   // удаляет ботов (всех либо конкретной команды)
-  removeBots(teamName = null) {
+  removeScripted(teamName = null) {
     const botsToRemove = teamName
       ? this._participants.getScripted().filter(bot => bot.team === teamName)
       : this._participants.getScripted();
@@ -99,7 +92,7 @@ export default class TanksBotManager {
   }
 
   // удаляет одного бота из команды, чтобы освободить место игроку
-  removeOneBotForPlayer(teamName) {
+  removeOneForHuman(teamName) {
     for (const bot of this._participants.getScripted()) {
       if (bot.team === teamName) {
         this._removeBotById(bot.gameId);
@@ -135,17 +128,17 @@ export default class TanksBotManager {
     return this._participants.getScripted();
   }
 
-  getBotCount() {
+  getCount() {
     return this._participants.getScripted().length;
   }
 
-  getBotCountForTeam(teamName) {
+  getCountForTeam(teamName) {
     return this._participants
       .getScripted()
       .filter(bot => bot.team === teamName).length;
   }
 
-  getBotCountsPerTeam() {
+  getCountsPerTeam() {
     const counts = {};
 
     for (const bot of this._participants.getScripted()) {

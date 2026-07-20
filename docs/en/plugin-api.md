@@ -103,12 +103,12 @@ export default {
   systemMessages: { BOT_PLAYERS_ONLY: 'b:0', … },                     // merged into the engine code registry
   voteDefs: ['createBots', 'createBotsForTeam', 'removeBots', 'removeBotsForTeam'],
 
-  createModules(ctx) { return { bots: new TanksBotManager(ctx) }; },
+  createModules(ctx) { return { scripted: new TanksBotManager(ctx) }; },
   // ctx = { participants, coreAdapter, panel, stat, chat, roundManager,
   //         voteCoordinator, timerManager, socketManager }
   // Scripted-module contract (called by the engine — RoundManager/HostGame):
-  //   createMap(scaledMapData), createBots(count, team?), removeBots(team?),
-  //   removeOneBotForPlayer(team), getBots(), getBotCount(), getBotCountsPerTeam()
+  //   createMap(scaledMapData), createScripted(count, team?), removeScripted(team?),
+  //   removeOneForHuman(team), getCount(), getCountsPerTeam()
 };
 ```
 
@@ -287,9 +287,9 @@ Module split of today's `core/src/`:
 
 | Constant | Owner | Policy |
 | --- | --- | --- |
-| `ENGINE_API_VERSION` (=1) | engine | checked at plugin import (host worker and client); breaking Plugin API / Wasm ABI changes → +1 |
+| `ENGINE_API_VERSION` (=1) | engine | checked at plugin import (host worker and client); breaking Plugin API / Wasm ABI changes → +1. While the game lives in the monorepo and updates atomically with the engine, the version is deliberately not bumped on contract renames (e.g. the Stage D3 scripted-module rename); the bump policy kicks in once games live in external repos |
 | `SNAPSHOT_FORMAT_VERSION` (=3) | engine (framing) | the block schema travels in CONFIG_DATA → always consistent within a room |
-| `HANDOFF_VERSION` (→2) | engine | +`gameId`, `gameVersion` in the handoff meta; mismatch → the regular `resume` |
+| `HANDOFF_VERSION` (→3) | engine | v2: +`gameId`, `gameVersion` in the handoff meta; v3: the `bots` field renamed to `scripted`; mismatch → the regular `resume` |
 | `codeVersion` | master | composite: `{ engine: hash(host.worker-*.js), game: {id, version} }`; a mismatch of either part → Worker handoff (the new Worker gets a fresh `entries.host`) |
 | `mapsVersion` | master | per-game: `/games/:id/maps/manifest.json` |
 

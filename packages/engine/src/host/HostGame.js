@@ -13,10 +13,10 @@ import { sanitizeMessage } from '../lib/sanitizers.js';
 import GameCoreAdapter from './GameCoreAdapter.js';
 
 // Версия формата handoff-меты эстафеты Worker'ов (Этап 5.2; →2 в Этапе 6.5 —
-// добавлены gameId/gameVersion). Несовместимая версия валит init нового
-// Worker'а — главный поток возобновляет старый, комната продолжает жить на
-// прежней версии кода
-export const HANDOFF_VERSION = 2;
+// добавлены gameId/gameVersion; →3 в Этапе Д3 — нейтральное поле scripted).
+// Несовместимая версия валит init нового Worker'а — главный поток
+// возобновляет старый, комната продолжает жить на прежней версии кода
+export const HANDOFF_VERSION = 3;
 
 // Троттлинг отправки кадров (замена SnapshotManager: ядро само копит события
 // и дренирует их в pack_body, здесь нужен только контроль частоты).
@@ -45,8 +45,8 @@ class SnapshotThrottle {
   }
 }
 
-// Host-фасад: авторитетная часть матча в Worker'е хоста. Симуляция, боты и
-// упаковка снапшотов — в Rust-ядре через GameCoreAdapter, мета (RoundManager,
+// Host-фасад: авторитетная часть матча в Worker'е хоста. Симуляция,
+// scripted-участники и упаковка снапшотов — в Rust-ядре через GameCoreAdapter, мета (RoundManager,
 // участники, чат, голосования, статистика, панель) — JS-модули ./meta/.
 // Питается стандартным словарём событий ядра (adapter._drainEvents →
 // panel/reportKill/shake; 'custom' — HostPlugin.onCoreEvent).
@@ -128,8 +128,8 @@ export default class HostGame {
 
     this._snapshotManager = new SnapshotThrottle(data.timers.networkSendRate);
 
-    // игровые host-модули (scripted-модуль ботов)
-    this._bots = hostPlugin.createModules({
+    // игровые host-модули (scripted-модуль игры)
+    this._scripted = hostPlugin.createModules({
       participants: this._participants,
       coreAdapter: this._game,
       panel: this._panel,
@@ -137,7 +137,7 @@ export default class HostGame {
       chat: this._chat,
       socketManager: this._socketManager,
       scripted: data.scripted,
-    }).bots;
+    }).scripted;
 
     this._RTTManager = new RTTManager(data.rtt, {
       onKickForMissedPings: gameId => this._kickForMissedPings(gameId),
@@ -166,7 +166,7 @@ export default class HostGame {
       chat: this._chat,
       socketManager: this._socketManager,
       timerManager: this._timerManager,
-      bots: this._bots,
+      scripted: this._scripted,
       voteCoordinator: this._voteCoordinator,
       snapshotManager: this._snapshotManager,
       teams: this._teams,
@@ -183,7 +183,7 @@ export default class HostGame {
     this._commandProcessor = new CommandProcessor({
       participants: this._participants,
       chat: this._chat,
-      bots: this._bots,
+      scripted: this._scripted,
       roundManager: this._roundManager,
       voteCoordinator: this._voteCoordinator,
       timerManager: this._timerManager,
@@ -228,8 +228,9 @@ export default class HostGame {
   }
 
   // комната заполнена людьми — новые подключения отклоняются.
-  // Боты место не занимают: при входе игрока в полную команду бот кикается
-  // (RoundManager.changeTeam → removeOneBotForPlayer), уступая слот
+  // Scripted-участники место не занимают: при входе игрока в полную команду
+  // один из них кикается (RoundManager.changeTeam → removeOneForHuman),
+  // уступая слот
   get isFull() {
     return this._participants.getHumans().length >= this._maxPlayers;
   }
@@ -533,12 +534,12 @@ export default class HostGame {
         teamId: user.teamId,
       }));
 
-    const bots = this._participants.getScripted().map(bot => ({
-      gameId: bot.gameId,
-      name: bot.name,
-      model: bot.model,
-      team: bot.team,
-      teamId: bot.teamId,
+    const scripted = this._participants.getScripted().map(participant => ({
+      gameId: participant.gameId,
+      name: participant.name,
+      model: participant.model,
+      team: participant.team,
+      teamId: participant.teamId,
     }));
 
     return {
@@ -549,7 +550,7 @@ export default class HostGame {
       currentMap: this._roundManager.currentMap,
       mapTimeLeft: this._timerManager.getMapTimeLeft(),
       humans,
-      bots,
+      scripted,
       stat: this._stat.serialize(),
     };
   }
@@ -595,11 +596,11 @@ export default class HostGame {
       this._RTTManager.addUser(user.gameId);
     }
 
-    for (const record of meta.bots) {
-      const bot = this._participants.restoreScripted(record);
+    for (const record of meta.scripted) {
+      const participant = this._participants.restoreScripted(record);
 
-      if (bot) {
-        this._panel.addUser(bot.gameId);
+      if (participant) {
+        this._panel.addUser(participant.gameId);
       }
     }
 
@@ -643,18 +644,18 @@ export default class HostGame {
     }
   }
 
-  // освобождает слот под человека: если суммарный лимит (люди + боты) выбран,
-  // кикается один бот — из команды, где их больше всего
+  // освобождает слот под человека: если суммарный лимит (люди + scripted)
+  // выбран, кикается один scripted-участник — из команды, где их больше всего
   _freeSlotForHuman() {
     if (!this._participants.isFull) {
       return;
     }
 
-    const counts = this._bots.getBotCountsPerTeam();
+    const counts = this._scripted.getCountsPerTeam();
     const team = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
 
     if (team) {
-      this._bots.removeOneBotForPlayer(team);
+      this._scripted.removeOneForHuman(team);
     }
   }
 

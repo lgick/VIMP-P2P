@@ -3,28 +3,28 @@
 //   /bot 10        # создаёт 10 ботов, распределив их равномерно
 //   /bot 0 team2   # удаляет ботов team2
 //   /bot 0         # удаляет всех ботов
-// Регистрируется в движковом CommandProcessor (registerCommand); в этапе 6
-// приедет через HostPlugin.chatCommands. Worker-safe.
+// Регистрируется в движковом CommandProcessor через HostPlugin.chatCommands.
+// Worker-safe.
 //
-// ctx — контекст меты движка: participants, chat, bots, roundManager,
-// voteCoordinator, teams, spectatorTeam, spectatorId.
+// ctx — контекст меты движка: participants, chat, scripted (модуль ботов),
+// roundManager, voteCoordinator, teams, spectatorTeam, spectatorId.
 
 // исполняет команду /bot
 function executeBotCommand(ctx, count, team) {
   if (team) {
-    ctx.bots.removeBots(team);
+    ctx.scripted.removeScripted(team);
 
     if (count > 0) {
-      count = ctx.bots.createBots(count, team);
+      count = ctx.scripted.createScripted(count, team);
       ctx.chat.pushSystem('BOT_CREATED_FOR_TEAM', [count, team]);
     } else {
       ctx.chat.pushSystem('BOT_REMOVED_FROM_TEAM', [team]);
     }
   } else {
-    ctx.bots.removeBots();
+    ctx.scripted.removeScripted();
 
     if (count > 0) {
-      count = ctx.bots.createBots(count, null);
+      count = ctx.scripted.createScripted(count, null);
       ctx.chat.pushSystem('BOT_CREATED', [count]);
     } else {
       ctx.chat.pushSystem('BOT_REMOVED');
@@ -113,12 +113,12 @@ export default {
 
     // если команда на удаление ботов, но удалять нечего
     if (count === 0) {
-      if (team && ctx.bots.getBotCountForTeam(team) === 0) {
+      if (team && ctx.scripted.getCountForTeam(team) === 0) {
         ctx.chat.pushSystemByUser(gameId, 'BOT_REMOVED_FROM_TEAM', [team]);
         return;
       }
 
-      if (ctx.bots.getBotCount() === 0) {
+      if (ctx.scripted.getCount() === 0) {
         ctx.chat.pushSystemByUser(gameId, 'BOT_REMOVED');
         return;
       }

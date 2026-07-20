@@ -1,6 +1,6 @@
 // Обработчик чат-команд. Движковое ядро: /name, /nr, /timeleft, /mapname;
-// игровые команды (у танков — /bot) регистрируются через registerCommand и
-// получают контекст меты: handler(ctx, gameId, args).
+// игровые команды (HostPlugin.chatCommands) регистрируются через
+// registerCommand и получают контекст меты: handler(ctx, gameId, args).
 class CommandProcessor {
   constructor(deps) {
     this._chat = deps.chat;
@@ -8,7 +8,7 @@ class CommandProcessor {
     this._timerManager = deps.timerManager;
     this._isDevMode = deps.isDevMode;
 
-    // контекст игровых команд (participants, chat, bots, roundManager,
+    // контекст игровых команд (participants, chat, scripted, roundManager,
     // voteCoordinator, teams, spectatorTeam, spectatorId, …)
     this._ctx = deps;
 
@@ -17,7 +17,7 @@ class CommandProcessor {
 
   /**
    * Регистрирует игровую команду.
-   * @param {string} name - имя команды (с ведущим '/', например '/bot').
+   * @param {string} name - имя команды (с ведущим '/').
    * @param {Function} handler - обработчик (ctx, gameId, args) => void.
    */
   registerCommand(name, handler) {

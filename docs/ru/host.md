@@ -161,18 +161,17 @@ prediction) собирает `packages/engine/src/lib/buildClientConfig.js`.
 `TanksBotManager` (`games/tanks/src/host/TanksBotManager.js`) — игровой
 scripted-модуль: тонкий менеджер ботов, регистрация участников и связка со
 `Stat`/`Panel` (ИИ, навигация и пространственная сетка — в ядре). Создаётся
-фабрикой `createModules(ctx)` (`games/tanks/src/host/createModules.js` —
-будущий `HostPlugin.createModules`); движок дергает контракт scripted-модуля:
-`createMap`, `createBots(count, team?)`, `removeBots(team?)`,
-`removeOneBotForPlayer(team)`, `getBots`, `getBotCount`,
-`getBotCountsPerTeam`. Параметры — `scripted` из конфига игры
-(`namePrefix`, `defaultModel`).
+фабрикой `createModules(ctx)` (`games/tanks/src/host/createModules.js`
+возвращает `{ scripted }`); движок дергает контракт scripted-модуля:
+`createMap`, `createScripted(count, team?)`, `removeScripted(team?)`,
+`removeOneForHuman(team)`, `getCount`, `getCountsPerTeam`. Параметры —
+`scripted` из конфига игры (`namePrefix`, `defaultModel`).
 
 **HostPlugin танков** (`games/tanks/src/host/index.js`, default export
 host-entry сборки игры) — вся игровая половина хоста одним объектом: `id`,
 `engineApi`, `createCore(coreConfigJson, { wasmUrl })`, `gameConfig`,
 `authSchema`, `chatCommands` (`/bot`), `systemMessages` (группа `b:*`),
-`createModules` (scripted-модуль ботов), `buildClientGameConfig()` (игровая
+`createModules` (возвращает scripted-модуль), `buildClientGameConfig()` (игровая
 половина CONFIG_DATA); опционально `onCoreEvent` для игровых
 `custom`-событий ядра (танки его не задают). `host.worker.js` грузит его
 динамическим `import(room.game.hostEntryUrl)` на `init` (Этап 6.4) —
@@ -195,7 +194,7 @@ Worker-safe (только изоморфные API — `Date`/`Math`/`performanc
 - классы `Participant` (база: `gameId`, `name`, `model`, `team`, `teamId`,
   `status`) → `HumanParticipant` (`socketId`, `isReady`, `currentMap`,
   `isWatching`, `watchedGameId`, `forceCameraReset`, `pendingShake`,
-  `lastActionTime`, `lastInputSeq`) и `BotParticipant`;
+  `lastActionTime`, `lastInputSeq`) и `ScriptedParticipant`;
 - различение scripted/человек — геттеры `isScripted`/`isNetworked`,
   **не** по формату id: люди и
   scripted-участники делят единое числовое пространство id (генератор —
@@ -432,11 +431,12 @@ version } }` (Этап 6.5). Деплой рестартует мастер → 
    штатные `sendClear`/респаун/старт раунда (`sendSoundCue`+`sendGameInform`).
 
 **Handoff-мета** (`HostGame._collectHandoff`, формат версионирован —
-`HANDOFF_VERSION = 2` с Этапа 6.5, добавившего `gameId`/`gameVersion`): id
+`HANDOFF_VERSION = 3` с Этапа Д3, переименовавшего поле `bots` в
+`scripted`; v2 Этапа 6.5 добавила `gameId`/`gameVersion`): id
 загруженного `HostPlugin` и версия игры комнаты (чтобы восстановление в
 несовпадающую игру — если такое вообще случится — падало явной ошибкой, а не
 тащило бессмысленное состояние), участники-люди с `isReady`
-(gameId/socketId/имя/модель/команда) и боты (с исходными gameId — единое
+(gameId/socketId/имя/модель/команда) и scripted-участники (с исходными gameId — единое
 числовое пространство сохраняется), счёт `Stat` целиком, текущая карта +
 остаток её времени, `seq` кадров (нумерация снапшотов продолжается —
 интерполятор клиентов не ломается). **Осознанно не переносятся**:

@@ -1,7 +1,7 @@
 // Игровой scripted-модуль фикстуры: зеркало
 // games/tanks/src/host/TanksBotManager.js — тот же контракт (createMap,
-// createBots, removeBots, removeOneBotForPlayer, getBots, getBotCount,
-// getBotCountsPerTeam), проверяющий, что RoundManager/HostGame/CommandProcessor
+// createScripted, removeScripted, removeOneForHuman, getCount,
+// getCountsPerTeam), проверяющий, что RoundManager/HostGame/CommandProcessor
 // работают с любым HostPlugin.createModules(ctx), а не только с ботами
 // танков. Worker-safe.
 export default class ScriptedManager {
@@ -15,15 +15,11 @@ export default class ScriptedManager {
     this._respawns = null;
   }
 
-  updateBots() {}
-  buildSpatialGrid() {}
-  clearSpatialGrid() {}
-
   createMap(mapData) {
     this._respawns = mapData.respawns;
   }
 
-  createBots(count, teamName = null) {
+  createScripted(count, teamName = null) {
     if (!this._respawns) {
       return 0;
     }
@@ -74,18 +70,18 @@ export default class ScriptedManager {
     return createdCount;
   }
 
-  removeBots(teamName = null) {
-    const botsToRemove = teamName
-      ? this._participants.getScripted().filter(bot => bot.team === teamName)
+  removeScripted(teamName = null) {
+    const toRemove = teamName
+      ? this._participants.getScripted().filter(p => p.team === teamName)
       : this._participants.getScripted();
 
-    botsToRemove.forEach(bot => this._removeBotById(bot.gameId));
+    toRemove.forEach(p => this._removeById(p.gameId));
   }
 
-  removeOneBotForPlayer(teamName) {
-    for (const bot of this._participants.getScripted()) {
-      if (bot.team === teamName) {
-        this._removeBotById(bot.gameId);
+  removeOneForHuman(teamName) {
+    for (const participant of this._participants.getScripted()) {
+      if (participant.team === teamName) {
+        this._removeById(participant.gameId);
         return true;
       }
     }
@@ -93,7 +89,7 @@ export default class ScriptedManager {
     return false;
   }
 
-  _removeBotById(gameId) {
+  _removeById(gameId) {
     const participant = this._participants.get(gameId);
 
     if (!participant || !participant.isScripted) {
@@ -107,25 +103,25 @@ export default class ScriptedManager {
     this._participants.remove(gameId);
   }
 
-  getBots() {
+  getScripted() {
     return this._participants.getScripted();
   }
 
-  getBotCount() {
+  getCount() {
     return this._participants.getScripted().length;
   }
 
-  getBotCountForTeam(teamName) {
+  getCountForTeam(teamName) {
     return this._participants
       .getScripted()
-      .filter(bot => bot.team === teamName).length;
+      .filter(p => p.team === teamName).length;
   }
 
-  getBotCountsPerTeam() {
+  getCountsPerTeam() {
     const counts = {};
 
-    for (const bot of this._participants.getScripted()) {
-      counts[bot.team] = (counts[bot.team] || 0) + 1;
+    for (const participant of this._participants.getScripted()) {
+      counts[participant.team] = (counts[participant.team] || 0) + 1;
     }
 
     return counts;

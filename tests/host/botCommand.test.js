@@ -22,11 +22,11 @@ const makeCtx = (overrides = {}) => ({
     pushSystem: vi.fn(),
     pushSystemByUser: vi.fn(),
   },
-  bots: overrides.bots || {
-    getBotCountForTeam: vi.fn(() => 0),
-    getBotCount: vi.fn(() => 0),
-    removeBots: vi.fn(),
-    createBots: vi.fn(() => 0),
+  scripted: overrides.scripted || {
+    getCountForTeam: vi.fn(() => 0),
+    getCount: vi.fn(() => 0),
+    removeScripted: vi.fn(),
+    createScripted: vi.fn(() => 0),
   },
   roundManager: overrides.roundManager || {
     initiateNewRound: vi.fn(),
@@ -84,7 +84,7 @@ describe('botCommand: валидация', () => {
 
     run(ctx, 'u', ['0']);
     expect(ctx.chat.pushSystemByUser).toHaveBeenCalledWith('u', 'BOT_REMOVED');
-    expect(ctx.bots.removeBots).not.toHaveBeenCalled();
+    expect(ctx.scripted.removeScripted).not.toHaveBeenCalled();
   });
 });
 
@@ -94,8 +94,8 @@ describe('botCommand: исполнение и голосование', () => {
 
     run(ctx, 'u', ['3', 'team1']);
 
-    expect(ctx.bots.removeBots).toHaveBeenCalledWith('team1');
-    expect(ctx.bots.createBots).toHaveBeenCalledWith(3, 'team1');
+    expect(ctx.scripted.removeScripted).toHaveBeenCalledWith('team1');
+    expect(ctx.scripted.createScripted).toHaveBeenCalledWith(3, 'team1');
     expect(ctx.roundManager.initiateNewRound).toHaveBeenCalled();
   });
 
@@ -112,7 +112,7 @@ describe('botCommand: исполнение и голосование', () => {
     expect(ctx.voteCoordinator.createVote).toHaveBeenCalledWith(
       expect.objectContaining({ voteName: 'createBotsForTeam' }),
     );
-    expect(ctx.bots.createBots).not.toHaveBeenCalled();
+    expect(ctx.scripted.createScripted).not.toHaveBeenCalled();
   });
 
   it('не создаёт голосование, если категория заблокирована', () => {
@@ -143,7 +143,7 @@ describe('botCommand: исполнение и голосование', () => {
     resultFunc('Yes');
 
     expect(ctx.chat.pushSystem).toHaveBeenCalledWith('VOTE_PASSED');
-    expect(ctx.bots.createBots).toHaveBeenCalledWith(2, null);
+    expect(ctx.scripted.createScripted).toHaveBeenCalledWith(2, null);
     expect(ctx.roundManager.initiateNewRound).toHaveBeenCalled();
   });
 
@@ -162,6 +162,6 @@ describe('botCommand: исполнение и голосование', () => {
     resultFunc('No');
 
     expect(ctx.chat.pushSystem).toHaveBeenCalledWith('VOTE_FAILED');
-    expect(ctx.bots.createBots).not.toHaveBeenCalled();
+    expect(ctx.scripted.createScripted).not.toHaveBeenCalled();
   });
 });

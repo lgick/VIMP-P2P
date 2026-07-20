@@ -40,7 +40,7 @@ class RoundManager {
     this._chat = deps.chat;
     this._socketManager = deps.socketManager;
     this._timerManager = deps.timerManager;
-    this._bots = deps.bots;
+    this._scripted = deps.scripted;
     this._voteCoordinator = deps.voteCoordinator;
     this._snapshotManager = deps.snapshotManager;
 
@@ -106,16 +106,15 @@ class RoundManager {
   restoreMap(mapName) {
     this._currentMap = mapName;
     this._prepareMapData();
-    this._bots.createMap(this._scaledMapData);
+    this._scripted.createMap(this._scaledMapData);
   }
 
   // создает карту
   createMap() {
     this._prepareMapData();
-    this._bots.createMap(this._scaledMapData);
-    const botCounts = this._bots.getBotCountsPerTeam();
-    this._bots.removeBots();
-    this._bots.clearSpatialGrid();
+    this._scripted.createMap(this._scaledMapData);
+    const scriptedCounts = this._scripted.getCountsPerTeam();
+    this._scripted.removeScripted();
 
     // остановка всех игровых таймеров и отложенных вызовов
     this._timerManager.stopGameTimers();
@@ -155,10 +154,10 @@ class RoundManager {
       this.sendMap(gameId);
     }
 
-    // воссоздание ботов на новой карте
-    for (const [team, count] of Object.entries(botCounts)) {
+    // воссоздание scripted-участников на новой карте
+    for (const [team, count] of Object.entries(scriptedCounts)) {
       if (count > 0) {
-        this._bots.createBots(count, team);
+        this._scripted.createScripted(count, team);
       }
     }
 
@@ -259,9 +258,9 @@ class RoundManager {
       this._socketManager.sendGameInform(socketId, 'roundStart');
     }
 
-    // создание ботов на карте
-    for (const botData of this._bots.getBots()) {
-      this._setActivePlayer(botData, getRespawnData(botData.team));
+    // размещение scripted-участников на карте
+    for (const participant of this._participants.getScripted()) {
+      this._setActivePlayer(participant, getRespawnData(participant.team));
     }
   }
 
@@ -299,10 +298,10 @@ class RoundManager {
       newTeam !== this._spectatorTeam &&
       respawns[newTeam].length <= this._participants.getTeamSize(newTeam)
     ) {
-      // попытка удалить одного бота, чтобы освободить место
-      const botRemoved = this._bots.removeOneBotForPlayer(newTeam);
+      // попытка удалить одного scripted-участника, чтобы освободить место
+      const slotFreed = this._scripted.removeOneForHuman(newTeam);
 
-      if (!botRemoved) {
+      if (!slotFreed) {
         this._chat.pushSystemByUser(gameId, 'TEAMS_TEAM_FULL', [
           newTeam,
           currentTeam,
@@ -491,7 +490,7 @@ class RoundManager {
       return;
     }
 
-    // проверка на живых участников в команде (игроки и боты)
+    // проверка на живых участников в команде (люди и scripted)
     for (const participant of this._participants.getAll()) {
       // если нашелся живой участник, команда не уничтожена
       if (

@@ -103,12 +103,12 @@ export default {
   systemMessages: { BOT_PLAYERS_ONLY: 'b:0', … },                     // merge в реестр кодов движка
   voteDefs: ['createBots', 'createBotsForTeam', 'removeBots', 'removeBotsForTeam'],
 
-  createModules(ctx) { return { bots: new TanksBotManager(ctx) }; },
+  createModules(ctx) { return { scripted: new TanksBotManager(ctx) }; },
   // ctx = { participants, coreAdapter, panel, stat, chat, roundManager,
   //         voteCoordinator, timerManager, socketManager }
   // Контракт scripted-модуля (дергает движок — RoundManager/HostGame):
-  //   createMap(scaledMapData), createBots(count, team?), removeBots(team?),
-  //   removeOneBotForPlayer(team), getBots(), getBotCount(), getBotCountsPerTeam()
+  //   createMap(scaledMapData), createScripted(count, team?), removeScripted(team?),
+  //   removeOneForHuman(team), getCount(), getCountsPerTeam()
 };
 ```
 
@@ -283,9 +283,9 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 
 | Константа | Владелец | Политика |
 | --- | --- | --- |
-| `ENGINE_API_VERSION` (=1) | движок | проверяется при import плагинов (host worker и клиент); ломающие изменения Plugin API / Wasm ABI → +1 |
+| `ENGINE_API_VERSION` (=1) | движок | проверяется при import плагинов (host worker и клиент); ломающие изменения Plugin API / Wasm ABI → +1. Пока игра живёт в монорепо и обновляется атомарно с движком, версия осознанно не поднимается при переименованиях контракта (например, scripted-модуль Этапа Д3); политика бампа включается с выносом игр во внешние репо |
 | `SNAPSHOT_FORMAT_VERSION` (=3) | движок (фрейминг) | схема блоков едет в CONFIG_DATA → внутри комнаты всегда согласована |
-| `HANDOFF_VERSION` (→2) | движок | +`gameId`, `gameVersion` в мете эстафеты; несовпадение → штатный `resume` |
+| `HANDOFF_VERSION` (→3) | движок | v2: +`gameId`, `gameVersion` в мете эстафеты; v3: поле `bots` переименовано в `scripted`; несовпадение → штатный `resume` |
 | `codeVersion` | мастер | составной: `{ engine: hash(host.worker-*.js), game: {id, version} }`; расхождение любой части → эстафета (новый Worker получает свежий `entries.host`) |
 | `mapsVersion` | мастер | per-game: `/games/:id/maps/manifest.json` |
 

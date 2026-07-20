@@ -48,18 +48,17 @@ describe('HostPlugin танков: поверхность', () => {
       stat: {},
       scripted: hostPlugin.gameConfig.scripted,
     };
-    const { bots } = hostPlugin.createModules(ctx);
+    const { scripted } = hostPlugin.createModules(ctx);
 
     for (const method of [
       'createMap',
-      'createBots',
-      'removeBots',
-      'removeOneBotForPlayer',
-      'getBots',
-      'getBotCount',
-      'getBotCountsPerTeam',
+      'createScripted',
+      'removeScripted',
+      'removeOneForHuman',
+      'getCount',
+      'getCountsPerTeam',
     ]) {
-      expect(typeof bots[method]).toBe('function');
+      expect(typeof scripted[method]).toBe('function');
     }
   });
 

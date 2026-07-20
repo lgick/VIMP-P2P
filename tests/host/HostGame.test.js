@@ -107,7 +107,7 @@ describe.skipIf(!coreAvailable)('HostGame (core-driven)', () => {
     host.pushMessage(gameId, '/bot 1');
     tick(host, 2);
 
-    const bots = host._bots.getBots();
+    const bots = host._scripted.getBots();
 
     expect(bots.length).toBeGreaterThan(0);
     expect(core.is_alive(bots[0].gameId)).toBe(true);
@@ -170,15 +170,15 @@ describe.skipIf(!coreAvailable)('HostGame (core-driven)', () => {
     await connectPlayer(host, { name: 'P1', socketId: 's1' });
 
     // комната «полна» ботами, но людей меньше лимита — вход открыт
-    host._bots.createBots(2, 'team1');
+    host._scripted.createScripted(2, 'team1');
     expect(host.isFull).toBe(false);
 
     // подключение человека вытесняет бота (суммарный лимит был выбран)
-    const botsBefore = host._bots.getBotCount();
+    const botsBefore = host._scripted.getCount();
 
     await connectPlayer(host, { name: 'P2', socketId: 's2' });
 
-    expect(host._bots.getBotCount()).toBe(botsBefore - 1);
+    expect(host._scripted.getCount()).toBe(botsBefore - 1);
     expect(host.isFull).toBe(true);
     expect(host.maxPlayers).toBe(2);
   });
@@ -274,7 +274,7 @@ describe.skipIf(!coreAvailable)('HostGame: эстафета Worker\'ов (5.2)',
     });
     await new Promise(resolve => queueMicrotask(resolve));
 
-    host._bots.createBots(1, 'team2');
+    host._scripted.createScripted(1, 'team2');
     tick(host, 4);
 
     // заметный счёт — должен пережить эстафету
@@ -296,7 +296,7 @@ describe.skipIf(!coreAvailable)('HostGame: эстафета Worker\'ов (5.2)',
     const { host, meta, p1, p2, p3 } = await collectHandoffFixture();
 
     expect(meta).not.toBeNull();
-    expect(meta.version).toBe(2);
+    expect(meta.version).toBe(3);
     expect(meta.gameId).toBe('tanks');
     expect(meta.seq).toBe(host._seq);
     expect(meta.currentMap).toBe(host._roundManager.currentMap);
@@ -308,7 +308,7 @@ describe.skipIf(!coreAvailable)('HostGame: эстафета Worker\'ов (5.2)',
     expect(socketIds).toEqual(['s1', 's2']);
     expect(meta.humans.map(h => h.gameId).sort()).toEqual([p1, p2].sort());
     expect(meta.humans.find(h => h.gameId === p3)).toBeUndefined();
-    expect(meta.bots).toHaveLength(1);
+    expect(meta.scripted).toHaveLength(1);
 
     // игра остановлена: цикл, раунд, карта, idle
     expect(host._timerManager._hasTimer('gameLoop')).toBe(false);
@@ -384,7 +384,7 @@ describe.skipIf(!coreAvailable)('HostGame: эстафета Worker\'ов (5.2)',
   it('completeHandoff кикает не переподключившихся и стартует раунд', async () => {
     const old = await collectHandoffFixture();
     const meta = structuredClone(old.meta);
-    const botId = meta.bots[0].gameId;
+    const botId = meta.scripted[0].gameId;
 
     vi.resetModules();
 

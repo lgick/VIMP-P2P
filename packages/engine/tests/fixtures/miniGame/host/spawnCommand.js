@@ -6,7 +6,7 @@ export default {
   name: '/spawn',
   handler(ctx, gameId, args) {
     const count = Number(args[0]) || 1;
-    const created = ctx.bots.createBots(count);
+    const created = ctx.scripted.createScripted(count);
 
     ctx.chat.pushSystem('SCRIPTED_SPAWNED', [created]);
     ctx.roundManager.initiateNewRound();
