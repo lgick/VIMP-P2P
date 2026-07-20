@@ -5,9 +5,6 @@
 // сюда приходят уже разобранные пакеты клиентов, обратно уходят wire-кадры
 // (JSON-строки и бинарные ArrayBuffer'ы через Transferable).
 
-// временная статическая композиция движок+игра (до этапа 6 —
-// динамической загрузки HostPlugin/entries.wasm)
-import { hostPlugin, initGameCore as init, GameCore } from '../gameRegistry.static.js';
 import hostDefaults from '../config/hostDefaults.js';
 import clientDefaults from '../config/clientDefaults.js';
 import wsports from '../config/wsports.js';
@@ -35,6 +32,10 @@ let host = null;
 let socketManager = null;
 let clientCfg = null;
 
+// HostPlugin игры (Этап 6.4): грузится динамически по entries.host из
+// GameManifest (room.game) — до onInit движок игру не знает вовсе
+let hostPlugin = null;
+
 // состояние подключений: socketId → { gameId, methods, enabled }
 const clients = new Map();
 
@@ -44,8 +45,8 @@ let handoffClients = null;
 
 // собирает конфиг игры (движковые дефолты + игровая половина) и применяет
 // пользовательские настройки комнаты
-function applyRoomOverrides(room = {}) {
-  const game = structuredClone({ ...hostDefaults, ...hostPlugin.gameConfig });
+function applyRoomOverrides(room = {}, plugin) {
+  const game = structuredClone({ ...hostDefaults, ...plugin.gameConfig });
 
   // Этап 5.1: актуальные карты мастера (фетчит главный поток) вместо бандла
   if (room.maps && Object.keys(room.maps).length) {
@@ -124,19 +125,26 @@ function makeWorkerSocket(socketId) {
   };
 }
 
-// инициализация хоста: ядро, мета, игровой цикл. handoff — состояние
+// инициализация хоста: HostPlugin игры (динамический import по
+// GameManifest, Этап 6.4), ядро, мета, игровой цикл. handoff — состояние
 // эстафеты Worker'ов (Этап 5.2): комната восстанавливается вместо
 // холодного старта, порт-машины клиентов поднимутся минуя хендшейк
 async function onInit(room, handoff = null) {
-  await init();
+  const pluginModule = await import(/* @vite-ignore */ room.game.hostEntryUrl);
 
-  const game = applyRoomOverrides(room);
+  hostPlugin = pluginModule.default;
+
+  const game = applyRoomOverrides(room, hostPlugin);
   const seed = (Math.random() * 2 ** 32) >>> 0;
 
-  const core = new GameCore(
+  const core = await hostPlugin.createCore(
     JSON.stringify(
-      buildCoreConfig({ friendlyFire: game.parts.friendlyFire, seed }),
+      buildCoreConfig(hostPlugin.gameConfig, {
+        friendlyFire: game.parts.friendlyFire,
+        seed,
+      }),
     ),
+    { wasmUrl: room.game.wasmUrl },
   );
 
   clientCfg = buildClientConfig(
@@ -148,7 +156,7 @@ async function onInit(room, handoff = null) {
     soundCues: game.soundCues,
     initialVote: game.initialVote,
   });
-  host = new HostGame(game, socketManager, core, {
+  host = new HostGame(game, socketManager, core, hostPlugin, {
     hostSocketId: room?.hostSocketId ?? null,
     onMapChange: mapName => self.postMessage({ type: 'map_changed', mapName }),
     handoff,

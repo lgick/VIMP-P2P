@@ -37,22 +37,27 @@ DataChannel/loopback and the Worker.
 
 ## Web Worker (`packages/engine/src/host/host.worker.js`)
 
-Loads the WASM core (`init()` + `GameCore` from `core/pkg-web`), builds
+Loads the game's `HostPlugin` (dynamic `import(room.game.hostEntryUrl)`,
+Stage 6.4 — the Worker doesn't know the game at build time), builds
 `HostGame` with the room's settings, and holds a per-client port state
 machine — an automaton over client ports 0–8 (see [network.md](network.md)).
 Main-thread messages:
 
-- `init(room, handoff?)` — assembles the game config (a merge of the engine
-  defaults `packages/engine/src/config/hostDefaults.js` and `HostPlugin.gameConfig`) and
-  applies room settings to it
+- `init(room, handoff?)` — dynamically imports `HostPlugin` from
+  `room.game.hostEntryUrl` (`room.game = { id, version, hostEntryUrl,
+  wasmUrl }`, built by `connectAsHost` from the active `GameManifest`),
+  assembles the game config (a merge of the engine defaults
+  `packages/engine/src/config/hostDefaults.js` and `HostPlugin.gameConfig`)
+  and applies room settings to it
   (`applyRoomOverrides`: name/map/limit ≤ `roomDefaults.maxPlayers`/timers/
   friendly fire; maps come
   from `room.maps` if the main thread fetched the master's catalog),
-  initializes the core, creates `HostGame`, replies `ready`; `handoff` is the
-  Worker handoff state: the room is restored instead of a cold start. A
-  failure (WASM/config/handoff meta) sends `error { message }`: on a cold
-  start the main thread tears down the room and returns to the lobby, on a
-  handoff it resumes the old Worker;
+  initializes the core via `HostPlugin.createCore(coreConfigJson, {
+  wasmUrl: room.game.wasmUrl })`, creates `HostGame`, replies `ready`;
+  `handoff` is the Worker handoff state: the room is restored instead of a
+  cold start. A failure (game import/WASM/config/handoff meta) sends
+  `error { message }`: on a cold start the main thread tears down the room
+  and returns to the lobby, on a handoff it resumes the old Worker;
 - `connect(socketId)` — a new client: registers a wire socket in
   `SocketManager`, sends `CONFIG_DATA` (port 0), starts the
   config→auth→map→firstShot handshake. **A full room** (`HostGame.isFull`,
@@ -181,15 +186,19 @@ core). It's built by the `createModules(ctx)` factory
 `getBotCountsPerTeam`. Parameters come from the game config's `scripted`
 (`namePrefix`, `defaultModel`).
 
-**The tanks HostPlugin** (`games/tanks/src/host/index.js`; imported by the
-engine only through `gameRegistry.static.js` — temporary static composition
-until stage 6) — the whole game half of the host as a single
-object: `gameConfig`, `authSchema`, `chatCommands` (`/bot`), `systemMessages`
-(the `b:*` group), `createModules` (the bots scripted module),
+**The tanks HostPlugin** (`games/tanks/src/host/index.js`, the default export
+of the game's host-entry bundle) — the whole game half of the host as a
+single object: `id`, `engineApi`, `createCore(coreConfigJson, { wasmUrl })`,
+`gameConfig`, `authSchema`, `chatCommands` (`/bot`), `systemMessages` (the
+`b:*` group), `createModules` (the bots scripted module),
 `buildClientGameConfig()` (the game half of CONFIG_DATA); optionally
 `onCoreEvent` for game-specific `custom` core events (tanks doesn't set it).
-It's consumed by `host.worker.js` (configs/auth) and `HostGame` (commands,
-codes, modules, `onCoreEvent`).
+`host.worker.js` loads it with a dynamic `import(room.game.hostEntryUrl)` on
+`init` (Stage 6.4) — `room.game` (`{ id, version, hostEntryUrl, wasmUrl }`)
+comes from `GameManifest.entries` via `connectAsHost`, so the engine never
+imports the game statically at all. It's consumed by `host.worker.js`
+(`createCore`, configs/auth) and `HostGame` (commands, codes, modules,
+`onCoreEvent`).
 
 ## Meta modules (`packages/engine/src/host/meta/`)
 
@@ -383,9 +392,10 @@ below) / a Worker handoff.
 ### Dynamic maps
 
 A room starts on the master's current maps rather than the ones baked into
-the bundle: `connectAsHost` fetches `GET /maps/manifest.json` plus every map
-and passes them to the Worker's `init` (`room.maps`; catalog unavailability
-is non-critical — falls back to the bundled maps). Updating on the fly:
+the bundle: `connectAsHost` fetches `GET /games/:id/maps/manifest.json`
+(`:id` — the active game's manifest id, Stage 6.4) plus every map and passes
+them to the Worker's `init` (`room.maps`; catalog unavailability is
+non-critical — falls back to the bundled maps). Updating on the fly:
 `host_registered.mapsVersion` (after a reconnect) or the master's
 `update_available` signal → `refreshHostMaps` → fetch the catalog →
 `HostController.updateMaps` → the Worker's `update_maps` →

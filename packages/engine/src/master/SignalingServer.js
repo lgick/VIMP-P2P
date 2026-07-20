@@ -13,9 +13,10 @@ export default class SignalingServer {
     this._checkOrigin = options.checkOrigin;
     this._mapsVersion = options.mapsVersion ?? null;
     this._codeVersion = options.codeVersion ?? null;
-    // Этап 6.2: per-game mapsVersion — хост объявляет gameId в register_host,
-    // ответ несёт версию карт именно этой игры (GameCatalog); без gameId
-    // (хосты до Этапа 6.4) или без каталога — старый одноигровой mapsVersion
+    // per-game mapsVersion (Этап 6.2) — хост объявляет gameId в
+    // register_host, ответ несёт версию карт именно этой игры (GameCatalog);
+    // без gameId/каталога — статичный fallback (options.mapsVersion, если
+    // задан мастером)
     this._gameCatalog = options.gameCatalog ?? null;
 
     this._sessions = new Map(); // id соединения -> { id, ws, ip, region, hostId }
@@ -139,7 +140,7 @@ export default class SignalingServer {
     this._hostSessions.set(host.hostId, session.id);
 
     // per-game mapsVersion (Этап 6.2) — из манифеста игры, объявленной
-    // хостом; без gameId/каталога — старый одноигровой fallback
+    // хостом; без gameId/каталога — статичный fallback
     const gameManifest = gameId ? this._gameCatalog?.getManifest(gameId) : null;
     const mapsVersion = gameManifest?.maps.version ?? this._mapsVersion;
 

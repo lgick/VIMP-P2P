@@ -59,8 +59,15 @@ export default class SignalingClient {
   }
 
   // хост → регистрация комнаты у мастера (ответ — событие 'host_registered')
-  registerHost({ name, maxPlayers, mapName }) {
-    this._send({ type: 'register_host', name, maxPlayers, mapName });
+  registerHost({ name, maxPlayers, mapName, gameId, gameVersion }) {
+    this._send({
+      type: 'register_host',
+      name,
+      maxPlayers,
+      mapName,
+      gameId,
+      gameVersion,
+    });
   }
 
   // хост → актуализация комнаты (заодно heartbeat)

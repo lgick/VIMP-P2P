@@ -13,10 +13,10 @@
 > `maps/*.json`, `sounds/*` и `manifest.json` (`npm run game:build`), которую
 > читает `GameCatalog` мастера (Этап 6.2, маршруты `/games/*`). Клиент (Этап
 > 6.3) динамически грузит `ClientPlugin` из манифеста активной игры и зовёт
-> `createClientCore` — в `gameRegistry.static.js` осталась только
-> **хостовая** половина статической композиции (`hostPlugin`, Worker-safe
-> wasm-glue), удаляется в Этапе 6.4, когда `host.worker.js` перейдёт на
-> `entries.host`/`createCore`.
+> `createClientCore`. Хост (Этап 6.4) динамически грузит `HostPlugin` по
+> `entries.host` в `init` `host.worker.js` и зовёт `createCore` — движок
+> больше не импортирует игру статически вовсе (`gameRegistry.static.js`
+> удалён).
 
 Движок — **приложение** (деплоится один раз: мастер, транспорт,
 Worker-инфраструктура, мета-механизмы, MVC-каркас клиента, Rust-каркас).

@@ -5,14 +5,11 @@ import path from 'path';
 import express from 'express';
 import ViteExpress from 'vite-express';
 import { WebSocketServer } from 'ws';
-// временная статическая композиция движок+игра (до этапа 6 — GameCatalog)
-import { gameMaps as maps } from '../gameRegistry.static.js';
 import config from '../lib/config.js';
 import RateLimiter from '../lib/rateLimiter.js';
 import security from '../lib/security.js';
 import GameCatalog from './GameCatalog.js';
 import HostRegistry from './HostRegistry.js';
-import MapCatalog from './MapCatalog.js';
 import WorkerCatalog from './WorkerCatalog.js';
 import SignalingServer from './SignalingServer.js';
 
@@ -58,9 +55,6 @@ const registry = new HostRegistry({
   reportWindowMs: config.get('master:host:reportWindowMs'),
 });
 
-// каталог карт (Этап 5.1): раздача хостам без пересборки клиента
-const mapCatalog = new MapCatalog(maps);
-
 // каталог worker-бандла (Этап 5.2): версия кода комнаты для эстафеты
 // Worker'ов; в dev Worker раздаёт Vite из исходников — каталог пуст
 const workerCatalog = new WorkerCatalog(
@@ -80,7 +74,6 @@ const signaling = new SignalingServer(registry, {
   regionHeader: config.get('master:regionHeader'),
   heartbeatTimeout: config.get('master:host:heartbeatTimeout'),
   pingLimiter: new RateLimiter(config.get('master:pingRateLimit')),
-  mapsVersion: mapCatalog.version,
   codeVersion: workerCatalog.version,
   gameCatalog,
   checkOrigin: security.createOriginValidator({
@@ -116,22 +109,6 @@ app.get('/servers', (req, res) => {
   res.json(registry.getList(req.query));
 });
 
-// REST API: каталог карт (Этап 5.1 — обновление карт без пересборки)
-app.get('/maps/manifest.json', (req, res) => {
-  res.type('application/json').send(mapCatalog.manifest);
-});
-
-app.get('/maps/:name', (req, res) => {
-  const json = mapCatalog.get(req.params.name);
-
-  if (!json) {
-    res.status(404).json({ error: 'unknownMap' });
-    return;
-  }
-
-  res.type('application/json').send(json);
-});
-
 // REST API: манифест worker-бандла (Этап 5.2 — эстафета Worker'ов).
 // По нему вкладка хоста создаёт Worker (хешированное имя бандла страница
 // старой сборки знать не может) и обнаруживает новую версию кода
@@ -155,7 +132,7 @@ app.get('/games/:id/manifest.json', (req, res) => {
   res.json(manifest);
 });
 
-// per-game каталог карт (замена одноигрового /maps/* выше в Этапе 6.3)
+// per-game каталог карт
 app.get('/games/:id/maps/manifest.json', (req, res) => {
   const catalog = gameCatalog.getMapCatalog(req.params.id);
 

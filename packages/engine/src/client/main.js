@@ -994,6 +994,15 @@ async function connectAsHost(room) {
   // фактическая карта комнаты (из 'ready'; далее актуализируется map_changed)
   let currentMapName = null;
 
+  // Этап 6.4: Worker грузит HostPlugin динамически по entries.host/entries.wasm
+  // активной игры — движок больше не знает игру статически
+  room.game = {
+    id: activeGameManifest.id,
+    version: activeGameManifest.version,
+    hostEntryUrl: activeGameManifest.entries.host,
+    wasmUrl: activeGameManifest.entries.wasm,
+  };
+
   // Этап 5.1: комната стартует на актуальных картах мастера;
   // недоступность каталога некритична — Worker возьмёт карты из бандла
   try {
@@ -1037,6 +1046,8 @@ async function connectAsHost(room) {
           name: room.name,
           maxPlayers: room.maxPlayers,
           mapName: currentMapName,
+          gameId: room.game.id,
+          gameVersion: room.game.version,
         });
 
         clearInterval(hostHeartbeat);
@@ -1143,9 +1154,11 @@ let workerSwapInProgress = false;
 // повторная регистрация комнаты у мастера (reconnect сигналинга)
 let hostRegistration = null;
 
-// Этап 5.1: скачивает каталог карт мастера (манифест + все карты)
+// Этап 5.1/6.4: скачивает каталог карт мастера активной игры (манифест +
+// все карты)
 async function fetchMasterMaps() {
-  const manifestRes = await fetch(lobbyConfig.maps.manifestUrl);
+  const gameId = activeGameManifest.id;
+  const manifestRes = await fetch(lobbyConfig.maps.manifestUrl(gameId));
 
   if (!manifestRes.ok) {
     throw new Error(`maps manifest: HTTP ${manifestRes.status}`);
@@ -1155,7 +1168,7 @@ async function fetchMasterMaps() {
 
   const entries = await Promise.all(
     manifest.maps.map(async name => {
-      const url = `${lobbyConfig.maps.baseUrl}/${encodeURIComponent(name)}`;
+      const url = `${lobbyConfig.maps.baseUrl(gameId)}/${encodeURIComponent(name)}`;
       const res = await fetch(url);
 
       if (!res.ok) {

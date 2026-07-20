@@ -9,11 +9,12 @@ export default {
   // комнаты и ClientPlugin берутся отсюда вместо статической композиции
   gamesManifestUrl: '/games/manifest.json',
 
-  // каталог карт мастера (Этап 5.1): комната хоста стартует на актуальных
-  // картах, недоступность каталога — fallback на карты из бандла
+  // каталог карт мастера, per-game (Этап 6.4): комната хоста стартует на
+  // актуальных картах активной игры, недоступность каталога — fallback на
+  // карты из бандла
   maps: {
-    manifestUrl: '/maps/manifest.json',
-    baseUrl: '/maps',
+    manifestUrl: gameId => `/games/${gameId}/maps/manifest.json`,
+    baseUrl: gameId => `/games/${gameId}/maps`,
   },
 
   // манифест worker-бандла мастера (Этап 5.2): Worker комнаты создаётся по

@@ -1,6 +1,3 @@
-// Временная статическая композиция движок→игра (этапы 3/5 плана):
-// в этапе 6 HostPlugin приедет динамическим import'ом host-entry игры
-import { hostPlugin } from '../gameRegistry.static.js';
 import Panel from './meta/modules/Panel.js';
 import Stat from './meta/modules/Stat.js';
 import Chat from './meta/modules/chat/index.js';
@@ -55,9 +52,12 @@ class SnapshotThrottle {
 export default class HostGame {
   /**
    * @param {Object} data - конфиг игры (merge hostDefaults + игровой
-   *   конфиг @vimp/tanks/config/game.js; см. host.worker.js).
+   *   конфиг HostPlugin.gameConfig; см. host.worker.js).
    * @param {Object} socketManager - транспорт (per-user send/close).
    * @param {GameCore} core - экземпляр WASM-ядра.
+   * @param {Object} hostPlugin - HostPlugin игры, загруженной динамически по
+   *   GameManifest (Этап 6.4): onCoreEvent/createModules/chatCommands/
+   *   systemMessages.
    * @param {Object} [opts]
    * @param {string} [opts.hostSocketId] - socketId хоста-игрока (loopback):
    *   исключается из kick-политик — его отключение убивает комнату для всех.
@@ -70,6 +70,7 @@ export default class HostGame {
     data,
     socketManager,
     core,
+    hostPlugin,
     { hostSocketId = null, onMapChange = null, handoff = null } = {},
   ) {
     this._isDevMode = data.isDevMode || false;

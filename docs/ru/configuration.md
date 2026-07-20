@@ -56,7 +56,7 @@
 
 ## games/tanks/src/config/game.js — игровой конфиг (танки)
 
-Источник: [games/tanks/src/config/game.js](../../games/tanks/src/config/game.js). Игровая половина конфига хоста (приходит в Worker полем `gameConfig` HostPlugin через `gameRegistry.static.js` движка — временная статическая композиция до этапа 6). Импортирует карты, модели и оружие из `games/tanks/src/data/`.
+Источник: [games/tanks/src/config/game.js](../../games/tanks/src/config/game.js). Игровая половина конфига хоста (приходит в Worker полем `gameConfig` HostPlugin — `host.worker.js` грузит `HostPlugin` динамически по `entries.host` активного `GameManifest`, Этап 6.4). Импортирует карты, модели и оружие из `games/tanks/src/data/`.
 
 ### Основные параметры
 

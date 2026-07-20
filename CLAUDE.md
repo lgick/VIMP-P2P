@@ -71,9 +71,10 @@ and a built WASM core (`npm run core:build`) before the first run.
   component triplets (model/view/controller, Publisher pattern), PixiJS
   rendering parts in `games/tanks/src/client/parts/`. Details:
   `docs/en/client.md`.
-- **`games/tanks/`** — the game-plugin workspace (`@vimp/tanks`), imported by
-  the engine only through `packages/engine/src/gameRegistry.static.js`; the
-  boundary is enforced by ESLint `no-restricted-imports` in both directions.
+- **`games/tanks/`** — the game-plugin workspace (`@vimp/tanks`), loaded by
+  the engine only dynamically at runtime via `GameManifest` (never imported
+  statically); the boundary is enforced by ESLint `no-restricted-imports` in
+  both directions.
 
 ## Code Conventions
 

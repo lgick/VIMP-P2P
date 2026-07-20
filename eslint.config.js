@@ -93,7 +93,6 @@ export default [
     files: [
       'packages/engine/src/lib/**/*.js',
       'packages/engine/src/config/**/*.js',
-      'packages/engine/src/gameRegistry.static.js',
       'scripts/*.js',
       'games/*/src/**/*.js', // игровые данные/конфиги (@vimp/tanks)
     ],
@@ -111,12 +110,11 @@ export default [
     },
   },
 
-  // ESLint-граница движок↔игра (этап 5 плана отделения):
-  // движок не импортирует игру (единственное исключение —
-  // gameRegistry.static.js, временная статическая композиция до этапа 6)
+  // ESLint-граница движок↔игра (этапы 5/6.4 плана отделения): движок не
+  // импортирует игру статически вовсе — игра грузится динамически по
+  // GameManifest (import() с рантаймовым URL, который ESLint не проверяет)
   {
     files: ['packages/engine/**/*.js'],
-    ignores: ['packages/engine/src/gameRegistry.static.js'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -125,12 +123,12 @@ export default [
             {
               group: ['@vimp/tanks', '@vimp/tanks/*', '@vimp/tanks/**'],
               message:
-                'Движок не импортирует игру напрямую — только через gameRegistry.static.js (до этапа 6).',
+                'Движок не импортирует игру напрямую — только динамически по GameManifest.',
             },
             {
               group: ['**/games/**'],
               message:
-                'Движок не импортирует файлы games/** — только через gameRegistry.static.js (до этапа 6).',
+                'Движок не импортирует файлы games/** — только динамически по GameManifest.',
             },
           ],
         },

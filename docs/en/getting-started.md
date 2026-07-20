@@ -14,7 +14,7 @@ cd VIMP-P2P
 npm install
 ```
 
-The repository uses npm workspaces: `packages/engine` (`@vimp/engine`, the engine application) and `games/tanks` (`@vimp/tanks`, the game plugin). Root scripts (`npm run dev`, `npm run build`) proxy into `@vimp/engine`; the "engine does not import the game" boundary (except `gameRegistry.static.js`) is enforced by an ESLint rule.
+The repository uses npm workspaces: `packages/engine` (`@vimp/engine`, the engine application) and `games/tanks` (`@vimp/tanks`, the game plugin). Root scripts (`npm run dev`, `npm run build`) proxy into `@vimp/engine`; the "engine does not import the game" boundary — the game is loaded dynamically at runtime via `GameManifest` (see [plugin-api.md](plugin-api.md)) — is enforced by an ESLint rule.
 
 ## HTTPS certificates (one-time)
 

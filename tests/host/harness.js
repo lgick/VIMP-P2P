@@ -148,10 +148,11 @@ export const createHost = async ({ seed = 42, game = {}, opts = {} } = {}) => {
 
   const config = await loadConfig();
   const HostGame = (await import('../../packages/engine/src/host/HostGame.js')).default;
+  const hostPlugin = (await import('@vimp/tanks/host/index.js')).default;
   const core = makeCore({ seed });
   const socket = new FakeSocketManager();
   const gameConfig = { ...config.get('game'), ...game };
-  const host = new HostGame(gameConfig, socket, core, opts);
+  const host = new HostGame(gameConfig, socket, core, hostPlugin, opts);
 
   return { host, socket, core, config };
 };

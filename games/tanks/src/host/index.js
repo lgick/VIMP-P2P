@@ -9,10 +9,10 @@ import createModules from './createModules.js';
 
 // HostPlugin танков (Worker-safe): вся игровая половина хоста одним объектом.
 // default export host-entry игры (games/tanks/vite.config.js --mode host,
-// Этап 6.1); пока подключается статически через gameRegistry.static.js
-// (Этап 5) — динамическая загрузка по GameManifest приедет в Этапе 6.4.
-// Танки не используют 'custom'-события ядра — onCoreEvent не задан, движок
-// роутит стандартный словарь (panelSet/panelActive/death/shake) сам.
+// Этап 6.1); host.worker.js грузит его динамически по entries.host
+// GameManifest (Этап 6.4). Танки не используют 'custom'-события ядра —
+// onCoreEvent не задан, движок роутит стандартный словарь
+// (panelSet/panelActive/death/shake) сам.
 export default {
   id: 'tanks',
   engineApi: ENGINE_API_VERSION,

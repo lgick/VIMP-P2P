@@ -82,8 +82,8 @@ merge.
 
 Source: [games/tanks/src/config/game.js](../../games/tanks/src/config/game.js).
 The game half of the host config (reaches the Worker as the HostPlugin's
-`gameConfig` field via the engine's `gameRegistry.static.js` — temporary
-static composition until stage 6).
+`gameConfig` field — `host.worker.js` loads `HostPlugin` dynamically by
+`entries.host` from the active `GameManifest`, Stage 6.4).
 Imports maps, models, and weapons from `games/tanks/src/data/`.
 
 ### Core parameters

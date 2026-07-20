@@ -32,8 +32,6 @@ packages/engine/ — @vimp/engine: движок-приложение (npm worksp
   index.html / vite.config.js — Vite-root движка
   public/        — статика (звуки, favicon)
   src/
-    gameRegistry.static.js — ЕДИНСТВЕННЫЙ файл движка с правом импорта
-                   @vimp/tanks (временная статическая композиция, до этапа 6)
     master/      — мастер-сервер (точка входа): реестр комнат, REST,
                    сигналинг, каталог карт (docs/master.md)
     host/        — браузерный хост (docs/host.md)

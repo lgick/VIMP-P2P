@@ -38,7 +38,9 @@ export const loadGameCore = () => loadPkg().GameCore;
 export const makeCore = (overrides = {}) => {
   const GameCore = loadGameCore();
 
-  return new GameCore(JSON.stringify(buildCoreConfig({ seed: 42, ...overrides })));
+  return new GameCore(
+    JSON.stringify(buildCoreConfig(tanksGameConfig, { seed: 42, ...overrides })),
+  );
 };
 
 /**

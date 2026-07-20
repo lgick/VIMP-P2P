@@ -32,8 +32,6 @@ packages/engine/ — @vimp/engine: the engine application (npm workspace)
   index.html / vite.config.js — the engine's Vite root
   public/        — static assets (sounds, favicon)
   src/
-    gameRegistry.static.js — the ONLY engine file allowed to import
-                   @vimp/tanks (temporary static composition, until stage 6)
     master/      — master server (entry point): room registry, REST,
                    signaling, map catalog (docs/master.md)
     host/        — browser host (docs/host.md)

@@ -13,10 +13,10 @@
 > `maps/*.json`, `sounds/*` and `manifest.json` (`npm run game:build`),
 > consumed by the master's `GameCatalog` (Stage 6.2, `/games/*` routes). The
 > client (Stage 6.3) dynamically loads `ClientPlugin` from the active game's
-> manifest and calls `createClientCore` — `gameRegistry.static.js` now holds
-> only the **host** half of the static composition (`hostPlugin`, the
-> Worker-safe wasm glue), removed in Stage 6.4 when `host.worker.js` switches
-> to `entries.host`/`createCore`.
+> manifest and calls `createClientCore`. The host (Stage 6.4) dynamically
+> loads `HostPlugin` from `entries.host` in `host.worker.js`'s `init` and
+> calls `createCore` — the engine no longer imports the game statically at
+> all (`gameRegistry.static.js` is gone).
 
 The engine is an **application** (deployed once: master, transport, Worker
 infrastructure, meta mechanisms, client MVC framework, Rust framework). A

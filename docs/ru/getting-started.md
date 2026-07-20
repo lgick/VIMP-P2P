@@ -14,7 +14,7 @@ cd VIMP-P2P
 npm install
 ```
 
-Репозиторий — npm workspaces: `packages/engine` (`@vimp/engine`, движок-приложение) и `games/tanks` (`@vimp/tanks`, игра-плагин). Корневые скрипты (`npm run dev`, `npm run build`) проксируют в `@vimp/engine`; граница «движок не импортирует игру» (кроме `gameRegistry.static.js`) закреплена правилом ESLint.
+Репозиторий — npm workspaces: `packages/engine` (`@vimp/engine`, движок-приложение) и `games/tanks` (`@vimp/tanks`, игра-плагин). Корневые скрипты (`npm run dev`, `npm run build`) проксируют в `@vimp/engine`; граница «движок не импортирует игру» — игра грузится динамически в рантайме по `GameManifest` (см. [plugin-api.md](plugin-api.md)) — закреплена правилом ESLint.
 
 ## HTTPS-сертификаты (один раз)
 
