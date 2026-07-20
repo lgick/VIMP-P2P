@@ -317,9 +317,16 @@ The client lobby's config (see
 host: the lobby happens before connecting to a host.
 
 - `serversUrl: '/servers'` — the master's server-list REST endpoint;
-- `maps` — the master's map catalog: `manifestUrl: '/maps/manifest.json'`,
-  `baseUrl: '/maps'` — a host's room starts on current maps (falls back to
-  the bundle if unavailable);
+- `gamesManifestUrl: '/games/manifest.json'` — the master's game catalog
+  (`GameCatalog`): the room-creation form's `roomDefaults` and the
+  ClientPlugin come from here;
+- `maps` — the master's map catalog, per-game function URLs:
+  `manifestUrl: gameId => '/games/<id>/maps/manifest.json'`,
+  `baseUrl: gameId => '/games/<id>/maps'` — a host's room starts on the
+  active game's current maps (falls back to the bundle if unavailable);
+- `game` — a specific game's manifest:
+  `manifestUrl: gameId => '/games/<id>/manifest.json'` — the Worker handoff
+  re-reads it before a swap so the new Worker gets fresh `entries.host/wasm`;
 - `worker` — the master's worker bundle manifest:
   `manifestUrl: '/worker/manifest.json'` — the room's Worker is created
   from the `url` in the manifest, a `codeVersion` mismatch on re-register
@@ -391,8 +398,8 @@ rotation/centering rates).
 
 > ⚠️ The `models.js` coefficients are used both by the core's
 > authoritative path and by the client prediction replica
-> (`core/src/client/predictor.rs`, formulas shared through
-> `core/src/motion.rs`). Changing them requires the cargo parity check:
+> (`games/tanks/core/src/client/predictor.rs`, formulas shared through
+> `games/tanks/core/src/motion.rs`). Changing them requires the cargo parity check:
 > `npm run core:test`.
 
 ### weapons.js

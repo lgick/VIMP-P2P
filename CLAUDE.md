@@ -23,7 +23,7 @@ Bilingual user docs live in `docs/en/` (canonical, ToC at
 | `packages/engine/src/config/*`, env vars, `games/tanks/src/data/*` (balance) | `configuration.md` |
 | master server `packages/engine/src/master/` | `master.md` |
 | browser host `packages/engine/src/host/` (Worker, core adapter, meta, transport) | `host.md` |
-| Rust core `core/` (ABI, events, build, tests) | `core.md` |
+| Rust core `packages/engine/core/`, `games/tanks/core/` (ABI, events, build, tests) | `core.md` |
 | client modules / parts / ClientCore | `client.md` |
 | game rules (rounds, stats, votes, chat commands, controls) | `gameplay.md` |
 | new maps/weapons/sounds — if the add-process itself changed | `extending.md` |
@@ -62,11 +62,12 @@ and a built WASM core (`npm run core:build`) before the first run.
   running in a Web Worker: `host.worker.js`, `HostGame.js` facade,
   `GameCoreAdapter.js`, Worker-safe `meta/` modules (participants, rounds,
   votes, timers). Details: `docs/en/host.md`.
-- **Rust core** (`core/`) — physics (`rapier2d`), tanks, weapons, bots, the
-  binary frame codec, and client-side math (interpolation/prediction/shot
-  spawning), compiled via wasm-pack to `pkg-web`/`pkg-node`. Public ABI:
-  `GameCore` (host) and `ClientCore` (client) in `core/src/lib.rs`. Details:
-  `docs/en/core.md`.
+- **Rust core** — two crates: `packages/engine/core/` (`vimp-engine-core`
+  rlib: physics via `rapier2d`, frame codec, interpolation, ABI macros) and
+  `games/tanks/core/` (game crate: tanks, weapons, bots, prediction/shot
+  spawning), compiled via wasm-pack to `games/tanks/core/pkg-web`/`pkg-node`.
+  Public ABI: `GameCore` (host) and `ClientCore` (client) in
+  `games/tanks/core/src/lib.rs`. Details: `docs/en/core.md`.
 - **Client** (`packages/engine/src/client/`) — WebRTC transport, MVC
   component triplets (model/view/controller, Publisher pattern), PixiJS
   rendering parts in `games/tanks/src/client/parts/`. Details:
@@ -102,7 +103,7 @@ Vitest (+ happy-dom for client, `@vitest/coverage-v8`). Every change ends
 with a green `npx eslint .` and `npm test`. Tests live under `tests/`,
 mirroring `packages/engine/src/` and `games/tanks/src/` (not colocated with
 source). `tests/core/` and `tests/host/HostGame.test.js` are
-`describe.skipIf`-gated on `core/pkg-node/` being built, so `npm test` stays
+`describe.skipIf`-gated on `games/tanks/core/pkg-node/` being built, so `npm test` stays
 green without the Rust toolchain. Rust-side: unit tests per module plus a
 cargo motion-parity suite (`client::predictor::parity`) — run
 `npm run core:test` after any change to core movement or `models.js`.
@@ -117,6 +118,6 @@ cargo motion-parity suite (`client::predictor::parity`) — run
 ## Deployment
 
 CI/CD is in `.github/`; only the master server is deployed (Docker: Rust
-stage builds `core/pkg-web`, Node stage builds the client, the runner starts
+stage builds `games/tanks/core/pkg-web`, Node stage builds the client, the runner starts
 `packages/engine/src/master/main.js`). Production only, no staging. Details:
 `docs/en/deployment.md`.

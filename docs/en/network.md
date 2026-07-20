@@ -5,7 +5,7 @@ The game protocol between the client and the host uses two message formats:
 - **JSON**: `[portId, payload]` — every channel except the snapshot.
   `portId` is a numeric id from [packages/engine/src/config/wsports.js](../../packages/engine/src/config/wsports.js) (the source of truth).
 - **Binary**: the game snapshot frame (port `5`, SHOT_DATA) — an
-  `ArrayBuffer` packed by the core (`core/src/snapshot.rs`).
+  `ArrayBuffer` packed by the core (`packages/engine/core/src/snapshot.rs`).
 
 The client tells the formats apart by incoming data type: a string → the
 JSON dispatcher `socketMethods[portId]`

@@ -22,7 +22,7 @@ Host tab
 │   └─ HostConnectionManager: WebRTC answerer for remote clients
 │      (register_host, meta/state, backpressure)
 └─ Web Worker (packages/engine/src/host/host.worker.js): authoritative simulation
-    ├─ GameCore (WASM, core/pkg-web)
+    ├─ GameCore (WASM, games/tanks/core/pkg-web)
     ├─ GameCoreAdapter: physics/bots/packing surface over the core
     └─ HostGame facade + meta packages/engine/src/host/meta/ (RoundManager, Participant-
        Manager, Chat, Vote, Stat, Panel, TimerManager, RTTManager,
@@ -158,7 +158,7 @@ Implements the physics/bots/packing surface consumed by
 - **input** → `apply_input` (seq is confirmed by the core in the frame's
   player block);
 - **event projection**: after `step`, drains `take_events()` and routes the
-  standard engine dictionary (Wasm Host ABI, `core/src/events.rs`) itself,
+  standard engine dictionary (Wasm Host ABI, `packages/engine/core/src/events.rs`) itself,
   with no game-side mediator: `panelSet`/`panelActive` →
   `panel.updateUser(..., 'set')`/`panel.setActiveWeapon` (`field` is the
   game's panel-schema key, not tied to a specific weapon), `death` →
@@ -538,17 +538,18 @@ Host and meta module tests live in `tests/host/`:
 
 ## Build
 
-The Worker loads `core/pkg-web` (the web target of the core). The production
+The Worker loads `games/tanks/core/pkg-web` (the web target of the core). The production
 build (`npm run build`) builds it itself (`core:build:web`) — this requires
 the Rust toolchain (see [getting-started.md](getting-started.md),
-[deployment.md](deployment.md)). For dev, `core/pkg-web` must be built by
+[deployment.md](deployment.md)). For dev, `games/tanks/core/pkg-web` must be built by
 hand once (`npm run core:build`).
 
 ## Manual run checklist
 
 The P2P migration is complete: client-side math (interpolation, prediction,
 projectile spawning, frame unpacking) now lives entirely in the Rust core
-(`core/src/client/`); legacy JS equivalents and the JS-parity tests were
+(`packages/engine/core/src/client/` +
+`games/tanks/core/src/client/`); legacy JS equivalents and the JS-parity tests were
 removed. What's left is this manual two-tab smoke test — Vitest doesn't
 reproduce real WebRTC reordering, so an end-to-end match check is manual, in
 the browser:

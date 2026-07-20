@@ -63,7 +63,8 @@ Publisher-паттерн связей внутри тройки:
 
 Клиентская математика — интерполяция снапшотов, предикт своего танка,
 визуальный спавн снарядов и распаковка кадров v3 — живёт в Rust-ядре
-(`core/src/client/`, wasm-bindgen класс `ClientCore` из того же WASM-бинаря,
+(`packages/engine/core/src/client/` + `games/tanks/core/src/client/`,
+wasm-bindgen класс `ClientCore` из того же WASM-бинаря,
 что `GameCore` хоста). JS-оболочка (`main.js`) только пересылает данные и
 применяет результат к рендеру; ABI и раскладки — в [core.md](core.md#clientcore--клиентский-режим-ядра).
 
@@ -114,7 +115,7 @@ Publisher-паттерн связей внутри тройки:
   событий опоздавших кадров;
 - **предикт** (`client/predictor.rs`): реплика авторитетного движения без
   Rapier-коллизий фикс-шагом `timeStep`; формулы тика **общие** с
-  `Tank::update` (`core/src/motion.rs`) — реплика не может разойтись с
+  `Tank::update` (`games/tanks/core/src/motion.rs`) — реплика не может разойтись с
   авторитетным путём по формулам, паритет интеграции (ручная против Rapier)
   закрепляют cargo-тесты `client_parity`; история ввода, replay от `serverTime`
   кадра, `visualError` с экспоненциальным затуханием и снапом, freeze при

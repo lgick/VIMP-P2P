@@ -59,10 +59,10 @@ Production `.env` variables are described in [configuration.md](configuration.md
 
 ## Rust toolchain (the core, core/)
 
-The browser host loads the web target of the core (`core/pkg-web/`), so the
+The browser host loads the web target of the core (`games/tanks/core/pkg-web/`), so the
 Rust toolchain is required to play and for the production build (`npm run
 build` includes `core:build:web`). It isn't needed for plain JS development
-without running a match — core tests are skipped if `core/pkg-node/` isn't
+without running a match — core tests are skipped if `games/tanks/core/pkg-node/` isn't
 built.
 
 ```bash
@@ -87,7 +87,7 @@ Stack: **Vitest** + happy-dom (client tests) + coverage-v8. `vitest.config.js` s
 - `engine-node` — `tests/master`, `tests/host` (except the tanks-specific files below), `tests/lib`, `tests/config`, `packages/engine/tests/fixtures` (node environment);
 - `engine-client` — `tests/client` (except `tanksClientPlugin.test.js`, happy-dom environment);
 - `tanks` — `tests/host/hostPlugin.test.js`, `botCommand.test.js`, `TanksBotManager.test.js`, `tests/client/tanksClientPlugin.test.js`;
-- `integration` — `tests/host/HostGame.test.js` + `tests/core/**` (real core, skipped without a built `core/pkg-node/`).
+- `integration` — `tests/host/HostGame.test.js` + `tests/core/**` (real core, skipped without a built `games/tanks/core/pkg-node/`).
 
 Tests live in `tests/` and mirror the `packages/engine/src/` and `games/tanks/src/` layout. Host-facade integration on top of the real core — `tests/host/HostGame.test.js`; the JS↔WASM harness for the Rust core — `tests/core/` (see [core.md](core.md)); Rust core tests run separately (`npm run core:test`). `packages/engine/tests/fixtures/miniGame/` is a self-contained second HostPlugin/ClientPlugin (fake-core, no WASM) that proves the engine and its meta modules (Panel/Stat/RoundManager/CommandProcessor/…) work with any game, not just `@vimp/tanks` — `engine-node`/`engine-client` pass with zero Rust artifacts built for the game. Project rule: **any code change must end with a green `npx eslint .` and `npm test`**; editing motion in the core or `models.js` requires the cargo predictor-replica parity run (`npm run core:test`).
 

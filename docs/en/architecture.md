@@ -55,6 +55,8 @@ packages/engine/ — @vimp/engine: the engine application (npm workspace)
                    opcodes, lobby, master)
     lib/         — shared utilities: Publisher, factory, math, validators,
                    sanitizers, security, config, clientCoreConfig, …
+  core/          — vimp-engine-core (Rust rlib): physics, the snapshot codec,
+                   interpolation, frame unpacking, ABI macros (docs/core.md)
 games/tanks/     — @vimp/tanks: the game (npm workspace)
   src/host/      — HostPlugin: core-event router, TanksBotManager, /bot,
                    b:* system messages
@@ -62,9 +64,8 @@ games/tanks/     — @vimp/tanks: the game (npm workspace)
                    bakers/ (procedural textures), hooks, game CSS
   src/config/    — game config halves (game.js, client.js, auth.js, sounds.js)
   src/data/      — static data: maps/, models.js, weapons.js
-core/            — Rust simulation core → WASM: physics, tanks, weapons, bots,
-                   the snapshot codec, and client-side math — interpolation,
-                   prediction, shot spawning (a client submodule, docs/core.md)
+  core/          — vimp-tanks-core (Rust → WASM, pkg-web/pkg-node): tanks,
+                   weapons, bots, prediction, shot spawning (docs/core.md)
 tests/           — Vitest projects: engine-node, engine-client, tanks,
                    integration (tests/host/HostGame.test.js + tests/core)
 scripts/         — helper scripts (audio processing, map export to JSON)
@@ -99,7 +100,7 @@ Host tab
 │   ├─ LoopbackTransport         — host-player transport over postMessage
 │   └─ HostConnectionManager     — WebRTC answerer for remote clients + backpressure
 └─ Web Worker (host.worker.js)   — authoritative simulation ~120 Hz
-    ├─ GameCore (WASM, core/)    — physics, weapons, bots
+    ├─ GameCore (WASM, games/tanks/core/) — physics, weapons, bots
     ├─ GameCoreAdapter           — physics/bots/packing surface over the core
     └─ HostGame facade + meta     — RoundManager, ParticipantManager, Chat, Vote,
                                     Stat, Panel, TimerManager… (packages/engine/src/host/meta/)
@@ -159,9 +160,9 @@ The client revolves around three network-smoothing mechanisms; all three
 live in the client core — the `ClientCore` WASM class from the same Rust
 binary (details — [client.md](client.md), ABI — [core.md](core.md#clientcore--the-cores-client-mode)):
 
-- **Interpolation** (`core/src/client/interpolator.rs`): frames are buffered, the world renders in the past (`serverNow − 100 ms`); events are emitted exactly once, positions are interpolated.
-- **Prediction** (`core/src/client/predictor.rs`): the local tank is simulated by a replica of the authoritative motion model (formulas shared with the core — `motion.rs`); the host confirms input (`lastInputSeq`), reconciliation replays unconfirmed input, and the discrepancy decays smoothly.
-- **Client-side shot spawning** (`core/src/client/shot.rs`): a shot is seen and heard instantly; duplicates from the host are suppressed by author id.
+- **Interpolation** (`packages/engine/core/src/client/interpolator.rs`): frames are buffered, the world renders in the past (`serverNow − 100 ms`); events are emitted exactly once, positions are interpolated.
+- **Prediction** (`games/tanks/core/src/client/predictor.rs`): the local tank is simulated by a replica of the authoritative motion model (formulas shared with the core — `motion.rs`); the host confirms input (`lastInputSeq`), reconciliation replays unconfirmed input, and the discrepancy decays smoothly.
+- **Client-side shot spawning** (`games/tanks/core/src/client/shot.rs`): a shot is seen and heard instantly; duplicates from the host are suppressed by author id.
 
 The JS shell reads the render-tick result as a zero-copy flat Float32 buffer
 from WASM memory (hot positions) and as a JSON string (rare event frames),
@@ -197,10 +198,11 @@ a mismatch triggers the Worker handoff).
 
 ### File split (ENGINE / GAME / MIXED)
 
-Full markup of today's tree. MIXED files must be cut apart during the
-migration (the split is listed per file).
+Full markup of the pre-migration tree. The migration is complete: the MIXED
+files listed here have been cut apart as described (the split is listed per
+file); the table is kept as a record of what went where.
 
-| Area | ENGINE | GAME | MIXED (what gets cut out) |
+| Area | ENGINE | GAME | MIXED (what got cut out) |
 | --- | --- | --- | --- |
 | Master | all of `packages/engine/src/master/` (`HostRegistry`, `SignalingServer`, `WorkerCatalog`, `MapCatalog` becomes per-game; new `GameCatalog`) | — | `packages/engine/src/master/main.js` — the static import of `games/tanks/src/data/maps` |
 | Host | `host.worker.js` (plugin loading), `HostGame.js`, `GameCoreAdapter.js` (generic), `meta/player/*` (`isScripted` replaces `isBot`), `meta/core/RoundManager`, `VoteCoordinator`, `meta/modules/*` (Panel, Stat, Vote, chat mechanism, TimerManager, RTTManager) | `HostBotManager.js` → `TanksBotManager` (scripted-module contract), the `/bot` command, `b:*` system messages, the core-event router | `GameCoreAdapter._drainEvents` (game event vocabulary), `SocketManager` (sound cues `roundStart/victory/…`, `sendFirstVote`), `CommandProcessor` (`/bot`), `chat/systemMessages.js` (the `b:*` group), `Panel.js` (the `'wa'` hardcode) |
@@ -213,7 +215,7 @@ migration (the split is listed per file).
 ## Key invariants
 
 - **Source of truth for ports** — `packages/engine/src/config/wsports.js`; for the binary format version — `packages/engine/src/config/opcodes.js`; for snapshot keys — the game schema `games/tanks/src/config/snapshot.js` (`gameConfig.snapshot`).
-- **Motion replica parity**: authoritative motion (Rapier) and the client prediction replica share the tick formulas (`core/src/motion.rs`); integration parity is locked in by cargo tests (`client::predictor::parity`) — any edit to motion in the core or the `models.js` coefficients requires running `npm run core:test`.
+- **Motion replica parity**: authoritative motion (Rapier) and the client prediction replica share the tick formulas (`games/tanks/core/src/motion.rs`); integration parity is locked in by cargo tests (`client::predictor::parity`) — any edit to motion in the core or the `models.js` coefficients requires running `npm run core:test`.
 - **A single numeric id space** for humans and scripted participants (bots); distinguished via `isScripted`/`isNetworked`. The core operates on numeric ids, meta keys by string — the conversion happens at the `GameCoreAdapter` boundary.
 - Every send to a client goes only through `SocketManager`.
 

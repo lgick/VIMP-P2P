@@ -96,7 +96,7 @@ of crashing the master.
 
 In dev, `entries.client`/`entries.host`/`entries.wasm` are rewritten to Vite
 `/@fs/` absolute source paths (`games/<id>/src/client/index.js` etc. and the
-`.wasm` under `core/pkg-web/`) so imports go through Vite's dev
+`.wasm` under `games/tanks/core/pkg-web/`) so imports go through Vite's dev
 transform/HMR instead of the built bundle; everything else in the manifest
 (`maps`, `assetsBase`, `roomDefaults`, `version`) still comes from the built
 `dist/manifest.json` — a game must be built once (`npm run game:build`)

@@ -206,7 +206,8 @@ What each component does:
 
 Client-side math — snapshot interpolation, the local tank's prediction,
 visual shot spawning, and v3 frame decoding — lives in the Rust core
-(`core/src/client/`, the wasm-bindgen class `ClientCore` from the same WASM
+(`packages/engine/core/src/client/` + `games/tanks/core/src/client/`, the
+wasm-bindgen class `ClientCore` from the same WASM
 binary as the host's `GameCore`). The JS shell (`main.js`) only forwards
 data and applies the result to rendering; ABI and layouts —
 [core.md](core.md#clientcore--the-cores-client-mode).
@@ -262,7 +263,7 @@ Internally the core implements the following algorithms:
   seq-based insertion + immediate emission of late-frame events;
 - **prediction** (`client/predictor.rs`): a replica of the authoritative
   motion without Rapier collisions, at a fixed `timeStep`; tick formulas
-  are **shared** with `Tank::update` (`core/src/motion.rs`) — the replica
+  are **shared** with `Tank::update` (`games/tanks/core/src/motion.rs`) — the replica
   can't diverge from the authoritative path on formulas, integration
   parity (manual vs. Rapier) is locked in by the `client_parity` cargo
   tests; input history, replay from the frame's `serverTime`,

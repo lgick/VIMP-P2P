@@ -35,7 +35,8 @@ Worker-инфраструктура, мета-механизмы, MVC-карка
 
 ## GameManifest
 
-Генерируется сборкой игры в `dist/games/<id>/manifest.json`; версия — хеш
+Генерируется сборкой игры в `games/tanks/dist/manifest.json` (мастер отдаёт
+его под `/games/<id>/`); версия — хеш
 контента бандлов (по образцу `WorkerCatalog`). **Мастер не исполняет код
 игры** — ему хватает манифеста и статических JSON карт (продукт
 `maps:export` при сборке игры).
@@ -93,19 +94,25 @@ export default {
                  frag:'frag', death:'gameOver' },          // вместо хардкодов SocketManager
   },
 
-  buildCoreGameConfig(overrides),     // game-секция init-JSON ядра
   buildClientGameConfig(),            // game-секция CONFIG_DATA (см. ниже)
+  // init-JSON ядра движок собирает сам из gameConfig
+  // (packages/engine/src/lib/coreConfig.js) — плагин-хук не нужен
   authSchema: { elems: {…}, params: [...], validators: { isValidModel: v => v in models },
                 texts: { title, sections } },   // тексты формы для нейтрального каркаса auth.pug
 
   onCoreEvent(ctx, event),            // только 'custom'-события; стандартные роутит движок
   chatCommands: [{ name: '/bot', handler(ctx, gameId, args) {…} }],   // регистрация в CommandProcessor
   systemMessages: { BOT_PLAYERS_ONLY: 'b:0', … },                     // merge в реестр кодов движка
-  voteDefs: ['createBots', 'createBotsForTeam', 'removeBots', 'removeBotsForTeam'],
+  // статических определений голосований нет: игровые голосования создаются
+  // динамически через ctx.voteCoordinator.createVote(...) из чат-команд
 
   createModules(ctx) { return { scripted: new TanksBotManager(ctx) }; },
-  // ctx = { participants, coreAdapter, panel, stat, chat, roundManager,
-  //         voteCoordinator, timerManager, socketManager }
+  // ctx = { participants, coreAdapter, panel, stat, chat, socketManager,
+  //         scripted /* параметры gameConfig.scripted */ }
+  // обработчики чат-команд получают другой, мета-уровневый ctx от
+  // CommandProcessor: { participants, chat, scripted, roundManager,
+  //   voteCoordinator, timerManager, teams, spectatorTeam, spectatorId,
+  //   isDevMode }
   // Контракт scripted-модуля (дергает движок — RoundManager/HostGame):
   //   createMap(scaledMapData), createScripted(count, team?), removeScripted(team?),
   //   removeOneForHuman(team), getCount(), getCountsPerTeam()
@@ -144,7 +151,7 @@ export default {
 | --- | --- |
 | Panel (host + client MVC) | схема полей (`fields` + типы отображения: bar/число/время/иконка-оружия), `activeKey`; движковый PanelView **генерирует DOM по схеме** (замена хардкода `panel.pug` `#panel-health/-bullet/-bomb/-time`), внешний вид полей — CSS игры |
 | Stat (host + client MVC) | колонки (имена/методы агрегации) и **список команд произвольной длины**; движковый StatView **генерирует таблицы по числу команд** (замена хардкода `stat.pug` `#team1/#team2/#spectators` и 5 фиксированных колонок) |
-| Vote (host + client MVC) | определения игровых голосований (`voteDefs`) + все шаблоны/меню (тексты); движковые голосования механизмов (teamChange, mapChangeByUser/BySystem) остаются в движке, их тексты — тоже у игры |
+| Vote (host + client MVC) | игровые голосования создаются динамически (`voteCoordinator.createVote` из обработчиков чат-команд) + все шаблоны/меню (тексты); движковые голосования механизмов (teamChange, mapChangeByUser/BySystem) остаются в движке, их тексты — тоже у игры |
 | Chat (host + client MVC) | игровые коды системных сообщений (группа `b:*` и будущие) + ВСЕ тексты сообщений; движок владеет механизмом и кодами своих механизмов (`s/v/m/c/n`) |
 | CommandProcessor | регистрация игровых команд (`/bot`); движковые `/name`, `/nr`, `/timeleft`, `/mapname` остаются |
 | RoundManager / ParticipantManager | `teams` (произвольные), `spectatorTeam`, respawns из карт, `scripted`-параметры; в движке — нейтральный «scripted participant» |
@@ -273,7 +280,7 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
   (try_fire/cycle_weapon/sync_panel/клиентский спавн) — целиком в
   game-crate, зовёт движковый raycast.
 
-Разъезд модулей текущего `core/src/`:
+Состоявшийся разъезд модулей бывшего монолитного `core/src/` (этап 4b):
 
 | → `vimp-engine-core` | → `vimp-tanks-core` |
 | --- | --- |

@@ -179,7 +179,8 @@ projection of these events.
 - `frame_bytes()` — a copy of the frame (the nodejs target doesn't expose
   its memory).
 
-Frames are decoded by the client core (`games/tanks/vimp-engine-core's client/unpack.rs`) — the
+Frames are decoded by the client core (`games/tanks/core/src/client/mod.rs`
+via `vimp_engine_core::client::unpack`) — the
 packer and unpacker live in the same crate, so a layout mismatch is
 impossible by construction; the shapes are locked in by round-trip tests
 (`#[cfg(test)]` in `unpack.rs` plus `tests/core/core.test.js` and

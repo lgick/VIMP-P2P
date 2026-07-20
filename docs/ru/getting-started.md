@@ -59,10 +59,10 @@ npm run test:coverage  # покрытие
 
 ## Rust-тулчейн (ядро core/)
 
-Браузерный хост грузит web-таргет ядра (`core/pkg-web/`), поэтому для игры и
+Браузерный хост грузит web-таргет ядра (`games/tanks/core/pkg-web/`), поэтому для игры и
 прод-сборки (`npm run build` включает `core:build:web`) Rust-тулчейн обязателен.
 Для чистой JS-разработки без запуска матча он не нужен — тесты ядра
-пропускаются, если `core/pkg-node/` не собран.
+пропускаются, если `games/tanks/core/pkg-node/` не собран.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # rustc + cargo
@@ -86,7 +86,7 @@ npm run core:test             # Rust-тесты
 - `engine-node` — `tests/master`, `tests/host` (кроме игровых файлов ниже), `tests/lib`, `tests/config`, `packages/engine/tests/fixtures` (окружение node);
 - `engine-client` — `tests/client` (кроме `tanksClientPlugin.test.js`, окружение happy-dom);
 - `tanks` — `tests/host/hostPlugin.test.js`, `botCommand.test.js`, `TanksBotManager.test.js`, `tests/client/tanksClientPlugin.test.js`;
-- `integration` — `tests/host/HostGame.test.js` + `tests/core/**` (реальное ядро, пропускается без собранного `core/pkg-node/`).
+- `integration` — `tests/host/HostGame.test.js` + `tests/core/**` (реальное ядро, пропускается без собранного `games/tanks/core/pkg-node/`).
 
 Тесты лежат в `tests/` и зеркалят структуру `packages/engine/src/` и `games/tanks/src/`. Интеграция host-фасада поверх реального ядра — `tests/host/HostGame.test.js`; JS↔WASM харнесс Rust-ядра — в `tests/core/` (см. [core.md](core.md)); Rust-тесты ядра гоняются отдельно (`npm run core:test`). `packages/engine/tests/fixtures/miniGame/` — самостоятельная вторая пара HostPlugin/ClientPlugin (fake-core, без WASM), доказывающая, что движок и его мета (Panel/Stat/RoundManager/CommandProcessor/…) работают с любой игрой, а не только с `@vimp/tanks` — `engine-node`/`engine-client` зелёные без единого собранного Rust-артефакта игры. Правило проекта: **любое изменение кода завершается зелёными `npx eslint .` и `npm test`**; при правке движения в ядре или `models.js` обязателен cargo-паритет реплики предикта (`npm run core:test`).
 

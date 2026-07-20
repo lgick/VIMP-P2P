@@ -20,7 +20,7 @@
 │   └─ HostConnectionManager: WebRTC-answerer для удалённых клиентов
 │      (register_host, meta/state, бэкпрешер)
 └─ Web Worker (packages/engine/src/host/host.worker.js): авторитетная симуляция
-    ├─ GameCore (WASM, core/pkg-web)
+    ├─ GameCore (WASM, games/tanks/core/pkg-web)
     ├─ GameCoreAdapter: поверхность физики/ботов/упаковки поверх ядра
     └─ HostGame-фасад + мета packages/engine/src/host/meta/ (RoundManager, Participant-
        Manager, Chat, Vote, Stat, Panel, TimerManager, RTTManager,
@@ -145,7 +145,7 @@ prediction) собирает `packages/engine/src/lib/buildClientConfig.js`.
   `spawn_actor`/`remove_actor`); `changePlayerData` → `reset_actor`;
 - **ввод** → `apply_input` (seq подтверждается ядром в player-блоке кадра);
 - **проекция событий**: после `step` дренирует `take_events()` и роутит
-  стандартный движковый словарь (Wasm Host ABI, `core/src/events.rs`) сам, без
+  стандартный движковый словарь (Wasm Host ABI, `packages/engine/core/src/events.rs`) сам, без
   игрового посредника: `panelSet`/`panelActive` → `panel.updateUser(...,
   'set')`/`panel.setActiveWeapon` (`field` — ключ схемы панели игры, не
   завязан на конкретное оружие), `death` → `HostGame.reportKill`, `shake` →
@@ -503,16 +503,17 @@ version } }` (Этап 6.5). Деплой рестартует мастер → 
 
 ## Сборка
 
-Worker грузит `core/pkg-web` (web-таргет ядра). Прод-сборка (`npm run build`)
+Worker грузит `games/tanks/core/pkg-web` (web-таргет ядра). Прод-сборка (`npm run build`)
 собирает его сама (`core:build:web`) — сборка требует Rust-тулчейн (см.
 [getting-started.md](getting-started.md), [deployment.md](deployment.md)). Для
-dev `core/pkg-web` нужно собрать вручную один раз (`npm run core:build`).
+dev `games/tanks/core/pkg-web` нужно собрать вручную один раз (`npm run core:build`).
 
 ## Ручной прогон (чек-лист)
 
 P2P-миграция завершена: клиентская математика (интерполяция, предикт, спавн
 снарядов, распаковка кадров) целиком перенесена в Rust-ядро
-(`core/src/client/`); легаси JS-модули и JS-паритет-тесты удалены. Остался
+(`packages/engine/core/src/client/` +
+`games/tanks/core/src/client/`); легаси JS-модули и JS-паритет-тесты удалены. Остался
 только этот ручной прогон на двух вкладках — Vitest не воспроизводит реальный
 WebRTC и его реордеринг, поэтому сквозная проверка матча — ручная, в браузере:
 
