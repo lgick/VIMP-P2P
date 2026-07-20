@@ -17,6 +17,13 @@ export default {
     baseUrl: gameId => `/games/${gameId}/maps`,
   },
 
+  // манифест конкретной игры (Этап 6.5): эстафета Worker'ов перечитывает его
+  // перед свопом — новый Worker должен получить свежий entries.host/wasm
+  // (деплой игры мог обновиться независимо от деплоя движка)
+  game: {
+    manifestUrl: gameId => `/games/${gameId}/manifest.json`,
+  },
+
   // манифест worker-бандла мастера (Этап 5.2): Worker комнаты создаётся по
   // url из манифеста, расхождение codeVersion при re-register — эстафета
   // Worker'ов; недоступность манифеста — бандловый URL без обновлений кода

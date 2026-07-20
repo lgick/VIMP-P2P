@@ -45,7 +45,11 @@ import BakingProvider from './providers/BakingProvider.js';
 import DependencyProvider from './providers/DependencyProvider.js';
 import { HOT_FLAGS, SNAPSHOT_KEYS_BY_ID } from '../config/opcodes.js';
 import wsports from '../config/wsports.js';
-import { fetchGamesManifest, loadClientPlugin } from '../lib/gamePlugin.js';
+import {
+  fetchGamesManifest,
+  fetchGameManifest as fetchGamePluginManifest,
+  loadClientPlugin,
+} from '../lib/gamePlugin.js';
 import lobbyConfig from '../config/lobby.js';
 import clientDefaults from '../config/clientDefaults.js';
 
@@ -1022,7 +1026,12 @@ async function connectAsHost(room) {
   try {
     const manifest = await fetchWorkerManifest();
 
-    hostCodeVersion = manifest.version;
+    // составной codeVersion (Этап 6.5): движок (worker-бандл) + игра
+    // (id/version активного манифеста, с которым комната стартует)
+    hostCodeVersion = {
+      engine: manifest.version,
+      game: { id: activeGameManifest.id, version: activeGameManifest.version },
+    };
     workerUrl = manifest.url;
   } catch (e) {
     console.warn('[worker] master manifest unavailable, using bundled:', e);
@@ -1120,7 +1129,7 @@ async function connectAsHost(room) {
       refreshHostMaps();
     }
 
-    if (msg.codeVersion && hostCodeVersion && msg.codeVersion !== hostCodeVersion) {
+    if (msg.codeVersion && hostCodeVersion && codeVersionChanged(msg.codeVersion, hostCodeVersion)) {
       refreshHostWorker();
     }
   });
@@ -1131,7 +1140,7 @@ async function connectAsHost(room) {
       refreshHostMaps();
     }
 
-    if (msg.codeVersion && hostCodeVersion && msg.codeVersion !== hostCodeVersion) {
+    if (msg.codeVersion && hostCodeVersion && codeVersionChanged(msg.codeVersion, hostCodeVersion)) {
       refreshHostWorker();
     }
   });
@@ -1142,11 +1151,22 @@ async function connectAsHost(room) {
 // версия каталога карт мастера, с которой поднята комната (Этап 5.1)
 let hostMapsVersion = null;
 
-// версия worker-бандла комнаты (Этап 5.2); null — обновления кода отключены
+// составной codeVersion комнаты (Этап 5.2/6.5): { engine, game: { id, version } };
+// null — обновления кода отключены (манифест недоступен при старте)
 let hostCodeVersion = null;
 
 // версия, своп на которую не удался — не ретраить её на каждом re-register
 let failedCodeVersion = null;
+
+// сравнимый ключ составного codeVersion (Этап 6.5): движок + игра —
+// расхождение любой половины (деплой движка ИЛИ деплой игры) запускает эстафету
+function codeVersionKey(cv) {
+  return cv ? `${cv.engine ?? ''}:${cv.game?.id ?? ''}:${cv.game?.version ?? ''}` : null;
+}
+
+function codeVersionChanged(remote, local) {
+  return codeVersionKey(remote) !== codeVersionKey(local);
+}
 
 // защита от параллельных эстафет Worker'ов
 let workerSwapInProgress = false;
@@ -1206,9 +1226,16 @@ async function fetchWorkerManifest() {
   return res.json();
 }
 
-// Этап 5.2: эстафета Worker'ов — новая версия кода у мастера. Worker
-// заменяется на границе раунда без разрыва P2P; сбой свопа не смертелен —
-// комната продолжает жить на прежней версии
+// Этап 6.5: перечитывает манифест активной игры мастера — своп не должен
+// нести новому Worker'у закэшированный с момента создания комнаты
+// hostEntryUrl/wasmUrl (деплой игры мог обновиться независимо от движка)
+async function fetchGameManifest(gameId) {
+  return fetchGamePluginManifest(lobbyConfig.game.manifestUrl(gameId));
+}
+
+// Этап 5.2/6.5: эстафета Worker'ов — новая версия кода (движка ИЛИ игры) у
+// мастера. Worker заменяется на границе раунда без разрыва P2P; сбой свопа
+// не смертелен — комната продолжает жить на прежней версии
 async function refreshHostWorker() {
   if (workerSwapInProgress || !hostController) {
     return;
@@ -1217,27 +1244,42 @@ async function refreshHostWorker() {
   workerSwapInProgress = true;
 
   let manifest = null;
+  let game = null;
 
   try {
     manifest = await fetchWorkerManifest();
+    const gameManifest = await fetchGameManifest(activeGameManifest.id);
+
+    game = {
+      id: gameManifest.id,
+      version: gameManifest.version,
+      hostEntryUrl: gameManifest.entries.host,
+      wasmUrl: gameManifest.entries.wasm,
+    };
+
+    const nextCodeVersion = {
+      engine: manifest.version,
+      game: { id: game.id, version: game.version },
+    };
+    const nextKey = codeVersionKey(nextCodeVersion);
 
     if (
       !manifest.version ||
       !manifest.url ||
-      manifest.version === hostCodeVersion ||
-      manifest.version === failedCodeVersion
+      nextKey === codeVersionKey(hostCodeVersion) ||
+      nextKey === codeVersionKey(failedCodeVersion)
     ) {
       return;
     }
 
-    await hostController.swapWorker(manifest.url);
+    await hostController.swapWorker(manifest.url, game);
 
-    hostCodeVersion = manifest.version;
+    hostCodeVersion = nextCodeVersion;
     failedCodeVersion = null;
-    console.info(`[worker] room migrated to code version ${manifest.version}`);
+    console.info(`[worker] room migrated to code version ${nextKey}`);
   } catch (e) {
     if (manifest?.version) {
-      failedCodeVersion = manifest.version;
+      failedCodeVersion = { engine: manifest.version, game };
     }
 
     console.warn('[worker] swap to new version failed:', e);

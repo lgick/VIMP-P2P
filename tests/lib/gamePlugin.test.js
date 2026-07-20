@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   fetchGamesManifest,
+  fetchGameManifest,
   assertEngineApiCompatible,
+  assertGameConfigShape,
   loadClientPlugin,
 } from '../../packages/engine/src/lib/gamePlugin.js';
 import { ENGINE_API_VERSION } from '../../packages/engine/src/config/opcodes.js';
@@ -34,6 +36,60 @@ describe('gamePlugin: fetchGamesManifest', () => {
     );
 
     await expect(fetchGamesManifest()).rejects.toThrow(/HTTP 500/);
+  });
+});
+
+describe('gamePlugin: fetchGameManifest', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('возвращает распарсенный JSON-объект (не массив) при успешном ответе', async () => {
+    const manifest = { id: 'tanks' };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => manifest }),
+    );
+
+    await expect(
+      fetchGameManifest('/games/tanks/manifest.json'),
+    ).resolves.toBe(manifest);
+    expect(fetch).toHaveBeenCalledWith('/games/tanks/manifest.json');
+  });
+
+  it('бросает при неуспешном HTTP-ответе', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 404 }),
+    );
+
+    await expect(
+      fetchGameManifest('/games/tanks/manifest.json'),
+    ).rejects.toThrow(/HTTP 404/);
+  });
+});
+
+describe('gamePlugin: assertGameConfigShape', () => {
+  const validGameConfig = {
+    roomDefaults: { maxPlayers: 8 },
+    parts: { models: {}, weapons: {}, friendlyFire: false },
+    panel: { fields: {} },
+    playerKeys: {},
+  };
+
+  it('пропускает gameConfig со всеми обязательными полями', () => {
+    expect(() =>
+      assertGameConfigShape({ id: 'tanks', gameConfig: validGameConfig }),
+    ).not.toThrow();
+  });
+
+  it('бросает при отсутствии обязательного поля', () => {
+    const { roomDefaults, ...rest } = validGameConfig;
+
+    expect(() =>
+      assertGameConfigShape({ id: 'tanks', gameConfig: rest }),
+    ).toThrow(/roomDefaults\.maxPlayers/);
   });
 });
 

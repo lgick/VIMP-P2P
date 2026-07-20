@@ -104,10 +104,24 @@ IP хоста и служебные поля наружу не отдаются.
 его содержимое (SHA-256, 16 символов — по образцу `MapCatalog`). Vite хеширует
 имена ассетов, поэтому страница старой сборки не может знать имя нового
 бандла — вкладка хоста создаёт Worker по `url` из манифеста и сверяет
-`version` с `codeVersion` из `host_registered`. В dev каталог пуст
-(`{ "version": null, "url": null }`) — Worker раздаёт Vite из исходников,
-обновления кода отключены. Как хост потребляет манифест — см.
-[host.md](host.md#эстафета-workerов).
+`version` с движковой половиной составного `codeVersion` из `host_registered`
+(Этап 6.5 — см. ниже). В dev каталог пуст (`{ "version": null, "url": null }`)
+— Worker раздаёт Vite из исходников, обновления кода отключены. Как хост
+потребляет манифест — см. [host.md](host.md#эстафета-workerов).
+
+### Составной `codeVersion`
+
+`host_registered.codeVersion` — `{ engine, game: { id, version } }` (Этап
+6.5): `engine` — `WorkerCatalog.version` (хеш worker-бандла хоста, единый на
+весь деплой); `game.id`/`game.version` — id объявленной игры и
+`GameCatalog.getManifest(id).version` (fallback на самоприсланный хостом
+`gameVersion` только если каталог не знает эту игру). Расхождение любой
+половины — деплой движка ИЛИ деплой игры-плагина — это рассинхрон кода: хост
+перечитывает `GET /worker/manifest.json` **и** `GET /games/:id/manifest.json`,
+затем меняет Worker сразу на свежий бандл *и* свежие
+`entries.host`/`entries.wasm` одной эстафетой — деплой только игры запускает
+её точно так же, как деплой только движка. Протокол свопа и
+`HANDOFF_VERSION` — см. [host.md](host.md#эстафета-workerов).
 
 ## Сигнальный протокол (WebSocket)
 
@@ -125,7 +139,7 @@ IP хоста и служебные поля наружу не отдаются.
 
 | → мастеру | Ответ / эффект |
 | --- | --- |
-| `register_host { name, maxPlayers, mapName, gameId, gameVersion }` | `host_registered { hostId, gameId, mapsVersion, codeVersion }`; регион — из заголовка, IP — из соединения; `gameId`/`gameVersion` — какую игру-плагин и версию манифеста запустил хост (сохраняются в сессии, эхо в ответе; с Этапа 6.4 их шлёт каждый хост — `connectAsHost` собирает `room.game` из активного `GameManifest`); `mapsVersion` — `GameManifest.maps.version` объявленной игры через `GameCatalog` (`null`, если `gameId` неизвестен каталогу); `codeVersion` — версия worker-бандла движка (при re-register после разрыва — деплой рестартует мастер — хост сверяет их со своими: расхождение карт → перечитывание каталога, кода → эстафета Worker'ов). Ошибки: `alreadyRegistered`, `hostLimit` (уже есть комната с этого IP) |
+| `register_host { name, maxPlayers, mapName, gameId, gameVersion }` | `host_registered { hostId, gameId, mapsVersion, codeVersion }`; регион — из заголовка, IP — из соединения; `gameId`/`gameVersion` — какую игру-плагин и версию манифеста запустил хост (сохраняются в сессии, эхо в ответе; с Этапа 6.4 их шлёт каждый хост — `connectAsHost` собирает `room.game` из активного `GameManifest`); `mapsVersion` — `GameManifest.maps.version` объявленной игры через `GameCatalog` (`null`, если `gameId` неизвестен каталогу); `codeVersion` — составной `{ engine, game: { id, version } }` (Этап 6.5, см. выше; `engine` — версия worker-бандла) — при re-register после разрыва (деплой рестартует мастер) хост сверяет их со своими: расхождение карт → перечитывание каталога, расхождение любой половины `codeVersion` → эстафета Worker'ов. Ошибки: `alreadyRegistered`, `hostLimit` (уже есть комната с этого IP) |
 | `update_host { currentPlayers, mapName }` | актуализация данных комнаты (одновременно heartbeat) |
 | `heartbeat {}` | обновление `lastSeen` |
 | `webrtc_answer { clientId, sdp }` | пересылается клиенту как `webrtc_answer { hostId, sdp }` |

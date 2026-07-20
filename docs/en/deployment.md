@@ -16,9 +16,13 @@ container. On the VPS, Nginx terminates HTTPS and proxies to the app port
 > WASM core (`core/pkg-web/`), so [Dockerfile](../../Dockerfile) builds it
 > in a separate `core-builder` stage (`rust:slim` + `wasm-pack`), and the
 > node stage runs `npm run build:app` (audio + Vite) with `pkg-web`
-> already in place. A local `npm run build` does the same in one command
-> and requires the Rust toolchain (see
-> [getting-started.md](getting-started.md#rust-toolchain-the-core-core)).
+> already in place. A local `npm run build` also builds the
+> `@vimp/tanks` game plugin bundle (`npm run game:build`, required for
+> `GameCatalog` — see [getting-started.md](getting-started.md#rust-toolchain-the-core-core));
+> the Docker image does not build it yet (deferred to Stage 8 of the
+> engine/game split), so a production container currently needs the game
+> bundle supplied by another means (baked in separately, or a future
+> Docker stage).
 
 ## 📋 Prerequisites
 

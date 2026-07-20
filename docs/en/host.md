@@ -419,17 +419,25 @@ participate here.
 **Detecting a new version.** The room's Worker is created from the `url` in
 the master's `GET /worker/manifest.json` (`lobbyConfig.worker.manifestUrl`)
 — Vite hashes asset names, so after a deploy the old page's bundle URL
-disappears from what's served; the manifest version is remembered
-(`hostCodeVersion`). A deploy restarts the master → the signaling WS drops →
-a regular reconnect → re-register → `host_registered.codeVersion` differs
-from ours → `refreshHostWorker()`: re-fetches the manifest →
-`HostController.swapWorker(url)`. A version whose swap failed is remembered
-and not retried on every re-register. The `update_available { codeVersion }`
-push from the master is also handled (for future use). In dev the manifest
-is empty (`version: null`) — code updates are disabled, the Worker is
-bundled.
+disappears from what's served; a composite `hostCodeVersion` is remembered:
+`{ engine, game: { id, version } }` (Stage 6.5). A deploy restarts the
+master → the signaling WS drops → a regular reconnect → re-register →
+`host_registered.codeVersion` differs from ours in either half (an engine
+deploy changes `engine`, a game-plugin-only deploy changes `game.version`) →
+`refreshHostWorker()`: re-fetches **both** `GET /worker/manifest.json` and
+the active game's `GET /games/:id/manifest.json`
+(`lobbyConfig.game.manifestUrl`), builds a fresh `room.game` object
+(`{ id, version, hostEntryUrl, wasmUrl }` from the fresh manifest's
+`entries.host`/`entries.wasm`), and calls
+`HostController.swapWorker(url, freshRoomGame)` — so a game-only redeploy
+triggers a relay exactly like an engine-only one, and the new Worker never
+imports a stale `hostEntryUrl`. A `codeVersion` whose swap failed is
+remembered (by the same composite key) and not retried on every re-register.
+The `update_available { codeVersion }` push from the master is also handled
+(for future use). In dev the worker manifest is empty (`version: null`) —
+code updates are disabled, the Worker is bundled.
 
-**Swap protocol** (`HostController.swapWorker`):
+**Swap protocol** (`HostController.swapWorker(url, game)`):
 
 1. the old Worker receives `prepare_handoff` → `HostGame.requestHandoff`
    installs a callback in `RoundManager`; the game continues until the
@@ -438,14 +446,16 @@ bundled.
 2. at the boundary, the old Worker stops the game (`stopGameTimers` + idle)
    and sends `handoff_state { state }`; from this point `HostController`
    buffers incoming client messages (a capped queue);
-3. the main thread creates a new Worker from the new version's URL and sends
-   it `init { room, handoff: state }` (`room.maps` carries the current map
-   catalog);
-4. the new Worker restores the room (see below) and replies `ready` →
-   `HostController` reconnects every live client with internal `connect`
-   calls (port state machines come up past the handshake), delivers the
-   buffered queue, sends `handoff_complete`, and tears down the old Worker
-   (`terminate`);
+3. `HostController` overwrites `room.game` with the fresh manifest passed to
+   `swapWorker` (Stage 6.5 — falls back to the room's existing `game` if none
+   was passed), creates a new Worker from the new version's URL, and sends it
+   `init { room, handoff: state }` (`room.maps` carries the current map
+   catalog, `room.game` the fresh `hostEntryUrl`/`wasmUrl`);
+4. the new Worker imports `room.game.hostEntryUrl` (Stage 6.4), restores the
+   room (see below) and replies `ready` → `HostController` reconnects every
+   live client with internal `connect` calls (port state machines come up
+   past the handshake), delivers the buffered queue, sends
+   `handoff_complete`, and tears down the old Worker (`terminate`);
 5. `handoff_complete` in the new Worker: `HostGame.completeHandoff` kicks
    restored participants whose `connect` never arrived (dropped during the
    pause), resumes timers (the map — with its time remaining,
@@ -453,7 +463,10 @@ bundled.
    clients get the usual `sendClear`/respawn/round start (`sendSoundCue`+`sendGameInform`).
 
 **Handoff meta** (`HostGame._collectHandoff`, a versioned format —
-`HANDOFF_VERSION`): human participants with `isReady` (gameId/socketId/
+`HANDOFF_VERSION = 2` as of Stage 6.5, which added `gameId`/`gameVersion`):
+the loaded `HostPlugin`'s `id` and the room's `gameVersion` (so a restore
+into a mismatched game — should that ever happen — fails loudly instead of
+restoring bogus state), human participants with `isReady` (gameId/socketId/
 name/model/team) and bots (with their original gameId — the single numeric
 id space is preserved), the entire `Stat` score, the current map plus its
 remaining time, the frame `seq` (snapshot numbering continues — clients'
@@ -464,12 +477,12 @@ handshake (their scoreboard rows are wiped, and such a guest goes through
 the handshake again on the client).
 
 **Fault tolerance**: a new Worker's init failure (`error`: incompatible
-`HANDOFF_VERSION`, a map left the catalog, a WASM failure) or a timeout
-(15 s) → the new Worker is torn down, and `resume` is sent to the old one
-(`resumeAfterHandoff`: restoring timers + resuming the interrupted round) —
-**the room keeps living on the old code version**, and players notice
-nothing. Concurrent swaps are prevented (a guard in `main.js` and in
-`HostController`).
+`HANDOFF_VERSION`, a `gameId` mismatch, a map left the catalog, a WASM
+failure) or a timeout (15 s) → the new Worker is torn down, and `resume` is
+sent to the old one (`resumeAfterHandoff`: restoring timers + resuming the
+interrupted round) — **the room keeps living on the old code version**, and
+players notice nothing. Concurrent swaps are prevented (a guard in
+`main.js` and in `HostController`).
 
 In the lobby (`packages/engine/src/client/main.js`):
 

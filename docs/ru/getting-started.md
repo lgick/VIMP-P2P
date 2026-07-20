@@ -43,8 +43,8 @@ npm run dev
 
 ```bash
 npm start              # production-запуск мастера (читает .env: VIMP_DOMAIN и др.)
-npm run build          # прод-сборка (WASM-ядро + обработка аудио + Vite bundle)
-npm run build:app      # сборка без ядра (аудио + Vite; ядро уже собрано)
+npm run build          # прод-сборка (WASM-ядро + бандл игры-плагина + обработка аудио + Vite bundle движка)
+npm run build:app      # сборка только движка (аудио + Vite; ядро и игра-плагин уже собраны)
 npm run core:build     # сборка Rust-ядра в WASM (web + nodejs; нужен Rust-тулчейн)
 npm run core:test      # Rust-тесты ядра (cargo test)
 npm run maps:export    # экспорт карт в JSON (games/tanks/dist/maps/) для мастера/ядра

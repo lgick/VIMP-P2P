@@ -160,7 +160,12 @@ describe('register_host', () => {
     // версии каталога карт и worker-бандла — для сверки хостом при
     // re-register (Этапы 5.1/5.2)
     expect(reply.mapsVersion).toBe('v-test');
-    expect(reply.codeVersion).toBe('code-test');
+    // составной codeVersion (Этап 6.5): движок + игра (без gameId/каталога —
+    // игровая половина пуста)
+    expect(reply.codeVersion).toEqual({
+      engine: 'code-test',
+      game: { id: null, version: null },
+    });
 
     const host = registry.get(reply.hostId);
 
@@ -215,7 +220,9 @@ describe('register_host', () => {
       codeVersion: 'code-test',
       gameCatalog: {
         getManifest: id =>
-          id === 'tanks' ? { maps: { version: 'tanks-maps-v2' } } : undefined,
+          id === 'tanks'
+            ? { version: 'tanks-v3', maps: { version: 'tanks-maps-v2' } }
+            : undefined,
       },
     });
 
@@ -229,7 +236,12 @@ describe('register_host', () => {
 
     ws.message({ type: 'register_host', name: 'Room', gameId: 'tanks' });
 
-    expect(ws.lastSent().mapsVersion).toBe('tanks-maps-v2');
+    const reply = ws.lastSent();
+
+    expect(reply.mapsVersion).toBe('tanks-maps-v2');
+    // codeVersion.game.version — из каталога (источник истины), не из
+    // gameVersion, заявленного хостом
+    expect(reply.codeVersion.game).toEqual({ id: 'tanks', version: 'tanks-v3' });
   });
 
   it('без gameId или для неизвестной игры — fallback на статичный mapsVersion', async () => {

@@ -296,7 +296,8 @@ describe.skipIf(!coreAvailable)('HostGame: эстафета Worker\'ов (5.2)',
     const { host, meta, p1, p2, p3 } = await collectHandoffFixture();
 
     expect(meta).not.toBeNull();
-    expect(meta.version).toBe(1);
+    expect(meta.version).toBe(2);
+    expect(meta.gameId).toBe('tanks');
     expect(meta.seq).toBe(host._seq);
     expect(meta.currentMap).toBe(host._roundManager.currentMap);
     expect(meta.mapTimeLeft).toBeGreaterThan(0);
@@ -427,6 +428,18 @@ describe.skipIf(!coreAvailable)('HostGame: эстафета Worker\'ов (5.2)',
 
     await expect(createHost({ opts: { handoff: meta } })).rejects.toThrow(
       /handoff version/,
+    );
+  });
+
+  it('чужой gameId в мете валит init (главный поток вернёт старый Worker)', async () => {
+    const old = await collectHandoffFixture();
+    const meta = structuredClone(old.meta);
+
+    meta.gameId = 'other-game';
+    vi.resetModules();
+
+    await expect(createHost({ opts: { handoff: meta } })).rejects.toThrow(
+      /game mismatch/,
     );
   });
 

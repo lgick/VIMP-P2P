@@ -135,9 +135,13 @@ export default class HostController {
    * переподключаются внутренними connect'ами. Сбой нового Worker'а —
    * откат: старый возобновляется, комната живёт на прежней версии.
    * @param {string} url - URL worker-бандла из манифеста мастера.
+   * @param {Object} [game] - свежий room.game (Этап 6.5: {id, version,
+   *   hostEntryUrl, wasmUrl}) — подменяет закэшированный с момента создания
+   *   комнаты перед init нового Worker'а, чтобы деплой игры тоже подхватывался
+   *   эстафетой, а не только деплой движка.
    * @returns {Promise<void>}
    */
-  swapWorker(url) {
+  swapWorker(url, game) {
     if (this._swap) {
       return Promise.reject(new Error('worker swap already in progress'));
     }
@@ -149,6 +153,7 @@ export default class HostController {
     return new Promise((resolve, reject) => {
       this._swap = {
         url,
+        game,
         paused: false,
         queue: [],
         next: null,
@@ -194,6 +199,13 @@ export default class HostController {
     }
 
     this._swap.paused = true;
+
+    // Этап 6.5: своп несёт свежий манифест игры — новый Worker должен
+    // грузить актуальный hostEntryUrl/wasmUrl, а не тот, с которым комната
+    // стартовала (иначе деплой игры без деплоя движка не подхватился бы)
+    if (this._swap.game) {
+      this._room.game = this._swap.game;
+    }
 
     const next = this._createWorker(this._swap.url);
 

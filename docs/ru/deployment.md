@@ -4,7 +4,7 @@
 
 **Как это работает**: пуш в `main` → [.github/workflows/deploy.yml](../../.github/workflows/deploy.yml) собирает Docker-образ и публикует его в GHCR → по SSH заходит на каждый сервер из `SERVERS_MATRIX`, генерирует `.env` и перезапускает контейнер `vimp-<domain>`. На VPS Nginx терминирует HTTPS и проксирует на порт приложения (внутри контейнера мастер слушает `3002`).
 
-> **Rust-тулчейн в сборке.** Worker браузерного хоста грузит WASM-ядро (`core/pkg-web/`), поэтому [Dockerfile](../../Dockerfile) собирает его отдельной стадией `core-builder` (`rust:slim` + `wasm-pack`), а node-стадия выполняет `npm run build:app` (аудио + Vite) с уже готовым `pkg-web`. Локальный `npm run build` делает то же одной командой и требует Rust-тулчейн (см. [getting-started.md](getting-started.md#rust-тулчейн-ядро-core)).
+> **Rust-тулчейн в сборке.** Worker браузерного хоста грузит WASM-ядро (`core/pkg-web/`), поэтому [Dockerfile](../../Dockerfile) собирает его отдельной стадией `core-builder` (`rust:slim` + `wasm-pack`), а node-стадия выполняет `npm run build:app` (аудио + Vite) с уже готовым `pkg-web`. Локальный `npm run build` дополнительно собирает бандл игры-плагина `@vimp/tanks` (`npm run game:build`, нужен `GameCatalog`'у — см. [getting-started.md](getting-started.md#rust-тулчейн-ядро-core)); Docker-образ пока его не собирает (перенесено на Этап 8 распила движок/игра) — прод-контейнеру сейчас нужен бандл игры, доставленный иным способом (запечён отдельно, либо будущая Docker-стадия).
 
 ## 📋 Предварительные требования
 

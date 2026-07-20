@@ -291,7 +291,7 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 | 6.2 ✅ | **Мастер**: `GameCatalog` (`packages/engine/src/master/GameCatalog.js`, по образцу `WorkerCatalog`) — сканирует `dist/games/*/manifest.json`; REST `/games/manifest.json`, `/games/:id/manifest.json`, `/games/:id/maps/*` (per-game `MapCatalog`); `HostRegistry` + `GET /servers` + `register_host`/`host_registered` — поля `gameId`/`gameVersion`. Dev-режим: манифест с Vite-URL исходников (`/@fs/…/games/tanks/src/client/index.js` — трансформация и HMR штатные), `entries.wasm` — Vite-URL `.wasm` из `pkg-web`; ассеты (звуки, карты из `games/tanks/src/data`) — `express.static`-mount `/games/:id/` на мастере |
 | 6.3 ✅ | **Клиент**: лобби — `roomDefaults` из манифеста в форму создания комнаты (селект игры скрыт, пока игра одна); «Создать сервер» — фича-детект module worker + dynamic import с внятной ошибкой («браузер не может быть хостом»; join не блокируется); join: `GET /games/:id/manifest.json` → `import(entries.client)` → проверка `engineApi` → подключение; `sounds.path` от `assetsBase`; удалить клиентскую половину `gameRegistry.static.js` |
 | 6.4 ✅ | **Worker**: `init`-сообщение несёт `room.game = {id, version, hostEntryUrl, wasmUrl}`; `host.worker.js` → `await import(hostEntryUrl)` → `plugin.createCore(coreConfigJson, { wasmUrl })`; `applyRoomOverrides` валидирует по `roomDefaults`; удалить `gameRegistry.static.js` целиком |
-| 6.5 | **Эстафета**: составной `codeVersion` (движок+игра), `HANDOFF_VERSION=2` (+gameId/gameVersion), при свопе новый Worker получает свежий `hostEntryUrl`; сбой → существующий `resume`-путь |
+| 6.5 ✅ | **Эстафета**: составной `codeVersion` (движок+игра), `HANDOFF_VERSION=2` (+gameId/gameVersion), при свопе новый Worker получает свежий `hostEntryUrl`; сбой → существующий `resume`-путь |
 
 **6.3 — заметки реализации.** Новый модуль
 `packages/engine/src/lib/gamePlugin.js` (`fetchGamesManifest`,
@@ -385,6 +385,38 @@ dev-манифест с `entries.host`/`entries.wasm` на `/@fs/`-путях и
 каталогом. `npx eslint .` и `npm test` — 683/683 зелёные (тот же счётчик,
 что и после 6.3 — распил не добавил и не убрал тестов, только сместил
 точку внедрения зависимости).
+
+**6.5 — заметки реализации.** Составной `codeVersion` собирается на мастере
+(`SignalingServer._onRegisterHost`) как `{ engine, game: { id, version } }`:
+`engine` — прежний `WorkerCatalog.version`, `game.version` — источник
+истины `GameCatalog.getManifest(gameId).version` (fallback на
+самоприсланный хостом `gameVersion`, только если игра неизвестна каталогу,
+как и у `mapsVersion`); `main.js`/`WorkerCatalog` не менялись — композиция
+целиком в `SignalingServer`. Клиент (`packages/engine/src/client/main.js`)
+хранит `hostCodeVersion`/`failedCodeVersion` тем же составным объектом,
+сравнивает через `codeVersionKey()` (строковый ключ `engine:gameId:gameVersion`
+— расхождение любой части триггерит `refreshHostWorker`, как и раньше
+триггерило только расхождение движка). `refreshHostWorker()` теперь фетчит
+не только `/worker/manifest.json`, но и свежий `GET /games/:id/manifest.json`
+активной игры (`fetchGameManifest`, новый метод `lobbyConfig.game.manifestUrl`)
+— из него собирается новый `room.game` (`{id, version, hostEntryUrl,
+wasmUrl}`), который едет в `HostController.swapWorker(url, game)` вторым
+аргументом. `HostController._onHandoffState` подменяет `this._room.game`
+этим свежим объектом непосредственно перед `init` нового Worker'а (тот же
+приём, что и `updateMaps` для `room.maps`) — деплой только игры (без деплоя
+движка) теперь тоже запускает релокацию и новый Worker не подхватывает
+протухший `hostEntryUrl` из момента создания комнаты. `HANDOFF_VERSION`
+(`host/HostGame.js`) поднят до 2: `_collectHandoff`/`_restoreFromHandoff`
+несут `gameId` (из `hostPlugin.id`, загруженного при `onInit`) и
+`gameVersion` (проброшен новым опциональным параметром конструктора
+`HostGame`, `host.worker.js` передаёт `room.game.version`); рассинхрон
+`gameId` при восстановлении — та же ошибка init, что и раньше валила
+несовместимую версию формата, штатный `resume`-путь не менялся. Новые/правленные
+тесты: `tests/master/SignalingServer.test.js` (составной `codeVersion` в
+`host_registered`, `game.version` из каталога против `gameVersion` хоста),
+`tests/host/HostGame.test.js` (`meta.version === 2`, `meta.gameId`, новый
+тест на рассинхрон `gameId`). `npx eslint .` и `npm test` — 684/684 зелёные
+(+1 к счётчику 6.4 — новый тест на game-mismatch).
 
 **6.2 — заметки реализации.** Реальный выход сборки игры (6.1) —
 `games/tanks/dist/`, а не `dist/games/tanks/` из §2/6.1 — `GameCatalog` сканирует

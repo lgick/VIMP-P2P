@@ -36,6 +36,14 @@ if (isProduction) {
   }
 }
 
+// каталог игр-плагинов (Этап 6.2): сканирует games/*/dist/manifest.json
+// (продукт `npm run game:build`); в dev entries указывают на Vite-исходники
+// (HMR), maps/assetsBase — из уже собранного dist (как и WorkerCatalog,
+// требует сборки игры один раз перед первым запуском)
+const gameCatalog = new GameCatalog(path.resolve('..', '..', 'games'), {
+  dev: !isProduction,
+});
+
 console.info('------------------------------------------');
 console.info('Master Server Settings:');
 console.info(`-> Domain: ${config.get('master:domain')}`);
@@ -43,6 +51,15 @@ console.info(`-> Port: ${config.get('master:port')}`);
 console.info(`-> Region threshold: ${config.get('master:servers:regionThreshold')}`);
 console.info(`-> Max players per host: ${config.get('master:host:maxPlayersLimit')}`);
 console.info(`-> Ban threshold: ${config.get('master:host:banThreshold')} reports`);
+
+if (gameCatalog.ids.length > 0) {
+  console.info(`-> Games loaded: ${gameCatalog.ids.join(', ')}`);
+} else {
+  console.warn(
+    '-> Games loaded: none (run `npm run game:build` before starting the master)',
+  );
+}
+
 console.info('------------------------------------------');
 
 const registry = new HostRegistry({
@@ -60,14 +77,6 @@ const registry = new HostRegistry({
 const workerCatalog = new WorkerCatalog(
   isProduction ? path.resolve('dist', 'assets') : null,
 );
-
-// каталог игр-плагинов (Этап 6.2): сканирует games/*/dist/manifest.json
-// (продукт `npm run game:build`); в dev entries указывают на Vite-исходники
-// (HMR), maps/assetsBase — из уже собранного dist (как и WorkerCatalog,
-// требует сборки игры один раз перед первым запуском)
-const gameCatalog = new GameCatalog(path.resolve('..', '..', 'games'), {
-  dev: !isProduction,
-});
 
 const signaling = new SignalingServer(registry, {
   iceServers: config.get('master:iceServers'),

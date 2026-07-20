@@ -43,8 +43,8 @@ Other commands:
 
 ```bash
 npm start              # production run of the master (reads .env: VIMP_DOMAIN, etc.)
-npm run build           # production build (WASM core + audio processing + Vite bundle)
-npm run build:app       # build without the core (audio + Vite; core already built)
+npm run build           # production build (WASM core + game plugin bundle + audio processing + engine Vite bundle)
+npm run build:app       # engine build only (audio + Vite; core and game plugin already built)
 npm run core:build      # build the Rust core to WASM (web + nodejs; needs the Rust toolchain)
 npm run core:test       # Rust core tests (cargo test)
 npm run maps:export     # export maps to JSON (games/tanks/dist/maps/) for the master/core

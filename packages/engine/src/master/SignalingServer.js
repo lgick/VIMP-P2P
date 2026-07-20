@@ -144,16 +144,24 @@ export default class SignalingServer {
     const gameManifest = gameId ? this._gameCatalog?.getManifest(gameId) : null;
     const mapsVersion = gameManifest?.maps.version ?? this._mapsVersion;
 
+    // составной codeVersion (Этап 6.5): движок (worker-бандл) + игра
+    // (id/version из каталога — источник истины, не то, что заявил хост);
+    // без каталога/gameId — только движковая половина, как раньше
+    const codeVersion = {
+      engine: this._codeVersion,
+      game: { id: host.gameId, version: gameManifest?.version ?? gameVersion ?? null },
+    };
+
     // mapsVersion/codeVersion — актуальные версии каталога карт и
-    // worker-бандла: при re-register после разрыва (деплой рестартует мастер)
-    // хост сравнивает их со своими и при расхождении фетчит карты /
-    // заменяет Worker эстафетой (Этапы 5.1/5.2)
+    // worker-бандла+игры: при re-register после разрыва (деплой рестартует
+    // мастер) хост сравнивает их со своими и при расхождении фетчит карты /
+    // заменяет Worker эстафетой (Этапы 5.1/5.2/6.5)
     this._send(session, {
       type: 'host_registered',
       hostId: host.hostId,
       gameId: host.gameId,
       mapsVersion,
-      codeVersion: this._codeVersion,
+      codeVersion,
     });
   }
 

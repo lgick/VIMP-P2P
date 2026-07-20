@@ -11,6 +11,7 @@ import wsports from '../config/wsports.js';
 import { buildClientConfig } from '../lib/buildClientConfig.js';
 import { buildCoreConfig } from '../lib/coreConfig.js';
 import { validateAuth } from '../lib/validators.js';
+import { assertGameConfigShape } from '../lib/gamePlugin.js';
 import SocketManager from './meta/SocketManager.js';
 import HostGame from './HostGame.js';
 
@@ -133,6 +134,7 @@ async function onInit(room, handoff = null) {
   const pluginModule = await import(/* @vite-ignore */ room.game.hostEntryUrl);
 
   hostPlugin = pluginModule.default;
+  assertGameConfigShape(hostPlugin);
 
   const game = applyRoomOverrides(room, hostPlugin);
   const seed = (Math.random() * 2 ** 32) >>> 0;
@@ -160,6 +162,7 @@ async function onInit(room, handoff = null) {
     hostSocketId: room?.hostSocketId ?? null,
     onMapChange: mapName => self.postMessage({ type: 'map_changed', mapName }),
     handoff,
+    gameVersion: room.game.version,
   });
 
   if (handoff) {

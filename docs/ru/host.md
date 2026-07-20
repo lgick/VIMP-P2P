@@ -389,16 +389,24 @@ reconnect) или сигнал `update_available` мастера → `refreshHos
 **Обнаружение новой версии.** Worker комнаты создаётся по `url` из
 `GET /worker/manifest.json` мастера (`lobbyConfig.worker.manifestUrl`) — Vite
 хеширует имена ассетов, и после деплоя бандловый URL старой страницы исчезает
-из раздачи; версия манифеста запоминается (`hostCodeVersion`). Деплой
-рестартует мастер → сигнальный WS рвётся → штатный reconnect → re-register →
-`host_registered.codeVersion` расходится с нашей → `refreshHostWorker()`:
-повторный фетч манифеста → `HostController.swapWorker(url)`. Версия, своп на
-которую не удался, запоминается и не ретраится на каждом re-register. Также
-обрабатывается `update_available { codeVersion }` (push мастера, на будущее).
-В dev манифест пуст (`version: null`) — обновления кода отключены, Worker
-бандловый.
+из раздачи; запоминается составной `hostCodeVersion`: `{ engine, game: { id,
+version } }` (Этап 6.5). Деплой рестартует мастер → сигнальный WS рвётся →
+штатный reconnect → re-register → `host_registered.codeVersion` расходится с
+нашим по любой половине (деплой движка меняет `engine`, деплой только
+игры-плагина — `game.version`) → `refreshHostWorker()`: повторный фетч
+**обоих** манифестов — `GET /worker/manifest.json` и активной игры
+`GET /games/:id/manifest.json` (`lobbyConfig.game.manifestUrl`) — собирает
+свежий `room.game` (`{ id, version, hostEntryUrl, wasmUrl }` из свежих
+`entries.host`/`entries.wasm`) и зовёт
+`HostController.swapWorker(url, свежийRoomGame)` — деплой только игры
+запускает эстафету точно так же, как деплой только движка, а новый Worker
+никогда не импортирует протухший `hostEntryUrl`. Версия (по тому же
+составному ключу), своп на которую не удался, запоминается и не ретраится на
+каждом re-register. Также обрабатывается `update_available { codeVersion }`
+(push мастера, на будущее). В dev манифест worker-бандла пуст
+(`version: null`) — обновления кода отключены, Worker бандловый.
 
-**Протокол свопа** (`HostController.swapWorker`):
+**Протокол свопа** (`HostController.swapWorker(url, game)`):
 
 1. старому Worker'у уходит `prepare_handoff` → `HostGame.requestHandoff`
    ставит колбэк в `RoundManager`; игра продолжается до ближайшей границы
@@ -407,13 +415,16 @@ reconnect) или сигнал `update_available` мастера → `refreshHos
 2. на границе старый Worker останавливает игру (`stopGameTimers` + idle) и
    шлёт `handoff_state { state }`; с этого момента `HostController` буферизует
    входящие сообщения клиентов (очередь с капом);
-3. главный поток создаёт новый Worker по URL новой версии и шлёт ему
-   `init { room, handoff: state }` (в `room.maps` — актуальный каталог карт);
-4. новый Worker восстанавливает комнату (см. ниже) и отвечает `ready` →
-   `HostController` переподключает всех живых клиентов внутренними
-   `connect`'ами (порт-машины поднимаются минуя handshake), доставляет
-   накопленную очередь, шлёт `handoff_complete` и гасит старый Worker
-   (`terminate`);
+3. `HostController` подменяет `room.game` свежим манифестом, переданным в
+   `swapWorker` (Этап 6.5 — без него остаётся прежний `room.game`), создаёт
+   новый Worker по URL новой версии и шлёт ему `init { room, handoff: state }`
+   (в `room.maps` — актуальный каталог карт, в `room.game` — свежие
+   `hostEntryUrl`/`wasmUrl`);
+4. новый Worker импортирует `room.game.hostEntryUrl` (Этап 6.4), восстанавливает
+   комнату (см. ниже) и отвечает `ready` → `HostController` переподключает
+   всех живых клиентов внутренними `connect`'ами (порт-машины поднимаются
+   минуя handshake), доставляет накопленную очередь, шлёт `handoff_complete`
+   и гасит старый Worker (`terminate`);
 5. `handoff_complete` в новом Worker'е: `HostGame.completeHandoff` кикает
    восстановленных участников, чей `connect` не пришёл (отвалились в паузу),
    возобновляет таймеры (карта — с остатком времени, `TimerManager.
@@ -421,21 +432,26 @@ reconnect) или сигнал `update_available` мастера → `refreshHos
    штатные `sendClear`/респаун/старт раунда (`sendSoundCue`+`sendGameInform`).
 
 **Handoff-мета** (`HostGame._collectHandoff`, формат версионирован —
-`HANDOFF_VERSION`): участники-люди с `isReady` (gameId/socketId/имя/модель/
-команда) и боты (с исходными gameId — единое числовое пространство
-сохраняется), счёт `Stat` целиком, текущая карта + остаток её времени, `seq`
-кадров (нумерация снапшотов продолжается — интерполятор клиентов не ломается).
-**Осознанно не переносятся**: чат-история, активные голосования и кулдауны,
-RTT-статистика, panel (здоровье/боезапас живут в ядре и сбрасываются стартом
-раунда), не завершившие handshake гости (их строки в scoreboard вычищаются,
-клиенту такой гость проходит handshake заново).
+`HANDOFF_VERSION = 2` с Этапа 6.5, добавившего `gameId`/`gameVersion`): id
+загруженного `HostPlugin` и версия игры комнаты (чтобы восстановление в
+несовпадающую игру — если такое вообще случится — падало явной ошибкой, а не
+тащило бессмысленное состояние), участники-люди с `isReady`
+(gameId/socketId/имя/модель/команда) и боты (с исходными gameId — единое
+числовое пространство сохраняется), счёт `Stat` целиком, текущая карта +
+остаток её времени, `seq` кадров (нумерация снапшотов продолжается —
+интерполятор клиентов не ломается). **Осознанно не переносятся**:
+чат-история, активные голосования и кулдауны, RTT-статистика, panel
+(здоровье/боезапас живут в ядре и сбрасываются стартом раунда), не
+завершившие handshake гости (их строки в scoreboard вычищаются, клиенту
+такой гость проходит handshake заново).
 
 **Отказоустойчивость**: сбой init нового Worker'а (`error`: несовместимая
-`HANDOFF_VERSION`, карта ушла из каталога, сбой WASM) или таймаут (15 с) →
-новый Worker гасится, старому уходит `resume` (`resumeAfterHandoff`:
-возврат таймеров + перезапуск прерванного раунда) — **комната продолжает жить
-на прежней версии кода**, игроки ничего не замечают. Параллельные свопы
-исключены (guard в `main.js` и в `HostController`).
+`HANDOFF_VERSION`, рассинхрон `gameId`, карта ушла из каталога, сбой WASM)
+или таймаут (15 с) → новый Worker гасится, старому уходит `resume`
+(`resumeAfterHandoff`: возврат таймеров + перезапуск прерванного раунда) —
+**комната продолжает жить на прежней версии кода**, игроки ничего не
+замечают. Параллельные свопы исключены (guard в `main.js` и в
+`HostController`).
 
 В лобби (`packages/engine/src/client/main.js`):
 

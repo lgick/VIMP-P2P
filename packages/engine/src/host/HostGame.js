@@ -12,10 +12,11 @@ import CommandProcessor from './meta/core/CommandProcessor.js';
 import { sanitizeMessage } from '../lib/sanitizers.js';
 import GameCoreAdapter from './GameCoreAdapter.js';
 
-// Версия формата handoff-меты эстафеты Worker'ов (Этап 5.2). Несовместимая
-// версия валит init нового Worker'а — главный поток возобновляет старый,
-// комната продолжает жить на прежней версии кода
-export const HANDOFF_VERSION = 1;
+// Версия формата handoff-меты эстафеты Worker'ов (Этап 5.2; →2 в Этапе 6.5 —
+// добавлены gameId/gameVersion). Несовместимая версия валит init нового
+// Worker'а — главный поток возобновляет старый, комната продолжает жить на
+// прежней версии кода
+export const HANDOFF_VERSION = 2;
 
 // Троттлинг отправки кадров (замена SnapshotManager: ядро само копит события
 // и дренирует их в pack_body, здесь нужен только контроль частоты).
@@ -65,18 +66,31 @@ export default class HostGame {
    *   смене (голосование/таймер) — для актуализации комнаты у мастера.
    * @param {Object} [opts.handoff] - handoff-мета эстафеты Worker'ов
    *   (Этап 5.2): восстановление комнаты вместо холодного старта.
+   * @param {string} [opts.gameVersion] - версия игры комнаты (room.game.version,
+   *   Этап 6.5): едет в handoff-мете рядом с gameId — расхождение с игрой
+   *   восстанавливающего Worker'а валит init тем же путём, что и версия формата.
    */
   constructor(
     data,
     socketManager,
     core,
     hostPlugin,
-    { hostSocketId = null, onMapChange = null, handoff = null } = {},
+    {
+      hostSocketId = null,
+      onMapChange = null,
+      handoff = null,
+      gameVersion = null,
+    } = {},
   ) {
     this._isDevMode = data.isDevMode || false;
 
     this._hostSocketId = hostSocketId;
     this._onMapChange = onMapChange;
+
+    // составной codeVersion (Этап 6.5): id — из самого загруженного плагина
+    // (источник истины), version — то, что заявил Worker при инициализации
+    this._gameId = hostPlugin.id;
+    this._gameVersion = gameVersion;
 
     this._maps = data.maps;
     this._mapList = Object.keys(data.maps);
@@ -529,6 +543,8 @@ export default class HostGame {
 
     return {
       version: HANDOFF_VERSION,
+      gameId: this._gameId,
+      gameVersion: this._gameVersion,
       seq: this._seq,
       currentMap: this._roundManager.currentMap,
       mapTimeLeft: this._timerManager.getMapTimeLeft(),
@@ -539,11 +555,20 @@ export default class HostGame {
   }
 
   // восстанавливает комнату из handoff-меты. Ошибка (несовместимый формат,
-  // карта ушла из каталога) валит init Worker'а — главный поток возобновляет
-  // старый Worker, комната живёт на прежней версии
+  // чужая игра, карта ушла из каталога) валит init Worker'а — главный поток
+  // возобновляет старый Worker, комната живёт на прежней версии
   _restoreFromHandoff(meta) {
     if (!meta || meta.version !== HANDOFF_VERSION) {
       throw new Error(`unsupported handoff version: ${meta && meta.version}`);
+    }
+
+    // составной codeVersion (Этап 6.5): своп меняет только версию кода в
+    // рамках той же игры — смена самой игры комнаты handoff'ом не
+    // предусмотрена, рассинхрон id — явный сбой конфигурации свопа
+    if (meta.gameId !== undefined && meta.gameId !== this._gameId) {
+      throw new Error(
+        `handoff game mismatch: expected "${this._gameId}", got "${meta.gameId}"`,
+      );
     }
 
     if (!this._maps[meta.currentMap]) {

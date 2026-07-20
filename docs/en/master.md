@@ -110,11 +110,26 @@ The manifest of the host worker bundle used for the Worker handoff:
 hashes its content (SHA-256, 16 chars — following `MapCatalog`'s pattern).
 Vite hashes asset filenames, so an old build's page can't know the new
 bundle's name — the host tab creates its Worker from the `url` in the
-manifest and compares `version` against the `codeVersion` in
-`host_registered`. In dev the catalog is empty
-(`{ "version": null, "url": null }`) — the Worker is served by Vite from
-source, and code updates are disabled. How a host consumes the manifest —
-see [host.md](host.md#worker-handoff).
+manifest and compares `version` against the engine half of the composite
+`codeVersion` in `host_registered` (Stage 6.5 — see below). In dev the
+catalog is empty (`{ "version": null, "url": null }`) — the Worker is served
+by Vite from source, and code updates are disabled. How a host consumes the
+manifest — see [host.md](host.md#worker-handoff).
+
+### Composite `codeVersion`
+
+`host_registered.codeVersion` is `{ engine, game: { id, version } }` (Stage
+6.5): `engine` is `WorkerCatalog.version` (the host worker bundle hash,
+deploy-wide); `game.id`/`game.version` are the declared game's id and
+`GameCatalog.getManifest(id).version` (falls back to the host's own
+self-reported `gameVersion` only when the catalog doesn't know the game).
+Either half changing — an engine deploy or a game-plugin deploy — is a code
+mismatch: the host re-fetches `GET /worker/manifest.json` **and**
+`GET /games/:id/manifest.json`, then swaps its Worker to the fresh bundle
+*and* the fresh `entries.host`/`entries.wasm` in one handoff, so a game-only
+redeploy triggers a relay exactly like an engine-only one. See
+[host.md](host.md#worker-handoff) for the swap protocol and
+`HANDOFF_VERSION`.
 
 ## Signaling protocol (WebSocket)
 
@@ -135,7 +150,7 @@ The client-side signaling counterpart — [packages/engine/src/client/network/Si
 
 | → to master | Response / effect |
 | --- | --- |
-| `register_host { name, maxPlayers, mapName, gameId, gameVersion }` | `host_registered { hostId, gameId, mapsVersion, codeVersion }`; region — from the header, IP — from the connection; `gameId`/`gameVersion` — which game plugin/manifest version the host is running (stored on the session, echoed back; every host sends them as of Stage 6.4 — `connectAsHost` builds `room.game` from the active `GameManifest`); `mapsVersion` — the declared game's `GameManifest.maps.version` via `GameCatalog` (`null` if `gameId` is unknown to the catalog); `codeVersion` — the engine worker-bundle version (on re-register after a disconnect — a deploy restarts the master — the host compares them to its own: a map mismatch triggers a catalog re-read, a code mismatch triggers a Worker handoff). Errors: `alreadyRegistered`, `hostLimit` (a room from this IP already exists) |
+| `register_host { name, maxPlayers, mapName, gameId, gameVersion }` | `host_registered { hostId, gameId, mapsVersion, codeVersion }`; region — from the header, IP — from the connection; `gameId`/`gameVersion` — which game plugin/manifest version the host is running (stored on the session, echoed back; every host sends them as of Stage 6.4 — `connectAsHost` builds `room.game` from the active `GameManifest`); `mapsVersion` — the declared game's `GameManifest.maps.version` via `GameCatalog` (`null` if `gameId` is unknown to the catalog); `codeVersion` — composite `{ engine, game: { id, version } }` (Stage 6.5, see above; `engine` is the worker-bundle version) — on re-register after a disconnect (a deploy restarts the master) the host compares them to its own: a map mismatch triggers a catalog re-read, a mismatch in either `codeVersion` half triggers a Worker handoff. Errors: `alreadyRegistered`, `hostLimit` (a room from this IP already exists) |
 | `update_host { currentPlayers, mapName }` | refreshes room data (also serves as a heartbeat) |
 | `heartbeat {}` | updates `lastSeen` |
 | `webrtc_answer { clientId, sdp }` | forwarded to the client as `webrtc_answer { hostId, sdp }` |
