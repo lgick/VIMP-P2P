@@ -452,12 +452,68 @@ JSON (`dist/manifest.json` + `dist/maps/*.json`), никаких `import` игр
 
 Готово: `npm run build` даёт dist движка + `dist/games/tanks/`; ручной сценарий эстафеты с подменой версии игры; dev-режим без пересборки работает; тесты зелёные.
 
-### Этап 7. Фикстурная мини-игра и CI-матрица (M, 2 PR; можно после 5)
+### Этап 7. Фикстурная мини-игра и CI-матрица (M, 2 PR; можно после 5) — ✅ выполнен
 
 - JS-фикстура `packages/engine/tests/fixtures/miniGame/`: HostPlugin с fake-core (JS-объект, реализующий Wasm Host ABI — благодаря generic ABI это ~150 строк) + ClientPlugin с 1–2 заглушечными parts и минимальными схемами panel/stat (1 команда! — проверка настраиваемости). Тесты движковой меты/HostGame переводятся на фикстуру; интеграционные на реальном `@vimp/tanks` остаются в `integration`.
 - Rust: расширить сценарии `TestGame` в engine-crate (схемы снапшота, предиктор).
 - CI-матрица: `lint` → `engine` (cargo engine + vitest engine-*) / `tanks` (cargo tanks + vitest tanks) / `integration` (core:build:node + сборка игры + integration).
 - Готово: движковые тесты проходят без Rust-артефактов игры; матрица зелёная. Фикстура — фактическое доказательство «второй игры».
+
+**Заметки реализации.** `packages/engine/tests/fixtures/miniGame/` — самостоятельный
+HostPlugin/ClientPlugin (`id: 'miniGame'`), структурно отличный от танков: одна
+играющая команда (`team1` + `spectators`, вместо `team1`/`team2`), без оружия
+(`parts.weapons: {}`), один флаг панели, `/spawn` вместо `/bot` (генерик
+`ScriptedManager` — зеркало `TanksBotManager`, тот же контракт scripted-модуля).
+`host/fakeCore.js` — `FakeGameCore`: актёры — плоские JS-объекты (`x/y/vx/vy`),
+без Rapier/WASM; реализует полную поверхность методов, которые вызывает
+`GameCoreAdapter` (`load_map`/`spawn_actor`/`apply_input`/`step`/`take_events`/
+`pack_body`/`pack_frame`/`serialize_state`/… — 23 метода). Обнаружено, что
+движковый `RoundManager`/`RTTManager` безусловно пишут в Stat поля
+`status`/`score`/`deaths`/`latency` (не через схему) — стат-схема фикстуры
+поэтому несёт тот же набор колонок, что и танки; отличие — только число
+играющих команд (1 вместо 2), это и есть проверяемая ось настраиваемости, а
+не произвольность самих колонок. `camelcase` ESLint-правило выключено точечно
+для `fakeCore.js`/`fakeClientCore.js` (имена методов зеркалят Wasm Host ABI —
+snake_case, как у настоящих wasm-bindgen-биндингов).
+
+Тесты: `tests/host/fixtureHarness.js` (переиспользует `onboarding`-хелперы
+`tests/host/harness.js` — они не завязаны на конкретное ядро; `createHost`
+не переиспользуется — тот дергает реальный `@vimp/tanks`) +
+`tests/host/HostGame.fixture.test.js` (8 сценариев: карта, онбординг, вход в
+команду, движение, `/spawn`, стат с одной командой, `removeUser`, эстафета
+`requestHandoff`/восстановление) — в проекте `engine-node` (без гейта). Плюс
+`packages/engine/tests/fixtures/miniGame.contract.test.js` (6 тестов) —
+проверяет форму контракта (ABI-поверхность fake-core, `assertGameConfigShape`,
+совместимость с `buildCoreConfig`, `engineApi`, число parts). Проверено вручную
+(временным удалением `pkg-node`/`pkg-web`): весь `engine-node`+`engine-client`
+(618 тестов) проходит без единого собранного Rust-артефакта игры.
+
+Rust: `packages/engine/core/src/game.rs` — фикстура `TestGame`/`TestSim`
+(`#[cfg(test)] mod fixture`), актёры без Rapier-тел (тот же принцип, что у
+клиентской фикстуры `TestClient`, `client/game.rs`, — форма ABI важнее
+физики); 5 тестов (`spawn_actor`+`on_fixed_step` движение, `remove_actor`,
+`on_ai_tick` для scripted-актёра, упаковка `build_snapshot_blocks` через
+реальный `SnapshotPacker`, `serialize`/`deserialize` round-trip). В
+`client/game.rs` добавлен 4-й тест к существующей фикстуре `TestClient`:
+второй ключ схемы другого `BlockKind` (`indexedNoNull8` рядом с `indexed8`) —
+доказывает, что hot-буфер остаётся schema-driven для произвольного набора
+ключей. `cargo test --workspace` — 59 (engine, было 52) + 38 (tanks) + 12
+(integration) = 109, зелёные.
+
+CI (`.github/workflows/test.yml`) — четыре независимых job вместо одного:
+`lint` (только eslint), `engine` (`cargo test -p vimp-engine-core` +
+`vitest run --project engine-node --project engine-client`, без сборки WASM
+вообще), `tanks` (`cargo test -p vimp-tanks-core` + `core:build:web` +
+`vitest run --project tanks`), `integration` (`core:build` — оба таргета —
++ `vitest run --project integration`). При построении матрицы обнаружен
+скрытый пробел прежнего единого пайплайна: он собирал только
+`core:build:node`, а `tests/host/harness.js` (используется
+`HostGame.test.js`) и весь проект `tanks` (`hostPlugin.test.js` и др.)
+статически импортируют `@vimp/tanks/host|client/index.js`, которые грузят
+именно `pkg-web`, а не `pkg-node` — на чистом чекауте (без локально
+собранных артефактов на диске) прежний CI упал бы на этих тестах; починено
+явной сборкой обоих таргетов там, где они нужны (проверено локально —
+временным перемещением `pkg-node`/`pkg-web`).
 
 ### Этап 8. Сборка, деплой, документация, финал (L, 2–3 PR)
 

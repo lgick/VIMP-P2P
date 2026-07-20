@@ -155,9 +155,12 @@ export default [
     },
   },
 
-  // конфигурация для тестов (Vitest)
+  // конфигурация для тестов (Vitest) + движковой тестовой фикстуры
+  // (packages/engine/tests/fixtures/miniGame/**, Этап 7 плана: HostPlugin/
+  // ClientPlugin фикстуры и её собственные тесты — вне packages/engine/src/,
+  // поэтому не попадают под другие блоки globals/sourceType выше)
   {
-    files: ['tests/**/*.js'],
+    files: ['tests/**/*.js', 'packages/engine/tests/**/*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -209,6 +212,19 @@ export default [
         // RTCPeerConnection, encodeURIComponent), переименовать нельзя
         { exceptions: ['VX', 'VY', 'RTT', 'URL', 'RTC', 'URI'] },
       ],
+    },
+  },
+
+  // fake-core фикстуры миниигры: имена методов зеркалят Wasm Host ABI
+  // (snake_case, как у настоящих wasm-bindgen-биндингов GameCore/ClientCore) —
+  // camelCase здесь неприменим, это не движковый JS-код, а стенд-ин ядра
+  {
+    files: [
+      'packages/engine/tests/fixtures/miniGame/host/fakeCore.js',
+      'packages/engine/tests/fixtures/miniGame/client/fakeClientCore.js',
+    ],
+    rules: {
+      camelcase: 'off',
     },
   },
 

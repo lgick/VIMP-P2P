@@ -81,14 +81,16 @@ npm run core:test             # Rust-тесты
 
 ## Тесты
 
-Стек: **Vitest** + happy-dom (клиентские тесты) + coverage-v8. Конфиг `vitest.config.js` делит прогон на два проекта:
+Стек: **Vitest** + happy-dom (клиентские тесты) + coverage-v8. Конфиг `vitest.config.js` делит прогон на четыре проекта:
 
-- `node` — `tests/master`, `tests/host`, `tests/lib`, `tests/config`, `tests/core` (окружение node);
-- `client` — `tests/client` (окружение happy-dom).
+- `engine-node` — `tests/master`, `tests/host` (кроме игровых файлов ниже), `tests/lib`, `tests/config`, `packages/engine/tests/fixtures` (окружение node);
+- `engine-client` — `tests/client` (кроме `tanksClientPlugin.test.js`, окружение happy-dom);
+- `tanks` — `tests/host/hostPlugin.test.js`, `botCommand.test.js`, `TanksBotManager.test.js`, `tests/client/tanksClientPlugin.test.js`;
+- `integration` — `tests/host/HostGame.test.js` + `tests/core/**` (реальное ядро, пропускается без собранного `core/pkg-node/`).
 
-Тесты лежат в `tests/` и зеркалят структуру `packages/engine/src/` и `games/tanks/src/` (Vitest-проекты: engine-node, engine-client, tanks, integration). Интеграция host-фасада поверх реального ядра — `tests/host/HostGame.test.js`; JS↔WASM харнесс Rust-ядра — в `tests/core/` (пропускается без собранного `core/pkg-node/`, см. [core.md](core.md)); Rust-тесты ядра гоняются отдельно (`npm run core:test`). Правило проекта: **любое изменение кода завершается зелёными `npx eslint .` и `npm test`**; при правке движения в ядре или `models.js` обязателен cargo-паритет реплики предикта (`npm run core:test`).
+Тесты лежат в `tests/` и зеркалят структуру `packages/engine/src/` и `games/tanks/src/`. Интеграция host-фасада поверх реального ядра — `tests/host/HostGame.test.js`; JS↔WASM харнесс Rust-ядра — в `tests/core/` (см. [core.md](core.md)); Rust-тесты ядра гоняются отдельно (`npm run core:test`). `packages/engine/tests/fixtures/miniGame/` — самостоятельная вторая пара HostPlugin/ClientPlugin (fake-core, без WASM), доказывающая, что движок и его мета (Panel/Stat/RoundManager/CommandProcessor/…) работают с любой игрой, а не только с `@vimp/tanks` — `engine-node`/`engine-client` зелёные без единого собранного Rust-артефакта игры. Правило проекта: **любое изменение кода завершается зелёными `npx eslint .` и `npm test`**; при правке движения в ядре или `models.js` обязателен cargo-паритет реплики предикта (`npm run core:test`).
 
-CI (`.github/workflows/test.yml`) гоняет eslint, Rust-тесты ядра, сборку nodejs-таргета ядра и Vitest на каждый push/PR.
+CI (`.github/workflows/test.yml`) — четыре независимых job: `lint` (только eslint); `engine` (`cargo test -p vimp-engine-core` + Vitest-проекты `engine-node`/`engine-client`, без сборки WASM вообще); `tanks` (`cargo test -p vimp-tanks-core` + `core:build:web` + Vitest-проект `tanks`); `integration` (`core:build` — оба таргета — + Vitest-проект `integration`).
 
 ---
 

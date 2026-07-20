@@ -640,4 +640,60 @@ mod tests {
 
         assert_eq!(state.take_frames(), "[]");
     }
+
+    // Расширение сценариев фикстуры (Этап 7 плана отделения движка): второй
+    // ключ схемы другого BlockKind (IndexedNoNull8 — «динамика карты» по
+    // форме) наряду с Indexed8 («танк» по форме) — доказывает, что hot-буфер
+    // остаётся schema-driven для произвольного набора ключей, а не только
+    // для одного actor-блока выше.
+    #[test]
+    fn second_schema_key_of_different_block_kind_flows_into_hot_buffer() {
+        let config = serde_json::json!({
+            "timeStepMs": 1000.0 / 120.0,
+            "snapshot": {
+                "version": 3,
+                "port": 5,
+                "keys": {
+                    "actor": { "id": 1, "kind": "indexed8", "class": "hot", "fields": [
+                        { "name": "x", "ty": "f32", "interp": "lerp" },
+                        { "name": "y", "ty": "f32", "interp": "lerp" }
+                    ] },
+                    "zone": { "id": 2, "kind": "indexedNoNull8", "class": "hot", "fields": [
+                        { "name": "level", "ty": "f32", "interp": "discrete" }
+                    ] }
+                }
+            },
+            "interpolation": { "delay": 100, "maxFrameAge": 1000 }
+        });
+        let cfg: EngineClientConfig = serde_json::from_value(config).unwrap();
+        let mut state = ClientState::<TestClient>::new(cfg.clone(), &TestConfig {});
+        let mut packer = SnapshotPacker::new(cfg.snapshot.clone());
+
+        packer
+            .pack_body(&[
+                (
+                    "actor".to_string(),
+                    Block::Indexed8(vec![(2, Some(vec![FieldValue::F32(10.0), FieldValue::F32(0.0)]))]),
+                ),
+                (
+                    "zone".to_string(),
+                    Block::IndexedNoNull8(vec![(0, vec![FieldValue::F32(7.0)])]),
+                ),
+            ])
+            .unwrap();
+
+        let frame = packer.pack_frame(1000.0, 1, None, None).to_vec();
+
+        state.push_frame(&frame, 1000.0);
+        state.push_frame(&frame, 1100.0);
+        state.sample(1150.0);
+
+        let hot = state.hot().to_vec();
+
+        // [flags, camX, camY, tankCount, keyId, gameId, x, y, dynamicCount, keyId, index, level]
+        assert_eq!(hot[3], 1.0); // tankCount (Indexed8)
+        assert_eq!(hot[8], 1.0); // dynamicCount (IndexedNoNull8)
+        assert_eq!(hot[9], 2.0); // keyId зоны
+        assert_eq!(hot[11], 7.0); // level
+    }
 }

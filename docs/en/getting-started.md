@@ -82,14 +82,16 @@ npm run core:test             # Rust tests
 
 ## Tests
 
-Stack: **Vitest** + happy-dom (client tests) + coverage-v8. `vitest.config.js` splits the run into two projects:
+Stack: **Vitest** + happy-dom (client tests) + coverage-v8. `vitest.config.js` splits the run into four projects:
 
-- `node` — `tests/master`, `tests/host`, `tests/lib`, `tests/config`, `tests/core` (node environment);
-- `client` — `tests/client` (happy-dom environment).
+- `engine-node` — `tests/master`, `tests/host` (except the tanks-specific files below), `tests/lib`, `tests/config`, `packages/engine/tests/fixtures` (node environment);
+- `engine-client` — `tests/client` (except `tanksClientPlugin.test.js`, happy-dom environment);
+- `tanks` — `tests/host/hostPlugin.test.js`, `botCommand.test.js`, `TanksBotManager.test.js`, `tests/client/tanksClientPlugin.test.js`;
+- `integration` — `tests/host/HostGame.test.js` + `tests/core/**` (real core, skipped without a built `core/pkg-node/`).
 
-Tests live in `tests/` and mirror the `packages/engine/src/` and `games/tanks/src/` layout (Vitest projects: engine-node, engine-client, tanks, integration). Host-facade integration on top of the real core — `tests/host/HostGame.test.js`; the JS↔WASM harness for the Rust core — `tests/core/` (skipped without a built `core/pkg-node/`, see [core.md](core.md)); Rust core tests run separately (`npm run core:test`). Project rule: **any code change must end with a green `npx eslint .` and `npm test`**; editing motion in the core or `models.js` requires the cargo predictor-replica parity run (`npm run core:test`).
+Tests live in `tests/` and mirror the `packages/engine/src/` and `games/tanks/src/` layout. Host-facade integration on top of the real core — `tests/host/HostGame.test.js`; the JS↔WASM harness for the Rust core — `tests/core/` (see [core.md](core.md)); Rust core tests run separately (`npm run core:test`). `packages/engine/tests/fixtures/miniGame/` is a self-contained second HostPlugin/ClientPlugin (fake-core, no WASM) that proves the engine and its meta modules (Panel/Stat/RoundManager/CommandProcessor/…) work with any game, not just `@vimp/tanks` — `engine-node`/`engine-client` pass with zero Rust artifacts built for the game. Project rule: **any code change must end with a green `npx eslint .` and `npm test`**; editing motion in the core or `models.js` requires the cargo predictor-replica parity run (`npm run core:test`).
 
-CI (`.github/workflows/test.yml`) runs eslint, the Rust core tests, the nodejs core-target build, and Vitest on every push/PR.
+CI (`.github/workflows/test.yml`) runs four independent jobs: `lint` (eslint only); `engine` (`cargo test -p vimp-engine-core` + the `engine-node`/`engine-client` Vitest projects, no WASM build at all); `tanks` (`cargo test -p vimp-tanks-core` + `core:build:web` + the `tanks` Vitest project); `integration` (`core:build` — both targets — + the `integration` Vitest project).
 
 ---
 

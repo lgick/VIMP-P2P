@@ -27,6 +27,7 @@ export default defineConfig({
             'tests/lib/**/*.test.js',
             'tests/config/**/*.test.js',
             'tests/host/**/*.test.js',
+            'packages/engine/tests/fixtures/**/*.test.js',
           ],
           exclude: [
             'tests/host/HostGame.test.js',
