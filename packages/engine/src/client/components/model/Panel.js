@@ -5,7 +5,9 @@ import Publisher from '../../../lib/Publisher.js';
 let panelModel;
 
 export default class PanelModel {
-  constructor(keys) {
+  // keys — маппинг wire-ключей на имена полей (h → health, wa → activeWeapon);
+  // fields — схема полей игры: форматирование задаёт type, а не имя поля
+  constructor(keys, fields = []) {
     if (panelModel) {
       return panelModel;
     }
@@ -13,6 +15,9 @@ export default class PanelModel {
     panelModel = this;
 
     this._keys = keys;
+    this._types = Object.fromEntries(
+      fields.map(field => [field.name, field.type]),
+    );
     this.publisher = new Publisher();
   }
 
@@ -45,7 +50,7 @@ export default class PanelModel {
         } else {
           value = Number(value);
 
-          if (name === 'time') {
+          if (this._types[name] === 'time') {
             value = this.formatTime(value);
           }
 

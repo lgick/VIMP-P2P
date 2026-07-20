@@ -40,5 +40,9 @@ export const buildClientConfig = (game, defaults, gameClient) => {
     weapons: game.parts.weapons,
   };
 
+  // снапшот-схема игры: клиент собирает по ней конфиг клиентского ядра и
+  // читает hot-буфер — бандл клиента не обязан совпадать с бандлом хоста
+  config.snapshot = game.snapshot;
+
   return config;
 };

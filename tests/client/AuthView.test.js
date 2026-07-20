@@ -134,3 +134,59 @@ describe('AuthView: события DOM', () => {
     expect(document.getElementById('auth').style.display).toBe('none');
   });
 });
+
+describe('AuthView: тексты игры (authSchema.texts, Д2)', () => {
+  const textElems = {
+    ...elems,
+    titleId: 'auth-title',
+    informsId: 'auth-informs',
+  };
+
+  const seedTextDom = () => {
+    seedDom();
+    const form = document.getElementById('auth-form');
+    const title = document.createElement('h2');
+    title.id = 'auth-title';
+    const informs = document.createElement('div');
+    informs.id = 'auth-informs';
+    form.appendChild(title);
+    form.appendChild(informs);
+  };
+
+  it('подставляет заголовок и help-секции в нейтральный каркас', () => {
+    seedTextDom();
+
+    new AuthView(makeModel(), textElems, {
+      title: 'My Game',
+      sections: [
+        {
+          heading: 'Controls',
+          lines: [
+            { keys: 'W, S', text: 'move' },
+            { separator: true },
+            { keys: 'J', text: 'fire', last: true },
+          ],
+        },
+      ],
+    });
+
+    expect(document.getElementById('auth-title').textContent).toBe('My Game');
+
+    const section = document.querySelector('#auth-informs .auth-inform');
+    expect(section.querySelector('h4').textContent).toBe('Controls');
+    expect(section.querySelector('hr')).not.toBeNull();
+
+    const lines = [...section.querySelectorAll('p')];
+    expect(lines[0].textContent).toBe('W, S - move');
+    expect(lines[1].className).toBe('last');
+  });
+
+  it('без texts каркас не трогается (обратная совместимость)', () => {
+    seedTextDom();
+
+    new AuthView(makeModel(), textElems);
+
+    expect(document.getElementById('auth-title').textContent).toBe('');
+    expect(document.getElementById('auth-informs').children.length).toBe(0);
+  });
+});

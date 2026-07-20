@@ -54,8 +54,9 @@ Steps:
 4. Register the entity in `games/tanks/src/config/client.js`: `parts.gameSets`
    (snapshot key → classes) and `parts.entitiesOnCanvas` (class →
    canvas).
-5. Register the weapon's snapshot keys (and its effects) in
-   `SNAPSHOT_KEYS` in [packages/engine/src/config/opcodes.js](../../packages/engine/src/config/opcodes.js)
+5. Register the weapon's snapshot keys (and its effects) in the game's
+   snapshot schema
+   [games/tanks/src/config/snapshot.js](../../games/tanks/src/config/snapshot.js)
    — an unregistered key breaks frame packing. If the existing `kind`
    values don't fit the data shape, add a new block layout to the engine's
    `packages/engine/core/src/snapshot.rs` and mirror it in the client

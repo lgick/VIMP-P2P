@@ -226,16 +226,14 @@ export default {
         w1: 'bullet',
         w2: 'bomb',
       },
-      // схема DOM панели: PanelView генерирует ячейки в порядке
-      // health → оружие → time; внешний вид — CSS игры
-      elems: {
-        time: 'panel-time',
-        health: 'panel-health',
-        weapons: {
-          bullet: 'panel-bullet',
-          bomb: 'panel-bomb',
-        },
-      },
+      // схема DOM панели: PanelView генерирует ячейки в порядке fields;
+      // семантику задаёт type ('bar'|'value'|'time'|'weapon'), не имя поля
+      fields: [
+        { name: 'health', elem: 'panel-health', type: 'bar', max: 100, blocks: 30 },
+        { name: 'bullet', elem: 'panel-bullet', type: 'weapon' },
+        { name: 'bomb', elem: 'panel-bomb', type: 'weapon' },
+        { name: 'time', elem: 'panel-time', type: 'time' },
+      ],
     },
 
     stat: {

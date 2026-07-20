@@ -181,10 +181,12 @@ function buildPortMethods(socketId, state) {
       state.enabled[PC_AUTH_RESPONSE] = true;
 
       // validators — код, по проводу не передаётся (форма клиента берёт
-      // игровые валидаторы из своего бандла)
+      // игровые валидаторы из своего бандла); texts — заголовок и
+      // help-секции игры для нейтрального каркаса auth.pug
       socketManager.sendAuthData(socketId, {
         elems: hostPlugin.authSchema.elems,
         params: hostPlugin.authSchema.params,
+        texts: hostPlugin.authSchema.texts,
       });
       state.enabled[PC_CONFIG_READY] = false;
     },

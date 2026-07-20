@@ -59,6 +59,7 @@ export const makeClientCore = (overrides = {}) => {
         weapons,
       },
       interpolation: clientDefaults.interpolation,
+      snapshot: tanksGameConfig.snapshot,
     },
     { seed: 42, ...overrides },
   );

@@ -5,8 +5,16 @@ import { lerp } from '../../../lib/math.js';
 
 let panelView;
 
+// дефолты bar-поля (могут переопределяться схемой игры)
+const DEFAULT_BAR_BLOCKS = 30;
+const DEFAULT_BAR_MAX = 100;
+const EMPTY_BLOCK_COLOR = '#888';
+
 export default class PanelView {
-  // config — { containerId (движок), elems (схема игры: time/health/weapons) }
+  // config — { containerId (движок), fields (схема игры: массив
+  // { name, elem, type: 'bar'|'value'|'time'|'weapon', max?, blocks? }) }
+  // Семантику ячейки задаёт type, а не имя поля: игра с полем `energy`
+  // вместо `health` получает тот же бар
   constructor(model, config) {
     if (panelView) {
       return panelView;
@@ -14,19 +22,17 @@ export default class PanelView {
 
     panelView = this;
 
-    const { containerId, elems } = config;
+    const { containerId, fields } = config;
 
     this._panels = {};
-    this._weaponList = Object.keys(elems.weapons);
+    this._fields = {};
+    this._bars = {};
+    this._weaponList = fields
+      .filter(field => field.type === 'weapon')
+      .map(field => field.name);
 
-    // DOM панели генерируется по схеме игры (порядок: health → оружие → time)
-    this._buildPanel(document.getElementById(containerId), elems);
-
-    this._healthBarWrapper = null; // контейнер
-    this._healthBlocks = []; // блоки здоровья
-    this._totalHealthBlocks = 30; // количество блоков здоровья
-    this._healthBlockColors = []; // цвета блоков здоровья
-    this._emptyBlockColor = '#888'; // цвет пустых блоков
+    // DOM панели генерируется по схеме игры в порядке fields
+    this._buildPanel(document.getElementById(containerId), fields);
 
     this.publisher = new Publisher();
 
@@ -34,64 +40,64 @@ export default class PanelView {
     this._mPublic.on('data', 'update', this);
     this._mPublic.on('hide', 'hidePanel', this);
     this._mPublic.on('activeWeapon', 'setCurrentWeapon', this);
-
-    this.initHealthBar();
   }
 
   // генерирует таблицу панели по схеме игры (замена хардкода panel.pug)
-  _buildPanel(container, elems) {
+  _buildPanel(container, fields) {
     const table = document.createElement('table');
     const row = table.insertRow(-1);
 
-    const addCell = (name, id) => {
+    for (const field of fields) {
       const cell = row.insertCell(-1);
 
-      cell.setAttribute('id', id);
-      this._panels[name] = cell;
-    };
+      cell.setAttribute('id', field.elem);
+      this._panels[field.name] = cell;
+      this._fields[field.name] = field;
 
-    addCell('health', elems.health);
-
-    for (const weaponName of this._weaponList) {
-      addCell(weaponName, elems.weapons[weaponName]);
+      if (field.type === 'bar') {
+        this._initBar(field, cell);
+      }
     }
-
-    addCell('time', elems.time);
 
     container.appendChild(table);
   }
 
-  // инициализирует полосу здоровья
-  initHealthBar() {
-    const healthContainer = this._panels.health;
-
-    healthContainer.textContent = '';
+  // инициализирует полосу-бар поля type: 'bar'
+  _initBar(field, cell) {
+    cell.textContent = '';
 
     const wrapper = document.createElement('div');
 
-    wrapper.className = 'panel-health-wrapper';
+    wrapper.className = 'panel-bar-wrapper';
 
-    this._healthBarWrapper = wrapper; // сохранение ссылки на обертку
+    const total = field.blocks ?? DEFAULT_BAR_BLOCKS;
+    const bar = {
+      max: field.max ?? DEFAULT_BAR_MAX,
+      total,
+      blocks: [],
+      colors: [],
+    };
 
-    for (let i = 0, len = this._totalHealthBlocks; i < len; i += 1) {
+    for (let i = 0; i < total; i += 1) {
       const block = document.createElement('div');
 
-      block.className = 'panel-health-block';
-      block.style.backgroundColor = this._emptyBlockColor;
-      block.textContent = '\u00A0'; // неразрывный пробел
+      block.className = 'panel-bar-block';
+      block.style.backgroundColor = EMPTY_BLOCK_COLOR;
+      block.textContent = ' '; // неразрывный пробел
 
       wrapper.appendChild(block);
 
-      this._healthBlocks.push(block);
-      this._healthBlockColors.push(this.getHealthBlockColor(i));
+      bar.blocks.push(block);
+      bar.colors.push(this.getBarBlockColor(i, total));
     }
 
-    healthContainer.appendChild(wrapper);
+    this._bars[field.name] = bar;
+    cell.appendChild(wrapper);
   }
 
-  // вычисляет цвет для каждого блока здоровья на основе его индекса
-  getHealthBlockColor(index) {
-    const progress = index / (this._totalHealthBlocks - 1);
+  // вычисляет цвет блока бара на основе его индекса
+  getBarBlockColor(index, total) {
+    const progress = index / (total - 1);
 
     const colors = [
       { p: 0, c: { r: 255, g: 50, b: 50 } }, // red
@@ -124,33 +130,36 @@ export default class PanelView {
     const { name, value } = data;
     const elem = this._panels[name];
 
-    // логика для здоровья
-    if (name === 'health') {
-      const blocksToShow = Math.ceil((value / 100) * this._totalHealthBlocks);
-
-      this._healthBlocks.forEach((block, index) => {
-        if (index < blocksToShow) {
-          block.className = 'panel-health-block';
-          block.style.backgroundColor = this._healthBlockColors[index];
-        } else {
-          block.className = 'panel-health-block-empty';
-          block.style.backgroundColor = this._emptyBlockColor;
-        }
-      });
-
-      // мигание для последнего неполного блока
-      const exactBlocks = (value / 100) * this._totalHealthBlocks;
-
-      if (value > 0 && exactBlocks % 1 !== 0) {
-        this._healthBlocks[blocksToShow - 1].classList.add(
-          'panel-health-blink',
-        );
-      }
+    if (this._fields[name]?.type === 'bar') {
+      this._updateBar(name, value);
     } else {
       elem.textContent = value;
     }
 
     elem.style.display = 'table-cell';
+  }
+
+  // перерисовывает бар по текущему значению
+  _updateBar(name, value) {
+    const { max, total, blocks, colors } = this._bars[name];
+    const blocksToShow = Math.ceil((value / max) * total);
+
+    blocks.forEach((block, index) => {
+      if (index < blocksToShow) {
+        block.className = 'panel-bar-block';
+        block.style.backgroundColor = colors[index];
+      } else {
+        block.className = 'panel-bar-block-empty';
+        block.style.backgroundColor = EMPTY_BLOCK_COLOR;
+      }
+    });
+
+    // мигание для последнего неполного блока
+    const exactBlocks = (value / max) * total;
+
+    if (value > 0 && exactBlocks % 1 !== 0) {
+      blocks[blocksToShow - 1].classList.add('panel-bar-blink');
+    }
   }
 
   hidePanel(name) {

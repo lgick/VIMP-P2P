@@ -72,12 +72,20 @@ export default {
     },
 
     panel: {
+      // поле нарочно называется не health: бар обязан работать по
+      // type: 'bar', а не по имени поля (Д2)
       keys: {
-        h: 'health',
+        h: 'energy',
       },
-      elems: {
-        health: 'panel-health',
-      },
+      fields: [
+        {
+          name: 'energy',
+          elem: 'panel-energy',
+          type: 'bar',
+          max: 100,
+          blocks: 10,
+        },
+      ],
     },
 
     stat: {

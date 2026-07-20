@@ -255,9 +255,11 @@ game-owned:
   (votes), `m` (maps), `c` (teams), `n` (names), `b` (bots). The host
   only sends `'group:number:params'`, the client assembles the text.
 - **`panel`** — the `containerId` container (engine); the mapping from
-  server keys (`t`, `h`, `wa`, `w1`, `w2`) to fields (`keys`) and the cell
-  schema `elems` (game) — `PanelView` generates the panel DOM from the
-  schema.
+  server keys (`t`, `h`, `wa`, `w1`, `w2`) to fields (`keys`) and the
+  typed field schema `fields` (game): an ordered list of
+  `{ name, elem, type: 'bar'|'value'|'time'|'weapon', max?, blocks? }` —
+  `PanelView` generates the panel DOM and rendering behavior from the
+  types, not from field names.
 - **`stat`** — the container id (engine); the `columns` labels, head/body
   tables (`heads`, `bodies`), and `sortList` (game) — `StatView` generates
   the scoreboard DOM from the schema; `sortList` — sort parameters: an
@@ -338,18 +340,21 @@ host: the lobby happens before connecting to a host.
 ## games/tanks/src/config/auth.js
 
 The game's auth config
-([games/tanks/src/config/auth.js](../../games/tanks/src/config/auth.js)):
-DOM element ids (`elems`), form parameters (`params`), and the game's
-validators (`validators`). Each parameter: `name`, a default value,
-`validator` (a function name), and a `storage` key for localStorage. The
-engine validator is `isValidName`
+([games/tanks/src/config/auth.js](../../games/tanks/src/config/auth.js)),
+arriving via `HostPlugin.authSchema`: DOM element ids (`elems`), form
+parameters (`params`), the game's validators (`validators`), and the
+form's texts (`texts`: `title` + help `sections` of
+`{ heading, lines: [{ keys, text, last? } | { separator }] }`) — the
+engine template `auth.pug` is a neutral shell, `AuthView` fills in the
+game's title and help sections from `texts`. Each parameter: `name`, a
+default value, `validator` (a function name), and a `storage` key for
+localStorage. The engine validator is `isValidName`
 ([packages/engine/src/lib/validators.js](../../packages/engine/src/lib/validators.js)); game validators
 (e.g. `isValidModel` — the model exists in `models.js`) are injected into
 `validateAuth` as the third argument. Validation runs on the client (with
 validators from the game bundle) and is repeated by the host (Worker);
-only `elems`/`params` travel over the wire (`AUTH_DATA`, port 1) — the
-validator code doesn't. In stage 6 the config arrives via
-`HostPlugin.authSchema`.
+only `elems`/`params`/`texts` travel over the wire (`AUTH_DATA`, port 1) —
+the validator code doesn't.
 
 ## games/tanks/src/config/sounds.js
 
@@ -363,10 +368,12 @@ must exist in both formats. More on playback — [client.md](client.md#soundmana
 - **`wsports.js`** — the numeric port registry for the game protocol
   (the source of truth). Full tables — [network.md](network.md#ports).
 - **`opcodes.js`** — the binary snapshot format version
-  (`SNAPSHOT_FORMAT_VERSION = 3`) and the `SNAPSHOT_KEYS` registry
-  (`m1`, `w1`, `w2`, `w2e`, `c1`, `c2` → a numeric id + `kind`, which
-  drives the block's byte layout). An unregistered key breaks frame
-  packing. Details — [network.md](network.md#binary-snapshot-frame-port-5).
+  (`SNAPSHOT_FORMAT_VERSION = 3`), `ENGINE_API_VERSION` and `HOT_FLAGS`.
+  The snapshot key registry is game data —
+  `games/tanks/src/config/snapshot.js` (`gameConfig.snapshot`: `m1`,
+  `w1`, `w2`, `w2e`, `c1`, `c2` → a numeric id + `kind`, which drives the
+  block's byte layout). An unregistered key breaks frame packing.
+  Details — [network.md](network.md#binary-snapshot-frame-port-5).
 
 ## games/tanks/src/data/ — game data
 

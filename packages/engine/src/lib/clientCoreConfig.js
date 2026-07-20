@@ -1,7 +1,4 @@
-import {
-  SNAPSHOT_FORMAT_VERSION,
-  SNAPSHOT_KEYS,
-} from '../config/opcodes.js';
+import { SNAPSHOT_FORMAT_VERSION } from '../config/opcodes.js';
 import wsports from '../config/wsports.js';
 
 // Сборка JSON-конфига клиентского ядра (ClientCore, срез 2.6): данные
@@ -19,12 +16,14 @@ import wsports from '../config/wsports.js';
  *   (timeStep в мс, playerKeys, models, weapons).
  * @param {Object} options.interpolation - Секция interpolation CONFIG_DATA
  *   (delay, maxFrameAge в мс).
+ * @param {Object} options.snapshot - Секция snapshot CONFIG_DATA —
+ *   игровая схема ключей (гоняется хостом, не из бандла клиента).
  * @param {Object} [overrides] - Переопределения плоским объектом (например,
  *   seed для воспроизводимых прогонов) — распределяются автоматически.
  * @returns {Object} Конфиг для `new ClientCore(JSON.stringify(config))`.
  */
 export const buildClientCoreConfig = (
-  { prediction, interpolation },
+  { prediction, interpolation, snapshot },
   overrides = {},
 ) => {
   const flat = {
@@ -33,10 +32,11 @@ export const buildClientCoreConfig = (
     playerKeys: prediction.playerKeys,
     models: prediction.models,
     weapons: prediction.weapons,
+    // keys — игровая схема из CONFIG_DATA; version/port — движковые
     snapshot: {
       version: SNAPSHOT_FORMAT_VERSION,
       port: wsports.server.SHOT_DATA,
-      keys: SNAPSHOT_KEYS,
+      keys: snapshot,
     },
     interpolation,
     seed: undefined,

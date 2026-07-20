@@ -8,6 +8,22 @@ export default {
     formId: 'auth-form',
     errorId: 'auth-error',
     enterId: 'auth-enter',
+    titleId: 'auth-title',
+    informsId: 'auth-informs',
+  },
+  // собственные тексты фикстуры (Д2): каркас auth.pug нейтрален,
+  // заголовок/подсказки — данные игры
+  texts: {
+    title: 'Mini Game Fixture',
+    sections: [
+      {
+        heading: 'Controls',
+        lines: [
+          { keys: 'W, S', text: 'move' },
+          { keys: 'J', text: 'fire' },
+        ],
+      },
+    ],
   },
   params: [
     {

@@ -43,7 +43,7 @@ import LobbyView from './components/view/Lobby.js';
 import LobbyCtrl from './components/controller/Lobby.js';
 import BakingProvider from './providers/BakingProvider.js';
 import DependencyProvider from './providers/DependencyProvider.js';
-import { HOT_FLAGS, SNAPSHOT_KEYS_BY_ID } from '../config/opcodes.js';
+import { HOT_FLAGS } from '../config/opcodes.js';
 import wsports from '../config/wsports.js';
 import {
   fetchGamesManifest,
@@ -164,12 +164,25 @@ let clientCore = null;
 let wasm = null;
 let inputSeq = 0; // номер отправленного ввода (KEYS_DATA)
 
+// обратный индекс снапшот-схемы игры (CONFIG_DATA.snapshot):
+// keyId → { key, kind, width } — раскладку hot-буфера диктует схема,
+// движковый бандл её не знает
+let snapshotKeysById = null;
+
 // SOCKET МЕТОДЫ
 
 // config data
 socketMethods[PS_CONFIG_DATA] = async data => {
   gameSets = data.parts.gameSets;
   entitiesOnCanvas = data.parts.entitiesOnCanvas;
+
+  // ширина hot-записи: keyId + id + поля класса по схеме игры
+  snapshotKeysById = Object.fromEntries(
+    Object.entries(data.snapshot).map(([key, { id, kind, fields }]) => [
+      id,
+      { key, kind, width: 2 + fields.length },
+    ]),
+  );
 
   // клиентское ядро: интерполяция + предикт + спавн выстрелов; конфиг
   // собирается из interpolation/prediction CONFIG_DATA (хост шлёт их
@@ -278,7 +291,7 @@ socketMethods[PS_AUTH_DATA] = data => {
     return;
   }
 
-  const { elems, params } = data;
+  const { elems, params, texts } = data;
 
   params.forEach(param => {
     const { storage } = param.options;
@@ -295,7 +308,7 @@ socketMethods[PS_AUTH_DATA] = data => {
   const clientValidator = authData => validateAuth(authData, params);
 
   const authModel = new AuthModel(clientValidator);
-  const authView = new AuthView(authModel, elems);
+  const authView = new AuthView(authModel, elems, texts);
   modules.auth = new AuthCtrl(authModel, authView);
 
   authModel.publisher.on('socket', data => {
@@ -565,53 +578,37 @@ function applyShot(game, camera) {
 }
 
 // восстанавливает объект игровых данных из плоского hot-буфера ядра:
-// [3] N танков × 12 (keyId, gameId, x, y, angle, gun, vx, vy, engineLoad,
-// condition, size, teamId), затем M динамики × 5 (keyId, index, x, y, angle);
-// predicted-запись (последняя) перекрывает свой танк — предикт поверх
-// интерполяции тем же parse-конвейером
+// [3] N записей Indexed8-группы, затем M записей IndexedNoNull8-группы;
+// каждая запись — keyId, id, поля по схеме игры (ширина = 2 + fields);
+// у IndexedNoNull8 id получает префикс 'd' (динамика карты, зеркало
+// snapshot_to_json ядра). Predicted-запись (последняя) перекрывает свою —
+// предикт поверх интерполяции тем же parse-конвейером
 function reconstructHot(hot) {
   const game = {};
   let i = 3;
 
-  const readTankRecord = () => {
-    const { key } = SNAPSHOT_KEYS_BY_ID[hot[i]];
+  const readRecord = () => {
+    const { key, kind, width } = snapshotKeysById[hot[i]];
+    const id =
+      kind === 'indexedNoNull8' ? `d${hot[i + 1]}` : hot[i + 1];
 
-    (game[key] ??= {})[hot[i + 1]] = [
-      hot[i + 2],
-      hot[i + 3],
-      hot[i + 4],
-      hot[i + 5],
-      hot[i + 6],
-      hot[i + 7],
-      hot[i + 8],
-      hot[i + 9],
-      hot[i + 10],
-      hot[i + 11],
-    ];
-    i += 12;
+    (game[key] ??= {})[id] = Array.from(hot.subarray(i + 2, i + width));
+    i += width;
   };
 
-  const tankCount = hot[i];
+  // две группы: Indexed8 (акторы), затем IndexedNoNull8 (динамика карты)
+  for (let g = 0; g < 2; g += 1) {
+    const count = hot[i];
 
-  i += 1;
+    i += 1;
 
-  for (let n = 0; n < tankCount; n += 1) {
-    readTankRecord();
-  }
-
-  const dynCount = hot[i];
-
-  i += 1;
-
-  for (let n = 0; n < dynCount; n += 1) {
-    const { key } = SNAPSHOT_KEYS_BY_ID[hot[i]];
-
-    (game[key] ??= {})[`d${hot[i + 1]}`] = [hot[i + 2], hot[i + 3], hot[i + 4]];
-    i += 5;
+    for (let n = 0; n < count; n += 1) {
+      readRecord();
+    }
   }
 
   if (hot[0] & HOT_FLAGS.PREDICTED) {
-    readTankRecord();
+    readRecord();
   }
 
   return game;
@@ -710,9 +707,9 @@ function runModules(data) {
   // Panel Module
   //==========================================//
 
-  const panelModel = new PanelModel(panelData.keys);
+  const panelModel = new PanelModel(panelData.keys, panelData.fields);
 
-  // PanelView генерирует DOM по схеме игры ({ containerId, elems })
+  // PanelView генерирует DOM по типам схемы игры ({ containerId, fields })
   const panelView = new PanelView(panelModel, panelData);
 
   modules.panel = new PanelCtrl(panelModel, panelView);

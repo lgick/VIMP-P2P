@@ -81,6 +81,7 @@ export default {
     teams: { team1: 1, team2: 2, spectators: 3 },   // any number of teams
     spectatorTeam: 'spectators',
     models, weapons,                  // from games/tanks/src/data
+    snapshot,                         // the snapshot key schema (config/snapshot.js) — required
     playerKeys, // spectatorKeys are engine-owned (spectating is an engine mechanism)
     panel: { fields: { health: {key:'h', value:100}, w1: {…}, w2: {…} }, activeKey: 'wa' },
     stat:  { columns: {name:{…}, status:{…}, score:{…}, deaths:{…}, latency:{…}} },
@@ -94,7 +95,8 @@ export default {
 
   buildCoreGameConfig(overrides),     // the game section of the core init JSON
   buildClientGameConfig(),            // the game section of CONFIG_DATA (see below)
-  authSchema: { params: [...], validators: { isValidModel: v => v in models } },
+  authSchema: { elems: {…}, params: [...], validators: { isValidModel: v => v in models },
+                texts: { title, sections } },   // form texts for the neutral auth.pug shell
 
   onCoreEvent(ctx, event),            // 'custom' events only; standard ones are routed by the engine
   chatCommands: [{ name: '/bot', handler(ctx, gameId, args) {…} }],   // registered in CommandProcessor
@@ -213,16 +215,18 @@ into a full block schema — `id`, count/id widths, `nullMarker`, a field list
 with a type (`f32/u8/u16/u32`) and an interpolation mode
 (`lerp`/`lerpAngle`/discrete), a `hot` (interpolated) / `event` (frame-only)
 class, `idPrefix`. The packer (`snapshot.rs`), unpacker (`client/unpack.rs`),
-interpolator and the engine hot buffer become schema interpreters; the game
-crate supplies rows as flat `RowData`. The same schema travels to client JS
-in CONFIG_DATA → a generic `reconstructHot` (replacing the hardcoded
-12-field tank layout in `packages/engine/src/client/main.js`); `SNAPSHOT_KEYS` disappears
-from the client bundle (the host always provides the schema — removing the
-hidden "client bundle must match the host" coupling). The player block is
+interpolator and the engine hot buffer are schema interpreters; the game
+crate supplies rows as flat `RowData`. The schema itself is game data —
+`games/tanks/src/config/snapshot.js` (`HostPlugin.gameConfig.snapshot`,
+a required field). The same schema travels to client JS in CONFIG_DATA →
+a generic `reconstructHot` in `packages/engine/src/client/main.js` (record
+width = 2 service fields + the key's `fields` count); the engine bundle
+carries no snapshot keys (the host always provides the schema — no hidden
+"client bundle must match the host" coupling). The player block is
 described by a `playerState` schema (currently `[f32;8]+centering`).
-`SNAPSHOT_FORMAT_VERSION` → 4 (engine framing); byte compatibility across
-deploys is not required (host and clients are one deploy; the version only
-protects framing within a room).
+`SNAPSHOT_FORMAT_VERSION` stays 3 (engine framing; the byte layout did not
+change); byte compatibility across deploys is not required (host and
+clients are one deploy; the version only protects framing within a room).
 
 Invariants to keep: `gameId` in a frame is a u8 (≤255 participants); the
 `weapons` key order defines the weapon index; panel fields must correspond
@@ -284,7 +288,7 @@ Module split of today's `core/src/`:
 | Constant | Owner | Policy |
 | --- | --- | --- |
 | `ENGINE_API_VERSION` (=1) | engine | checked at plugin import (host worker and client); breaking Plugin API / Wasm ABI changes → +1 |
-| `SNAPSHOT_FORMAT_VERSION` (→4) | engine (framing) | the block schema travels in CONFIG_DATA → always consistent within a room |
+| `SNAPSHOT_FORMAT_VERSION` (=3) | engine (framing) | the block schema travels in CONFIG_DATA → always consistent within a room |
 | `HANDOFF_VERSION` (→2) | engine | +`gameId`, `gameVersion` in the handoff meta; mismatch → the regular `resume` |
 | `codeVersion` | master | composite: `{ engine: hash(host.worker-*.js), game: {id, version} }`; a mismatch of either part → Worker handoff (the new Worker gets a fresh `entries.host`) |
 | `mapsVersion` | master | per-game: `/games/:id/maps/manifest.json` |

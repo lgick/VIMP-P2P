@@ -56,6 +56,8 @@ describe('miniGame fixture: HostPlugin/ClientPlugin contract', () => {
 
     expect(config.engine.mapScale).toBe(hostPlugin.gameConfig.mapScale);
     expect(config.game.models).toBe(hostPlugin.gameConfig.parts.models);
+    // схема снапшота — игровая (Д1): ядро получает раскладку фикстуры
+    expect(config.engine.snapshot.keys).toBe(hostPlugin.gameConfig.snapshot);
   });
 
   it('ClientPlugin несёт минимум 1-2 заглушечных part и совпадающий engineApi', () => {

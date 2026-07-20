@@ -212,7 +212,7 @@ migration (the split is listed per file).
 
 ## Key invariants
 
-- **Source of truth for ports** — `packages/engine/src/config/wsports.js`; for snapshot keys and the binary format version — `packages/engine/src/config/opcodes.js`.
+- **Source of truth for ports** — `packages/engine/src/config/wsports.js`; for the binary format version — `packages/engine/src/config/opcodes.js`; for snapshot keys — the game schema `games/tanks/src/config/snapshot.js` (`gameConfig.snapshot`).
 - **Motion replica parity**: authoritative motion (Rapier) and the client prediction replica share the tick formulas (`core/src/motion.rs`); integration parity is locked in by cargo tests (`client::predictor::parity`) — any edit to motion in the core or the `models.js` coefficients requires running `npm run core:test`.
 - **A single numeric id space** for humans and scripted participants (bots); distinguished via `isScripted`/`isNetworked`. The core operates on numeric ids, meta keys by string — the conversion happens at the `GameCoreAdapter` boundary.
 - Every send to a client goes only through `SocketManager`.

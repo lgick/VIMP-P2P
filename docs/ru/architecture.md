@@ -206,7 +206,7 @@ CommandProcessor) остаются движковыми, но **вся их па
 
 ## Ключевые инварианты
 
-- **Источник истины по портам** — `packages/engine/src/config/wsports.js`; по snapshot-ключам и версии бинарного формата — `packages/engine/src/config/opcodes.js`.
+- **Источник истины по портам** — `packages/engine/src/config/wsports.js`; по версии бинарного формата — `packages/engine/src/config/opcodes.js`; по snapshot-ключам — игровая схема `games/tanks/src/config/snapshot.js` (`gameConfig.snapshot`).
 - **Паритет реплики движения**: авторитетное движение (Rapier) и реплика клиентского предикта делят формулы тика (`core/src/motion.rs`); паритет интеграции закреплён cargo-тестами (`client::predictor::parity`) — любая правка движения в ядре или коэффициентов `models.js` требует прогона `npm run core:test`.
 - **Единое числовое пространство id** для людей и scripted-участников (ботов); различение — `isScripted`/`isNetworked`. Ядро оперирует числовыми id, мета ключует строками — приведение на границе `GameCoreAdapter`.
 - Все отправки клиенту — только через `SocketManager`.

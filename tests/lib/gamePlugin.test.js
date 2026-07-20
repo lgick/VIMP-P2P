@@ -73,6 +73,7 @@ describe('gamePlugin: fetchGameManifest', () => {
 describe('gamePlugin: assertGameConfigShape', () => {
   const validGameConfig = {
     roomDefaults: { maxPlayers: 8 },
+    snapshot: {},
     parts: { models: {}, weapons: {}, friendlyFire: false },
     panel: { fields: {} },
     playerKeys: {},

@@ -10,6 +10,41 @@ export default {
     formId: 'auth-form',
     errorId: 'auth-error',
     enterId: 'auth-enter',
+    titleId: 'auth-title',
+    informsId: 'auth-informs',
+  },
+  // тексты формы (заголовок + help-секции): auth.pug — нейтральный каркас,
+  // игровые тексты подставляет AuthView из этих данных
+  texts: {
+    title: 'VIMP P2P Tank Battle',
+    sections: [
+      {
+        heading: 'Controls',
+        lines: [
+          { keys: 'W, A, S, D', text: 'move the tank' },
+          { keys: 'K, L', text: 'turn the gun' },
+          { keys: 'U', text: 'center the gun' },
+          { keys: 'J', text: 'fire' },
+          { keys: 'N, P', text: 'switch weapon/player', last: true },
+          { keys: 'C', text: 'chat/command line' },
+          { keys: 'M', text: 'menu' },
+          { keys: 'TAB', text: 'stats', last: true },
+        ],
+      },
+      {
+        heading: 'Command line',
+        lines: [
+          { keys: '/name <name>', text: 'change nickname' },
+          { keys: '/mapname', text: 'show current map name' },
+          { keys: '/timeleft', text: 'map time left' },
+          { separator: true },
+          { keys: '/bot <count>', text: 'add bot(s)' },
+          { keys: '/bot <count> <team>', text: 'add to team' },
+          { keys: '/bot 0', text: 'remove all bots' },
+          { keys: '/bot 0 <team>', text: 'remove from team' },
+        ],
+      },
+    ],
   },
   params: [
     {

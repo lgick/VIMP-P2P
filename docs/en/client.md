@@ -188,8 +188,12 @@ What each component does:
   escaping happens on output (`textContent`).
 - **Panel** — the HUD: round time, health, ammo, active weapon (from
   `'key:value'` strings). `PanelView` **generates the DOM from the game's
-  schema** (`modules.panel.elems`: order health → weapons → time) inside
-  the engine's `#panel` container; the cells' look is the game's CSS.
+  schema** (`modules.panel.fields`: an ordered list of
+  `{ name, elem, type }`; cell semantics come from
+  `type: 'bar' | 'value' | 'time' | 'weapon'`, not from field names — a
+  `bar` field also takes `max` and `blocks`) inside the engine's `#panel`
+  container; the cells' look is the game's CSS (bar blocks use the
+  engine-neutral `panel-bar-*` classes).
 - **Stat** — sortable scoreboard tables (`sortList`), shown on Tab.
   `StatView` **generates the header and tables from the game's schema**
   (`modules.stat.params`: `columns` — column labels, `bodies` — an

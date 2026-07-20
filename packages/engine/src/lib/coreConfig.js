@@ -1,7 +1,4 @@
-import {
-  SNAPSHOT_FORMAT_VERSION,
-  SNAPSHOT_KEYS,
-} from '../config/opcodes.js';
+import { SNAPSHOT_FORMAT_VERSION } from '../config/opcodes.js';
 import hostDefaults from '../config/hostDefaults.js';
 import wsports from '../config/wsports.js';
 
@@ -33,10 +30,11 @@ export const buildCoreConfig = (gameConfig, overrides = {}) => {
     weapons,
     playerKeys: gameConfig.playerKeys,
     panel: gameConfig.panel.fields,
+    // keys — игровая схема (gameConfig.snapshot); version/port — движковые
     snapshot: {
       version: SNAPSHOT_FORMAT_VERSION,
       port: wsports.server.SHOT_DATA,
-      keys: SNAPSHOT_KEYS,
+      keys: gameConfig.snapshot,
     },
     seed: undefined,
     ...overrides,

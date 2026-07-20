@@ -12,6 +12,32 @@ export default {
     friendlyFire: false,
   },
 
+  // собственная снапшот-схема (нарочно не танковая: один hot-ключ актора
+  // с 4 полями и один event-ключ) — движок обязан работать с любой
+  // раскладкой из gameConfig.snapshot, а не только m1/w1/…/c2
+  snapshot: {
+    a1: {
+      id: 1,
+      kind: 'indexed8',
+      class: 'hot',
+      fields: [
+        { name: 'x', ty: 'f32', interp: 'lerp' },
+        { name: 'y', ty: 'f32', interp: 'lerp' },
+        { name: 'angle', ty: 'f32', interp: 'lerpAngle' },
+        { name: 'team', ty: 'u8' },
+      ],
+    },
+    e1: {
+      id: 2,
+      kind: 'list16',
+      class: 'event',
+      fields: [
+        { name: 'x', ty: 'f32' },
+        { name: 'y', ty: 'f32' },
+      ],
+    },
+  },
+
   soundCues: {},
   initialVote: 'teamChange',
 
@@ -84,8 +110,10 @@ export default {
   },
 
   panel: {
+    // поле нарочно не health (Д2): семантику ячейки клиенту задаёт
+    // type в схеме client.js, а не имя поля
     fields: {
-      health: {
+      energy: {
         key: 'h',
         value: 100,
       },

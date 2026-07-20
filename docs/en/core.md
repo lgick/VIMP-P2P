@@ -237,7 +237,10 @@ verbatim from `GameClientDef::render_overlay`'s `RenderOverlay.tail` — the
 engine only knows the camera (`RenderOverlay.camera`) and the presence flag,
 not the tail's field layout (`TanksClient::render_overlay` builds it as the
 same 12-value shape, so bytes are unchanged from before the trait split).
-`keyId` — numeric ids from `SNAPSHOT_KEYS`.
+`keyId` — numeric ids from the game's snapshot schema
+(`games/tanks/src/config/snapshot.js`); client JS reads the records
+generically off the same schema (record width = 2 service fields + the
+key's `fields` count).
 
 **motion.rs** — shared mass-free tick formulas for motion (turret, throttle,
 lateral grip, thrust/braking, engine load, turning): the authoritative side

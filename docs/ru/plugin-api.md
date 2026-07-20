@@ -81,6 +81,7 @@ export default {
     teams: { team1: 1, team2: 2, spectators: 3 },   // произвольное число команд
     spectatorTeam: 'spectators',
     models, weapons,                  // из games/tanks/src/data
+    snapshot,                         // снапшот-схема ключей (config/snapshot.js) — обязательное поле
     playerKeys, // spectatorKeys — движковые (наблюдение — механизм движка)
     panel: { fields: { health: {key:'h', value:100}, w1: {…}, w2: {…} }, activeKey: 'wa' },
     stat:  { columns: {name:{…}, status:{…}, score:{…}, deaths:{…}, latency:{…}} },
@@ -94,7 +95,8 @@ export default {
 
   buildCoreGameConfig(overrides),     // game-секция init-JSON ядра
   buildClientGameConfig(),            // game-секция CONFIG_DATA (см. ниже)
-  authSchema: { params: [...], validators: { isValidModel: v => v in models } },
+  authSchema: { elems: {…}, params: [...], validators: { isValidModel: v => v in models },
+                texts: { title, sections } },   // тексты формы для нейтрального каркаса auth.pug
 
   onCoreEvent(ctx, event),            // только 'custom'-события; стандартные роутит движок
   chatCommands: [{ name: '/bot', handler(ctx, gameId, args) {…} }],   // регистрация в CommandProcessor
@@ -207,20 +209,22 @@ engine-crate от wasm-bindgen не зависит вовсе.
 
 ### Snapshot-блоки — декларативная схема
 
-Жёсткие раскладки блоков заменяются схемой: `SnapshotConfig.keys`
-расширяется до полной схемы блока — `id`, ширины count/id, `nullMarker`,
-список полей с типом (`f32/u8/u16/u32`) и способом интерполяции
-(`lerp`/`lerpAngle`/дискретное), класс `hot` (интерполируется) / `event`
-(только кадром), `idPrefix`. Пакер (`snapshot.rs`), анпакер
-(`client/unpack.rs`), интерполятор и hot-буфер движка становятся
-интерпретаторами схемы; game-crate поставляет строки как плоские `RowData`.
-Та же схема едет клиентскому JS в CONFIG_DATA → generic `reconstructHot`
-(замена захардкоженной 12-польной раскладки танка в `packages/engine/src/client/main.js`);
-`SNAPSHOT_KEYS` из клиентского бандла исчезает (схему всегда даёт хост —
-устраняется скрытая связь «бандл клиента обязан совпадать с хостом»).
-Player-блок описывается схемой `playerState` (сейчас `[f32;8]+centering`).
-`SNAPSHOT_FORMAT_VERSION` → 4 (фрейминг движка); байт-совместимость между
-деплоями не требуется (хост и клиенты — один деплой; версия защищает только
+Жёсткие раскладки блоков заменены схемой: `SnapshotConfig.keys` — полная
+схема блока: `id`, ширины count/id, `nullMarker`, список полей с типом
+(`f32/u8/u16/u32`) и способом интерполяции (`lerp`/`lerpAngle`/дискретное),
+класс `hot` (интерполируется) / `event` (только кадром), `idPrefix`. Пакер
+(`snapshot.rs`), анпакер (`client/unpack.rs`), интерполятор и hot-буфер
+движка — интерпретаторы схемы; game-crate поставляет строки как плоские
+`RowData`. Сама схема — данные игры: `games/tanks/src/config/snapshot.js`
+(`HostPlugin.gameConfig.snapshot`, обязательное поле). Та же схема едет
+клиентскому JS в CONFIG_DATA → generic `reconstructHot` в
+`packages/engine/src/client/main.js` (ширина записи = 2 служебных поля +
+число `fields` ключа); движковый бандл снапшот-ключей не содержит (схему
+всегда даёт хост — скрытой связи «бандл клиента обязан совпадать с хостом»
+нет). Player-блок описывается схемой `playerState` (сейчас
+`[f32;8]+centering`). `SNAPSHOT_FORMAT_VERSION` остаётся 3 (фрейминг
+движка; байтовая раскладка не менялась); байт-совместимость между деплоями
+не требуется (хост и клиенты — один деплой; версия защищает только
 фрейминг внутри комнаты).
 
 Инварианты: `gameId` в кадре — u8 (≤255 участников); порядок ключей
@@ -280,7 +284,7 @@ Engine-crate — чистый Rust без wasm-bindgen (ошибки `Result<_, 
 | Константа | Владелец | Политика |
 | --- | --- | --- |
 | `ENGINE_API_VERSION` (=1) | движок | проверяется при import плагинов (host worker и клиент); ломающие изменения Plugin API / Wasm ABI → +1 |
-| `SNAPSHOT_FORMAT_VERSION` (→4) | движок (фрейминг) | схема блоков едет в CONFIG_DATA → внутри комнаты всегда согласована |
+| `SNAPSHOT_FORMAT_VERSION` (=3) | движок (фрейминг) | схема блоков едет в CONFIG_DATA → внутри комнаты всегда согласована |
 | `HANDOFF_VERSION` (→2) | движок | +`gameId`, `gameVersion` в мете эстафеты; несовпадение → штатный `resume` |
 | `codeVersion` | мастер | составной: `{ engine: hash(host.worker-*.js), game: {id, version} }`; расхождение любой части → эстафета (новый Worker получает свежий `entries.host`) |
 | `mapsVersion` | мастер | per-game: `/games/:id/maps/manifest.json` |

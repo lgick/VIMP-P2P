@@ -51,19 +51,21 @@
   background-color: #333;
 }
 
-#panel table td#panel-health div.panel-health-wrapper {
+/* bar-поля панели (type: 'bar' в схеме игры) — классы нейтральные,
+   без привязки к игровым DOM-id */
+#panel table td div.panel-bar-wrapper {
   display: flex;
   width: 100%;
   height: 100%;
   gap: 1px;
 }
 
-#panel table td#panel-health div.panel-health-block,
-#panel table td#panel-health div.panel-health-block-empty {
+#panel table td div.panel-bar-block,
+#panel table td div.panel-bar-block-empty {
   flex: 1;
 }
 
-#panel table td#panel-health div.panel-health-blink {
+#panel table td div.panel-bar-blink {
   animation: pulse-effect 2s infinite ease-out;
 }
 

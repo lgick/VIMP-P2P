@@ -65,7 +65,7 @@ export default {
     },
 
     panel: {
-      // контейнер панели; ячейки генерирует PanelView по схеме игры (elems)
+      // контейнер панели; ячейки генерирует PanelView по схеме игры (fields)
       containerId: 'panel',
     },
 

@@ -52,7 +52,7 @@ export default class FakeGameCore {
       lastInputSeq: 0,
     });
 
-    this._events.push({ type: 'panelSet', id: gameId, field: 'health', value: 100 });
+    this._events.push({ type: 'panelSet', id: gameId, field: 'energy', value: 100 });
   }
 
   remove_actor(gameId) {

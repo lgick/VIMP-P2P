@@ -1,6 +1,7 @@
 import maps from '../data/maps/index.js';
 import models from '../data/models.js';
 import weapons from '../data/weapons.js';
+import snapshot from './snapshot.js';
 
 // Игровая половина бывшего src/config/game.js: команды, панель, статистика,
 // клавиши игрока, карты и баланс. Движковые дефолты хоста —
@@ -14,6 +15,10 @@ export default {
     hitscanService: 'HitscanService', // сервис вычисления стрельбы hitscan
     friendlyFire: false, // огонь по своей команде
   },
+
+  // снапшот-схема (ключи/раскладка бинарного протокола) — игровая:
+  // движок передаёт её ядру и клиенту, не зная содержимого
+  snapshot,
 
   // маппинг движковых событий на имена звуков игры (SocketManager.sendSoundCue)
   soundCues: {

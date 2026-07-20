@@ -24,6 +24,7 @@ const makeGame = () => ({
   timers: { voteTime: 10000, timeStep: 1000 / 120 },
   playerKeys: { fire: { key: 1 } },
   parts: { models: { m1: {} }, weapons: { w1: {} } },
+  snapshot: { a1: { id: 1, kind: 'indexed8', class: 'hot', fields: [] } },
 });
 
 describe('buildClientConfig', () => {
@@ -56,6 +57,8 @@ describe('buildClientConfig', () => {
       models: game.parts.models,
       weapons: game.parts.weapons,
     });
+    // снапшот-схема игры едет клиенту в CONFIG_DATA (Д1)
+    expect(config.snapshot).toBe(game.snapshot);
   });
 
   it('не мутирует переданные конфиги', () => {

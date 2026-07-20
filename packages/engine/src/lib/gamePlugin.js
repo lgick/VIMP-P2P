@@ -45,6 +45,7 @@ export function assertEngineApiCompatible(manifest) {
 // (docs/en/plugin-api.md) сразу после import, рядом с engineApi-гейтом
 const REQUIRED_GAME_CONFIG_PATHS = [
   'roomDefaults.maxPlayers',
+  'snapshot',
   'parts.models',
   'parts.weapons',
   'parts.friendlyFire',
