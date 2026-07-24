@@ -45,19 +45,25 @@ export default {
   // проде ставит Nginx (см. docs/deployment.md) — здесь single source of truth
   // политики; мастер применяет её к своим ответам только в проде (в dev CSP
   // сломала бы Vite HMR). WASM требует 'wasm-unsafe-eval', Worker — 'blob:';
-  // connect-src data: — PixiJS фетчит тестовый data:-URL для проверки ImageBitmap
+  // connect-src data: — PixiJS фетчит тестовый data:-URL для проверки ImageBitmap.
+  // authServiceUrl (Этап B2) — домен central auth-сервиса (packages/auth):
+  // лобби делает туда прямой fetch (POST /nick), поэтому connect-src должен
+  // его разрешать; сам OAuth-редирект (location.href на auth-сервис/провайдера)
+  // CSP не ограничивает — это навигация верхнего уровня, не fetch/XHR
   security: {
-    csp: [
-      "default-src 'self'",
-      "script-src 'self' 'wasm-unsafe-eval'",
-      "worker-src 'self' blob:",
-      "connect-src 'self' wss: data:",
-      "img-src 'self' data: blob:",
-      "style-src 'self' 'unsafe-inline'",
-      "object-src 'none'",
-      "base-uri 'self'",
-      "frame-ancestors 'none'",
-    ].join('; '),
+    authServiceUrl: 'http://localhost:3010',
+    csp: authServiceUrl =>
+      [
+        "default-src 'self'",
+        "script-src 'self' 'wasm-unsafe-eval'",
+        "worker-src 'self' blob:",
+        `connect-src 'self' wss: data: ${authServiceUrl}`,
+        "img-src 'self' data: blob:",
+        "style-src 'self' 'unsafe-inline'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "frame-ancestors 'none'",
+      ].join('; '),
     referrerPolicy: 'no-referrer',
   },
 

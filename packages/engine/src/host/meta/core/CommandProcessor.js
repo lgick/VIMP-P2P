@@ -1,11 +1,12 @@
-// Обработчик чат-команд. Движковое ядро: /name, /nr, /timeleft, /mapname;
-// игровые команды (HostPlugin.chatCommands) регистрируются через
+// Обработчик чат-команд. Движковое ядро: /name, /nr, /timeleft, /mapname,
+// /rank; игровые команды (HostPlugin.chatCommands) регистрируются через
 // registerCommand и получают контекст меты: handler(ctx, gameId, args).
 class CommandProcessor {
   constructor(deps) {
     this._chat = deps.chat;
     this._roundManager = deps.roundManager;
     this._timerManager = deps.timerManager;
+    this._playerDataSync = deps.playerDataSync;
     this._isDevMode = deps.isDevMode;
 
     // контекст игровых команд (participants, chat, scripted, roundManager,
@@ -73,6 +74,13 @@ class CommandProcessor {
       // название текущей карты
       case '/mapname':
         this._chat.pushSystemByUser(gameId, [this._roundManager.currentMap]);
+        break;
+
+      // ранг игрока (Этап B4/B5: PlayerDataSync, подгружен с auth-сервиса)
+      case '/rank':
+        this._chat.pushSystemByUser(gameId, 'RANK', [
+          this._playerDataSync.getRank(gameId),
+        ]);
         break;
 
       default: {

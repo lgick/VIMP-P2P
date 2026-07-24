@@ -43,6 +43,7 @@ class RoundManager {
     this._scripted = deps.scripted;
     this._voteCoordinator = deps.voteCoordinator;
     this._snapshotManager = deps.snapshotManager;
+    this._playerDataSync = deps.playerDataSync || null;
 
     // конфигурация
     this._teams = deps.teams;
@@ -127,6 +128,10 @@ class RoundManager {
     this._panel.reset();
     this._stat.reset();
     this._voteCoordinator.reset();
+
+    // синхронизация накопленных rank/state на мастер перед сменой карты
+    // (Этап B4) — естественная граница жизненного цикла
+    this._playerDataSync?.flushAll();
 
     this._snapshotManager.reset();
 
@@ -459,9 +464,11 @@ class RoundManager {
         // если это не убийство игрока своей команды
         if (victimUser.teamId !== killerUser.teamId) {
           this._stat.updateUser(killerId, killerUser.teamId, { score: 1 });
+          this._playerDataSync?.addRank(killerId, 1);
           // иначе если это огонь по своим
         } else {
           this._stat.updateUser(killerId, killerUser.teamId, { score: -1 });
+          this._playerDataSync?.addRank(killerId, -1);
         }
 
         if (killerUser.isNetworked) {
@@ -515,6 +522,10 @@ class RoundManager {
         key => this._teams[key] === killerTeamId,
       );
     }
+
+    // синхронизация накопленных rank/state на мастер по итогам раунда
+    // (Этап B4) — естественная граница жизненного цикла
+    this._playerDataSync?.flushAll();
 
     if (winnerTeam) {
       this._participants.getHumans().forEach(user => {

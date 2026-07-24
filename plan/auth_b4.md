@@ -1,4 +1,33 @@
-# B4. Состояние игрока (скиллы) + rank: загрузка и синхронизация ✅критично
+# B4. Состояние игрока (скиллы) + rank: загрузка и синхронизация ✅критично ✅ выполнен
+
+## Реализация
+
+Auth-сервис получил `PUT /rank` (зеркало уже существовавшего `PUT /state`).
+Мастер — новый `PlayerDataProxy.js` (та же DI-форма, что `JwksProxy`, но без
+кэша: данные per-user) и роуты `GET/PUT /auth/rank`, `GET/PUT /auth/state`
+(`forwardPlayerData` в `main.js` достаёт Bearer-токен и `?game=` из входящего
+запроса и пробрасывает 1:1); `config/lobby.js` — `auth.rankUrl`/`auth.stateUrl`.
+Хост — новый `meta/modules/PlayerDataSync.js`: `load()` на join тянет
+`GET /auth/rank`+`GET /auth/state` (сбой auth-сервиса не блокирует вход —
+остаются дефолты, rank 0 и `playerState.defaultState` игры), `addRank()`
+вызывается из `RoundManager.reportKill` тем же чокпоинтом, что и `Stat`-score
+(+1/-1, с той же победа/тимкилл-веткой), `flush()`/`flushAll()`
+(`Promise.allSettled`, best-effort) вызываются в `RoundManager.createMap()` и
+`_checkTeamWipe()`, и финально в `HostGame.removeUser()` перед удалением
+участника. Токен участника теперь хранится (`HumanParticipant.token`,
+проброшен через `ParticipantManager.createHuman`), чтобы `PlayerDataSync`
+могла авторизовать PUT тем же JWT, каким был проверен вход. `HostGame`
+даёт `getPlayerRank/getPlayerState/setPlayerState` для игровых плагинов.
+`games/tanks/src/config/game.js` — новый ключ `playerState: { defaultState }`.
+Документация — `docs/en/auth.md`+`docs/ru/auth.md`, `docs/en/master.md`+
+`docs/ru/master.md`, `docs/en/host.md`+`docs/ru/host.md`. Тесты —
+`tests/master/PlayerDataProxy.test.js`, `tests/host/PlayerDataSync.test.js`,
+плюс дополнения в `RoundManager.test.js`/`ParticipantManager.test.js`.
+
+Не реализовано на этом этапе (B5–B6): чат-команда `/rank`, отдельный проход
+по конфиг/деплой-докам сверх перечисленного выше. Rank — простой
+аккумулятор +1/-1 по убийствам, не ELO/матчмейкинг-алгоритм. Rust/WASM-ядро
+о rank/state ничего не знает — это чисто engine/JS-слой.
 
 - **Что такое «скиллы»/rank.** Rank — числовой рейтинг per (user, game). State —
   непрозрачный для движка JSON-блоб per (user, game); его *схему определяет игра*

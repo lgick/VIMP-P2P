@@ -31,6 +31,19 @@ export default {
     manifestUrl: '/worker/manifest.json',
   },
 
+  // JWKS central auth-сервиса, проксируемый мастером (Этап B3): Worker хоста
+  // фетчит его сам (тот же origin, что и сам Worker) и проверяет подпись
+  // identity-токена, не доверяя auth-сервису напрямую из недоверенного хоста
+  auth: {
+    jwksUrl: '/auth/jwks',
+
+    // rank/state central auth-сервиса, проксируемые мастером (Этап B4):
+    // хост запрашивает их на join своим identity-токеном и синхронизирует
+    // обратно по границам раунда/карты (RoundManager)
+    rankUrl: '/auth/rank',
+    stateUrl: '/auth/state',
+  },
+
   // переподключение сигнального WS хоста (комната без него выпадает из
   // выдачи мастера): экспоненциальный бэкофф от baseDelay до maxDelay (мс)
   reconnect: {

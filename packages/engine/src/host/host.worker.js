@@ -5,12 +5,15 @@
 // сюда приходят уже разобранные пакеты клиентов, обратно уходят wire-кадры
 // (JSON-строки и бинарные ArrayBuffer'ы через Transferable).
 
+import authClientConfig from '../config/authClient.js';
 import clientDefaults from '../config/clientDefaults.js';
+import lobbyConfig from '../config/lobby.js';
 import wsports from '../config/wsports.js';
 import { applyRoomOverrides } from '../lib/applyRoomOverrides.js';
 import { buildClientConfig } from '../lib/buildClientConfig.js';
 import { buildCoreConfig } from '../lib/coreConfig.js';
 import { validateAuth } from '../lib/validators.js';
+import { verifyIdentityToken } from '../lib/jwt.js';
 import { assertGameConfigShape } from '../lib/gamePlugin.js';
 import SocketManager from './meta/SocketManager.js';
 import HostGame from './HostGame.js';
@@ -43,6 +46,42 @@ const clients = new Map();
 // эстафета Worker'ов (Этап 5.2): socketId → gameId участников, восстановленных
 // из handoff-меты — их порт-машины поднимаются минуя хендшейк
 let handoffClients = null;
+
+// JWKS central auth-сервиса, проксированный мастером (Этап B3), закэширован
+// на время жизни Worker'а — ключ меняется только при ротации
+let jwksPromise = null;
+
+function getJwks() {
+  if (!jwksPromise) {
+    jwksPromise = fetch(lobbyConfig.auth.jwksUrl).then(res => {
+      if (!res.ok) {
+        throw new Error(`jwks: HTTP ${res.status}`);
+      }
+
+      return res.json();
+    });
+
+    // сбой не должен закэшироваться навсегда — следующий вход попробует снова
+    jwksPromise.catch(() => {
+      jwksPromise = null;
+    });
+  }
+
+  return jwksPromise;
+}
+
+// проверяет identity-токен клиента (Этап B3): подпись RS256 по JWKS мастера,
+// issuer, срок годности — возвращает проверенный ник или бросает исключение.
+// Свободный ввод имени в игре больше не источник ника: он берётся из claim
+async function verifyClientToken(token) {
+  const jwks = await getJwks();
+  const payload = await verifyIdentityToken(token, {
+    jwks,
+    issuer: authClientConfig.issuer,
+  });
+
+  return payload.nick;
+}
 
 // wire-сокет пользователя: пишет кадры в главный поток (роутер WebRTC/loopback)
 function makeWorkerSocket(socketId) {
@@ -150,28 +189,47 @@ function buildPortMethods(socketId, state) {
       state.enabled[PC_CONFIG_READY] = false;
     },
 
-    // 1: auth response
+    // 1: auth response. Ник — не свободный ввод игровой формы, а claim
+    // проверенного identity-токена (Этап B3); authSchema.params больше не
+    // содержит 'name', только игро-специфичные поля (например 'model')
     data => {
-      if (data && typeof data === 'object') {
-        const err = validateAuth(
-          data,
-          hostPlugin.authSchema.params,
-          hostPlugin.authSchema.validators,
-        );
+      if (!data || typeof data !== 'object') {
+        return;
+      }
 
-        if (!err) {
+      const err = validateAuth(
+        data,
+        hostPlugin.authSchema.params,
+        hostPlugin.authSchema.validators,
+      );
+
+      if (err) {
+        socketManager.sendAuthResult(socketId, err);
+        return;
+      }
+
+      verifyClientToken(data.token)
+        .then(name => {
+          // клиент мог отключиться, пока токен проверялся
+          if (!clients.has(socketId)) {
+            return;
+          }
+
           state.enabled[PC_AUTH_RESPONSE] = false;
           state.enabled[PC_MODULES_READY] = true;
 
-          host.createUser(data, socketId, createdId => {
+          host.createUser({ ...data, name }, socketId, createdId => {
             state.gameId = createdId;
           });
 
           socketManager.sendTechInform(socketId, 'loading');
-        }
-
-        socketManager.sendAuthResult(socketId, err);
-      }
+          socketManager.sendAuthResult(socketId, undefined);
+        })
+        .catch(() => {
+          socketManager.sendAuthResult(socketId, [
+            { name: 'token', error: 'invalid' },
+          ]);
+        });
     },
 
     // 2: modules ready

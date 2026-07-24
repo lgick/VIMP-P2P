@@ -10,6 +10,7 @@ logs
 .env
 npm-debug.log*
 .certs/
+.keys/
 
 # Rust-ядро: артефакты сборки (workspace target/ + wasm-pack output)
 target/

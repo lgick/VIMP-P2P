@@ -22,6 +22,7 @@ const MESSAGE_CODES = {
   MAP_NEXT: 'm:1', // Next map: {0}
 
   COMMANDS_NOT_FOUND: 'c:0', // Command not found
+  RANK: 'c:1', // Your rank: {0}
 
   NAME_INVALID: 'n:0', // Invalid name
   NAME_CHANGED: 'n:1', // {0} changed name to {1}

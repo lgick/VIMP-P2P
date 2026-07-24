@@ -97,6 +97,68 @@ The ~120 Hz game loop starts on its own (`HostGame` constructor →
 `RoundManager.createMap` → `TimerManager.startGameTimers`); frames only go
 out to participants ready to play.
 
+### Auth response (Stage B3)
+
+Port 1 (`AUTH_RESPONSE`) still runs `validateAuth` against the game's
+`HostPlugin.authSchema.params`/`.validators` (game-specific fields only,
+e.g. `model` — `name` was removed from `games/tanks/src/config/auth.js`).
+Once those pass, the Worker itself is the authority on identity: it calls
+`verifyClientToken(data.token)`, which lazily fetches and caches
+`GET /auth/jwks` (the master's proxy of the central auth service, see
+[auth.md](auth.md#joining-a-room-host-verification) and
+[master.md](master.md#get-authjwks)) for the Worker's lifetime, then
+`verifyIdentityToken` (`packages/engine/src/lib/jwt.js`) checks the RS256
+signature (Web Crypto `crypto.subtle`, no JWT dependency), `iss`
+(`config/authClient.js`'s `issuer`) and expiry, and returns the token's
+`nick` claim. Only then does `host.createUser({ ...data, name: nick },
+socketId, cb)` run — a client can no longer type an arbitrary name. A
+missing/invalid/expired token sends `AUTH_RESULT` with
+`[{ name: 'token', error: 'invalid' }]` and no user is created; a client
+that disconnects mid-verification is checked against the live `clients` map
+before `createUser` runs.
+
+### Player rank and state sync (Stage B4)
+
+Now that the identity token is verified once (above), it's also **retained**
+on the participant — `HumanParticipant.token` (set from `params.token` by
+`ParticipantManager.createHuman`) — so later authenticated writes back to
+the auth service can reuse it without re-verifying.
+
+`meta/modules/PlayerDataSync.js` is a per-participant in-memory map of
+`{ token, rank, state }`:
+
+- **Load on join**: `HostGame.createUser()` fires
+  `playerDataSync.load(gameId, params.token)` fire-and-forget — it doesn't
+  block the join flow. `load()` calls the master's `GET /auth/rank` and
+  `GET /auth/state` (same relative-fetch pattern the Worker already uses for
+  JWKS, see [auth.md](auth.md#joining-a-room-host-verification) and
+  [master.md](master.md#getput-authrank-getput-authstate)) using the
+  participant's own token. On any failure (auth service down, network
+  error) it silently keeps the defaults — rank `0` and the game's declared
+  `playerState.defaultState` (`HostGame` reads it from
+  `data.playerState?.defaultState`, e.g.
+  `games/tanks/src/config/game.js`) — a join is never blocked by
+  auth-service unavailability.
+- **Accumulate**: `RoundManager.reportKill()` is the single choke point for
+  rank, mirroring how it already accumulates the ephemeral `Stat` score
+  there — `playerDataSync.addRank(killerId, +1 or -1)` with the same
+  win/team-kill branching as the score update.
+- **Sync back**: `flush(participantId)` `PUT`s the participant's current
+  rank+state to the master (`Promise.allSettled`, best-effort — errors are
+  swallowed and a later flush retries with whatever's accumulated by then);
+  `flushAll()` flushes every current participant. Two lifecycle points call
+  `flushAll()`: `RoundManager.createMap()` (map change) and
+  `RoundManager._checkTeamWipe()` (round end) — both alongside the existing
+  `Stat.reset()`/`Stat.updateHead()` calls at those same boundaries.
+  `HostGame.removeUser()` does one more best-effort `flush()` for the
+  leaving participant before deleting its `PlayerDataSync` entry.
+
+`HostGame` exposes `getPlayerRank(gameId)`/`getPlayerState(gameId)`/
+`setPlayerState(gameId, state)` for game-plugin modules (and a future
+`/rank` chat command, Stage B5) to read/write rank and the opaque state
+blob. The Rust/WASM game core is not involved at all — rank/state is a
+purely engine/JS-side concept.
+
 ## HostGame (`packages/engine/src/host/HostGame.js`)
 
 The host facade — module wiring + the participant lifecycle:
@@ -105,7 +167,7 @@ The host facade — module wiring + the participant lifecycle:
   `GameCoreAdapter`;
 - meta (`RoundManager`, `ParticipantManager`, `Chat`, `Vote`, `Stat`, `Panel`,
   `TimerManager`, `RTTManager`, `CommandProcessor`, `VoteCoordinator`,
-  `SocketManager`) lives in `packages/engine/src/host/meta/` modules (see "Meta modules"
+  `SocketManager`, `PlayerDataSync`) lives in `packages/engine/src/host/meta/` modules (see "Meta modules"
   below), with dependencies passed through constructors (DI);
 - the hot `_onShotTick` is core-driven: `adapter.updateData(dt)` (a core step
   + event drain), send throttling (`SnapshotThrottle` — a frame every
@@ -113,8 +175,10 @@ The host facade — module wiring + the participant lifecycle:
   per-user `adapter.packFrame(...)` (the core itself assembles the
   prediction player block for `playerId`);
 - **connection lifecycle**: `createUser` (registering a spectator in every
-  module), `removeUser`, `mapReady`, `firstShotReady`, `sendMap` (a proxy to
-  RoundManager); **input** via `updateKeys(gameId, 'seq:action:name')`;
+  module — called with the host Worker's verified nick, not a freely-typed
+  name, see "Auth response" below), `removeUser`, `mapReady`,
+  `firstShotReady`, `sendMap` (a proxy to RoundManager); **input** via
+  `updateKeys(gameId, 'seq:action:name')`;
   **chat and votes** via `pushMessage` (sanitizing, `/commands` →
   CommandProcessor) and `parseVote`; bridges for `TimerManager`/`RTTManager`
   callbacks (kicks), `reportKill`, `triggerCameraShake`, `updateRTT`;
@@ -294,6 +358,9 @@ callback + participant list), `reset`. Topic cooldown — `timeBlockedVote`
   `game:stat` config; `addUser`/`removeUser`/`moveUser`/`updateUser`/
   `updateHead`; `getLast()` — the delta for this tick, `getFull()` — full
   state (on join).
+- **`PlayerDataSync`** (Stage B4) — per-participant rank/state, loaded from
+  and flushed back to the master's `/auth/rank`/`/auth/state` proxy; see
+  "Player rank and state sync (Stage B4)" above for the full flow.
 - **`Chat`** (`meta/modules/chat/`) — user messages and system templates
   (`systemMessages.js`): `push` (broadcast), `pushSystem`/
   `pushSystemByUser` (templated `'group:number:params'`), queues
@@ -588,4 +655,4 @@ create a room + connect a guest → edit the host code → `npm run build:app`
 
 ---
 
-[← Previous: Master Server](master.md) · [Next: Rust Core →](core.md)
+[← Previous: Central Auth Service](auth.md) · [Next: Rust Core →](core.md)

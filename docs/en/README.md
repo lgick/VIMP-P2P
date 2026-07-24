@@ -13,6 +13,7 @@ and signaling.
 | [architecture.md](architecture.md) | Overall architecture: master/host/client, game loop, connection lifecycle, key invariants |
 | [gameplay.md](gameplay.md) | Gameplay: rounds, teams, stats, votes, chat commands, controls, weapons, bots, kicks |
 | [master.md](master.md) | Master server (entry point): room registry, `GET /servers`, map catalog, WebRTC signaling, `/ban` |
+| [auth.md](auth.md) | Central auth service (`packages/auth/`): OAuth login, global nick, JWT/JWKS, per-game rank/state |
 | [host.md](host.md) | Browser host: Worker with the core, `GameCoreAdapter`, the host facade, meta modules, host-player loopback, main-thread router |
 | [core.md](core.md) | Rust simulation core: `core/` layout, ABI (commands/events/frames), WASM build, tests |
 | [client.md](client.md) | Client modules: MVC components, client core (interpolation/prediction/shot spawning), rendering, sound |

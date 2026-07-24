@@ -32,6 +32,13 @@ describe('ParticipantManager: создание людей', () => {
     expect(pm.getTeamSize('spectators')).toBe(1);
   });
 
+  it('createHuman пробрасывает identity-токен на участника (Этап B4)', () => {
+    const pm = make();
+    const gameId = pm.createHuman({ name: 'Alice', model: 'm1', token: 'jwt-1' }, 's1');
+
+    expect(pm.get(gameId).token).toBe('jwt-1');
+  });
+
   it('getNetworkedReady возвращает только готовых людей', () => {
     const pm = make();
     const a = pm.createHuman({ name: 'A', model: 'm1' }, 's1');

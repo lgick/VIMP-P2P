@@ -27,6 +27,7 @@ const makeRm = (overrides = {}) =>
     scripted: overrides.scripted || {},
     voteCoordinator: overrides.voteCoordinator || {},
     snapshotManager: overrides.snapshotManager || {},
+    playerDataSync: overrides.playerDataSync,
     teams: overrides.teams || { red: 1, blue: 2, spec: 3 },
     spectatorTeam: 'spec',
     spectatorId: 3,
@@ -120,6 +121,24 @@ describe('RoundManager.reportKill', () => {
     expect(scoreCall).toBeUndefined();
   });
 
+  it('начисляет ранг убийце-врагу через playerDataSync (Этап B4)', () => {
+    const rm = makeCtx();
+    rm._playerDataSync = { addRank: vi.fn() };
+
+    rm.reportKill('v', 'k');
+
+    expect(rm._playerDataSync.addRank).toHaveBeenCalledWith('k', 1);
+  });
+
+  it('снимает ранг за огонь по своим через playerDataSync (Этап B4)', () => {
+    const rm = makeCtx();
+    rm._playerDataSync = { addRank: vi.fn() };
+
+    rm.reportKill('v', 'ally');
+
+    expect(rm._playerDataSync.addRank).toHaveBeenCalledWith('ally', -1);
+  });
+
   it('без убийцы только фиксирует смерть', () => {
     const rm = makeCtx();
     rm.reportKill('v');
@@ -199,6 +218,15 @@ describe('RoundManager._checkTeamWipe', () => {
     rm._checkTeamWipe(1, 2);
     expect(rm._isRoundEnding).toBe(false);
     expect(rm._stat.updateHead).not.toHaveBeenCalled();
+  });
+
+  it('синхронизирует rank/state участников по итогам раунда (Этап B4)', () => {
+    const rm = makeCtx();
+    rm._playerDataSync = { flushAll: vi.fn() };
+
+    rm._checkTeamWipe(1, 2);
+
+    expect(rm._playerDataSync.flushAll).toHaveBeenCalled();
   });
 });
 

@@ -17,6 +17,7 @@
 | `NODE_ENV` | `production` / `development` | — |
 | `VIMP_DOMAIN` | Домен мастера. **Обязательна** в production (иначе процесс завершится с ошибкой) | `localhost` |
 | `VIMP_MASTER_PORT` | Порт мастер-сервера | `3002` |
+| `VIMP_AUTH_SERVICE_URL` | Origin central auth-сервиса (`packages/auth`), переопределяет `security.authServiceUrl` — используется в CSP `connect-src` и прокси-роутах `/auth/*` ([auth.md](auth.md), [deployment.md](deployment.md#central-auth-сервис-packagesauth)) | `http://localhost:3010` |
 
 Игровые параметры (карта, лимит игроков, таймеры, friendly fire) переменными окружения не задаются: их выбирает создатель комнаты в лобби, а дефолты живут в `packages/engine/src/config/hostDefaults.js` (движковые) и `games/tanks/src/config/game.js` (игровые).
 
@@ -91,6 +92,23 @@
 Текущие столбцы: `name` (0), `status` (1), `score` (2), `deaths` (3), `latency` (4).
 
 Состав колонок объявляет схема: движковые записи (`name`/`status`/`score`/`deaths`/`latency` из RoundManager/RTTManager) в не объявленные схемой колонки молча игнорируются — игра может опустить любую из них.
+
+### Rank/state игрока (`playerState`)
+
+Этап B4 (см. [auth.md](auth.md#загрузка-и-синхронизация-rank-и-state-хост) и
+[host.md](host.md#синхронизация-rank-и-state-игрока-этап-b4)): объявляет
+дефолтную форму непрозрачного per-player блока «скиллов», синхронизируемого
+с центральным auth-сервисом.
+
+| Параметр | Значение | Описание |
+| --- | --- | --- |
+| `playerState.defaultState` | `{}` | С чем стартует участник, если у auth-сервиса нет сохранённой записи для него (или он недоступен на входе) |
+
+Движок обращается с `state` как с непрозрачным JSON-блобом (только
+транспорт + хранение) — форму интерпретирует только игра, точно так же, как
+`stat` выше объявляет столбцы scoreboard. У `rank` (простой числовой
+аккумулятор дельты по убийствам, ±1 за фраг) своей конфиг-схемы нет — это
+просто число.
 
 ### Панель HUD (`panel`)
 

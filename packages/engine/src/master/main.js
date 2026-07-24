@@ -11,6 +11,8 @@ import RateLimiter from '../lib/rateLimiter.js';
 import security from '../lib/security.js';
 import GameCatalog from './GameCatalog.js';
 import HostRegistry from './HostRegistry.js';
+import JwksProxy from './JwksProxy.js';
+import PlayerDataProxy from './PlayerDataProxy.js';
 import WorkerCatalog from './WorkerCatalog.js';
 import SignalingServer from './SignalingServer.js';
 
@@ -40,7 +42,24 @@ if (isProduction) {
   if (env.VIMP_MASTER_PORT) {
     config.set('master:port', Number(env.VIMP_MASTER_PORT));
   }
+
+  // домен central auth-сервиса (Этап B2) — попадает в CSP connect-src, т.к.
+  // лобби делает туда прямой fetch (POST /nick)
+  if (env.VIMP_AUTH_SERVICE_URL) {
+    config.set('master:security:authServiceUrl', env.VIMP_AUTH_SERVICE_URL);
+  }
 }
+
+// проксирует JWKS central auth-сервиса под собственным origin (Этап B3) —
+// Worker хоста верифицирует identity-токен по этому кэшу
+const jwksProxy = new JwksProxy(config.get('master:security:authServiceUrl'));
+
+// проксирует GET/PUT /rank и /state central auth-сервиса под мастером
+// (Этап B4) — хост запрашивает/синхронизирует rank+state своим Bearer
+// identity-токеном, не завися от CORS/прямой доступности auth-сервиса
+const playerDataProxy = new PlayerDataProxy(
+  config.get('master:security:authServiceUrl'),
+);
 
 // каталог игр-плагинов (Этап 6.2): сканирует games/*/dist/manifest.json
 // (продукт `npm run game:build`); в dev entries указывают на Vite-исходники
@@ -102,6 +121,9 @@ const signaling = new SignalingServer(registry, {
 const app = express();
 let server;
 
+// нужен для тела PUT /auth/rank и /auth/state (Этап B4)
+app.use(express.json());
+
 const port = config.get('master:port');
 
 // гигиена среды (Этап 5.4): базовые security-заголовки на всех ответах.
@@ -113,7 +135,9 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
 
   if (isProduction) {
-    res.setHeader('Content-Security-Policy', config.get('master:security:csp'));
+    const csp = config.get('master:security:csp')(config.get('master:security:authServiceUrl'));
+
+    res.setHeader('Content-Security-Policy', csp);
   }
 
   next();
@@ -123,6 +147,60 @@ app.use((req, res, next) => {
 app.get('/servers', (req, res) => {
   res.json(registry.getList(req.query));
 });
+
+// REST API: JWKS central auth-сервиса, проксированный под origin мастера
+// (Этап B3) — Worker хоста проверяет по нему подпись identity-токена
+app.get('/auth/jwks', (req, res) => {
+  jwksProxy
+    .get()
+    .then(jwks => res.json(jwks))
+    .catch(err => {
+      console.error('[auth] jwks proxy failed:', err.message);
+      res.status(502).json({ error: 'authServiceUnavailable' });
+    });
+});
+
+// REST API: rank/state central auth-сервиса, проксированные под origin
+// мастера (Этап B4) — хост запрашивает их на join и синхронизирует обратно
+// по границам раунда/карты, авторизуясь тем же Bearer identity-токеном
+// игрока, каким проверяется вход
+function forwardPlayerData(req, res, call) {
+  const header = req.get('authorization') || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  const game = req.query.game;
+
+  if (!token || !game) {
+    res.status(400).json({ error: 'badRequest' });
+    return;
+  }
+
+  call(token, game)
+    .then(({ status, json }) => res.status(status).json(json))
+    .catch(err => {
+      console.error('[auth] player-data proxy failed:', err.message);
+      res.status(502).json({ error: 'authServiceUnavailable' });
+    });
+}
+
+app.get('/auth/rank', (req, res) =>
+  forwardPlayerData(req, res, (token, game) => playerDataProxy.getRank(token, game)),
+);
+
+app.put('/auth/rank', (req, res) =>
+  forwardPlayerData(req, res, (token, game) =>
+    playerDataProxy.putRank(token, game, req.body?.rank),
+  ),
+);
+
+app.get('/auth/state', (req, res) =>
+  forwardPlayerData(req, res, (token, game) => playerDataProxy.getState(token, game)),
+);
+
+app.put('/auth/state', (req, res) =>
+  forwardPlayerData(req, res, (token, game) =>
+    playerDataProxy.putState(token, game, req.body?.state),
+  ),
+);
 
 // REST API: манифест worker-бандла (Этап 5.2 — эстафета Worker'ов).
 // По нему вкладка хоста создаёт Worker (хешированное имя бандла страница

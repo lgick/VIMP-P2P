@@ -40,6 +40,7 @@ export default [
   {
     files: [
       'packages/engine/src/master/**/*.js', // мастер-сервер (Node.js)
+      'packages/auth/src/**/*.js', // центральный auth-сервис (Node.js)
     ],
     languageOptions: {
       ecmaVersion: 'latest', // последний ECMAScript

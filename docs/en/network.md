@@ -103,7 +103,7 @@ complaint about itself. Ban logic lives on the master
 | Port | Name | Description |
 | :--: | --- | --- |
 | 0 | `CONFIG_READY` | Config received, canvas ready |
-| 1 | `AUTH_RESPONSE` | Auth form data (`{name, model}`) |
+| 1 | `AUTH_RESPONSE` | Auth form data plus the lobby identity JWT (`{model, ..., token}`); the host derives the nick from the verified token, not from a form field (Stage B3, see [auth.md](auth.md)) |
 | 2 | `MODULES_READY` | Client modules initialized |
 | 3 | `MAP_READY` | Map loaded and built |
 | 4 | `FIRST_SHOT_READY` | First frame applied, ready for the game loop |

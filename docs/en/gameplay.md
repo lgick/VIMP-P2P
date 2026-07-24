@@ -55,6 +55,7 @@ Plain text is a message to the team/everyone (length capped by the host, 60 char
 | `/name <nick>` | Change name (with validation and a system message) |
 | `/timeleft` | Time remaining on the map |
 | `/mapname` | Current map's name |
+| `/rank` | Your current rank (loaded from the auth service, see [auth.md](auth.md#rank-and-state-loading-and-sync-host)) |
 | `/bot <N> [team]` | Spawn N bots (into a team, or spread evenly); `/bot 0 [team]` — remove bots |
 | `/nr` | New round — **dev mode only** |
 | `/ban <reason>` | Report the room host (P2P social moderation) — **does not reach the host**, see below |

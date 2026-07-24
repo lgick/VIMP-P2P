@@ -45,6 +45,7 @@ class ParticipantManager {
       teamId: this._spectatorId,
       socketId,
       watchedGameId: this._activePlayersList[0] || null,
+      token: params.token,
     });
 
     this._participants.set(gameId, participant);

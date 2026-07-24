@@ -4,7 +4,7 @@
 
 ## main.js — бутстрап, диспетчер и рендер-цикл
 
-- **Бутстрап**: прежде всего фетчит каталог игр мастера (`GET /games/manifest.json`, `GameCatalog` — см. [master.md](master.md)) и динамически грузит `ClientPlugin` активной игры по `entries.client` её манифеста (`packages/engine/src/lib/gamePlugin.js`, `loadClientPlugin`), отклоняя несовпадение `engineApi`. Пока в каталоге одна игра — берётся первая запись манифеста, а селектор игры в лобби скрыт (см. [plugin-api.md](plugin-api.md)). Затем создаёт `SignalingClient`, подключается к мастеру; по `welcome` поднимает лобби (`initLobby`). Выбор сервера → `connectToHost` создаёт `WebRtcManager`, устанавливает P2P и запоминает `currentHostId` (для `/ban`).
+- **Бутстрап**: прежде всего фетчит каталог игр мастера (`GET /games/manifest.json`, `GameCatalog` — см. [master.md](master.md)) и динамически грузит `ClientPlugin` активной игры по `entries.client` её манифеста (`packages/engine/src/lib/gamePlugin.js`, `loadClientPlugin`), отклоняя несовпадение `engineApi`. Пока в каталоге одна игра — берётся первая запись манифеста, а селектор игры в лобби скрыт (см. [plugin-api.md](plugin-api.md)). Также независимо от сигнального сокета поднимает экран входа **LobbyAuth** (см. ниже) и подключает `SignalingClient`. Лобби (`initLobby`) открывается только после того, как прилетели оба события — `welcome` от мастера и `authenticated` от LobbyAuth: `#lobby` скрыт, пока игрок не авторизован. Выбор сервера → `connectToHost` создаёт `WebRtcManager`, устанавливает P2P и запоминает `currentHostId` (для `/ban`).
 - **Соц-модерация `/ban`**: исходящий чат идёт через `handleChatSend` — он перехватывает `/ban <причина>` и вместо отправки хосту (порт `CHAT_DATA`) шлёт жалобу напрямую мастеру (`signaling.reportHost(currentHostId, reason)`), минуя хоста-читера. Причина обязательна, доступно только гостю (`currentHostId` есть); у хоста-игрока команда даёт локальную подсказку; при разорванном сигнальном WS — честное сообщение об ошибке (жалоба не отправлена). Мастер дополнительно принимает жалобу только от сессии, реально подключавшейся к комнате — см. [master.md](master.md#соц-модерация-ban). Остальной чат — хосту как обычно.
 - Ветвит входящие пакеты хоста (`handleMessage`) по типу данных: строка → JSON `[portId, payload]` → обработчик `socketMethods[portId]`; `ArrayBuffer` → `clientCore.push_frame` (распаковка, вставка в буфер по seq и reconciliation предикта — в ядре; несовпадение версии — кадр отброшен).
 - По `CONFIG_DATA` (порт 0) инициализирует все модули: PixiJS `Application`-ы, MVC-компоненты, `BakingProvider` (запекание текстур), `SoundManager` и **клиентское ядро** (`ClientPlugin.createClientCore(configJson, { wasmUrl })`, где `wasmUrl` — `entries.wasm` манифеста активной игры: плагин сам зовёт свой wasm-bindgen `init()` и возвращает `{ core, memory }`; конфиг собирает [packages/engine/src/lib/clientCoreConfig.js](../../packages/engine/src/lib/clientCoreConfig.js) из секций `prediction`/`interpolation` CONFIG_DATA); отвечает `CONFIG_READY`.
@@ -30,7 +30,15 @@ Classic-фолбэка на Worker нет (запретил бы ESM и потр
 
 ## MVC-компоненты (packages/engine/src/client/components/)
 
-Девять троек `model/` + `view/` + `controller/`: **Auth**, **Lobby**, **CanvasManager**, **Controls**, **Game**, **Chat**, **Panel**, **Stat**, **Vote**.
+Десять троек `model/` + `view/` + `controller/`: **LobbyAuth**, **Auth**, **Lobby**, **CanvasManager**, **Controls**, **Game**, **Chat**, **Panel**, **Stat**, **Vote**.
+
+**LobbyAuth** — экран входа перед лобби (`plan/auth_b2.md`):
+
+- **model** — говорит с central auth-сервисом (`packages/auth`, см. [auth.md](auth.md)) напрямую, не через мастер. `boot(search)` один раз при старте разбирает query string OAuth-редиректа (`?token=`/`?pendingToken=`/`?authError=`), иначе восстанавливает identity JWT из `localStorage`; `submitNick` — единственный сетевой вызов, который эта модель делает сама (`POST /nick` с pending-токеном, в отличие от остальных моделей, публикующих сигнальный I/O событиями) — это обычный кросс-доменный fetch, а не сигнальный трафик. Публикует `login-required`/`nick-required`/`authenticated`/`login-error`/`nick-error`. Payload identity JWT декодируется на клиенте только для отображения (`packages/engine/src/lib/jwt.js`, `decodeJwtPayload`, без проверки подписи) — авторитетную проверку по `/jwks` делает хост (`plan/auth_b3.md`, ещё не реализовано).
+- **view** — переключает `#lobby-auth-login`/`#lobby-auth-nick` (`views/includes/lobbyAuth.pug`) и по `authenticated` прячет `#lobby-auth`, показывает `#lobby` и бейдж ника/выхода `#lobby-user` (`views/includes/lobby.pug`) — сам `#lobby` в шаблоне стартует скрытым, включает его только `LobbyAuthView` (или `LobbyCtrl.open`). Кнопки провайдеров (`.lobby-auth-provider`, `data-provider`) фильтруются по списку из конфига.
+- **controller** — `login(provider)` переводит браузер (`window.location.href = model.loginUrl(provider)`) на `GET /oauth/:provider/start` auth-сервиса — это навигация верхнего уровня, а не fetch, поэтому CSP `connect-src` её не касается. `nick`/`logout` проксируются в модель.
+
+Конфиг — [packages/engine/src/config/authClient.js](../../packages/engine/src/config/authClient.js) (бандлится в сборку, как `lobby.js` — `serviceUrl` должен указывать на реальный домен auth-сервиса per-деплою; CSP `connect-src` мастера (`config/master.js`, `security.csp`) шаблонизируется тем же `authServiceUrl`, чтобы fetch лобби `POST /nick` не блокировался в проде. `GET /oauth/:provider/start` и редирект колбэка — навигация верхнего уровня, CSP их не касается в любом случае).
 
 **Lobby** — экран выбора сервера ДО подключения к хосту:
 
@@ -50,7 +58,13 @@ Publisher-паттерн связей внутри тройки:
 
 Назначение компонентов:
 
-- **Auth** — форма входа (имя, модель), клиентская валидация (`validators.js`), localStorage.
+- **LobbyAuth** — экран входа перед лобби через central auth-сервис (см. выше).
+- **Auth** — комнатная форма входа только для игро-специфичных полей
+  (например, `model`), клиентская валидация (`validators.js`), localStorage.
+  Ник здесь больше не вводится (Этап B3, см.
+  [auth.md](auth.md#вход-в-комнату-проверка-хостом)): `main.js` прикладывает
+  `LobbyAuthModel.getToken()` к payload `AUTH_RESPONSE` как `token`, хост
+  проверяет его по `/auth/jwks` и берёт ник оттуда.
 - **CanvasManager** — управляет несколькими PixiJS `Application` одновременно: `vimp` (основной игровой canvas) и `radar` (мини-карта); canvas-элементы генерирует `main.js` из конфига канвасов игры (`modules.canvasManager.canvases`, включая стартовые `width`/`height`) — в HTML их нет. Адаптивное масштабирование (эталон 1920px), `aspectRatio`/`fixSize`/`baseScale`, динамическая камера (look-ahead, zoom от скорости) и тряска — параметры в [configuration.md](configuration.md#modulescanvasmanager--полотна-и-камера).
 - **Controls** — перехват клавиатуры (`InputListener`), активный набор клавиш диктует сервер (порт 17), режимы `chat`/`vote`/`stat`, отправка ввода `"seq:action:name"`.
 - **Game** — ядро рендеринга: `GameCtrl.parse(name, data)` создаёт/обновляет/удаляет экземпляры сущностей по снапшот-данным через `Factory`.

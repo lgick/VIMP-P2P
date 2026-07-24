@@ -76,6 +76,13 @@ export default {
     },
   },
 
+  // rank/state игрока (Этап B4): rank — числовой рейтинг per (user, game),
+  // state — непрозрачный для движка JSON ("скиллы"); defaultState — то, с
+  // чем стартует игрок без сохранённой записи на auth-сервисе
+  playerState: {
+    defaultState: {},
+  },
+
   panel: {
     // схема полей панели (стартовые значения ресурсов; уходит и в ядро)
     fields: {

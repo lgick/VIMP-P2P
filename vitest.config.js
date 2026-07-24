@@ -11,6 +11,8 @@ import { defineConfig } from 'vitest/config';
 //                    (tests/host/HostGame.test.js + JS↔WASM харнесс tests/core;
 //                    пропускается, если games/tanks/core/pkg-node не собран —
 //                    см. npm run core:build)
+//   - auth:          центральный auth-сервис (packages/auth/src) —
+//                    JWT/JWKS, валидаторы, репозиторий, OAuth-провайдеры
 export default defineConfig({
   test: {
     // глобальные describe/it/expect без импорта
@@ -67,12 +69,24 @@ export default defineConfig({
           include: ['tests/host/HostGame.test.js', 'tests/core/**/*.test.js'],
         },
       },
+      {
+        extends: true,
+        test: {
+          name: 'auth',
+          environment: 'node',
+          include: ['tests/auth/**/*.test.js'],
+        },
+      },
     ],
 
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
-      include: ['packages/engine/src/**/*.js', 'games/*/src/**/*.js'],
+      include: [
+        'packages/engine/src/**/*.js',
+        'packages/auth/src/**/*.js',
+        'games/*/src/**/*.js',
+      ],
       exclude: [
         '**/_*/**', // игнорируемые директории (префикс _)
         '**/_*.js', // игнорируемые файлы (префикс _)

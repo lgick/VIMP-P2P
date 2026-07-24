@@ -99,9 +99,67 @@
 3. На вкладке **Secrets** должны существовать секреты для SSH-доступа деплоя: `SERVER_USER` (пользователь VPS) и `SERVER_SSH_KEY` (приватный ключ).
 4. Перейдите во вкладку **Actions** и перезапустите пайплайн вручную (Re-run jobs) либо сделайте `git push` в ветку `main` — система задеплоит мастер на все серверы из списка.
 
+## Central auth-сервис (`packages/auth`)
+
+Вход в лобби, ник, rank и state ([auth.md](auth.md)) требуют, чтобы
+`@vimp/auth` работал как отдельный долгоживущий сервис с PostgreSQL. В
+отличие от мастера (по инстансу на домен в `SERVERS_MATRIX`), это обычно
+один общий инстанс, на который смотрят все домены мастеров.
+
+- **Образ.** Джоба `build_and_push_auth` из `deploy.yml` собирает и
+  публикует второй образ, `ghcr.io/<repo>-auth:latest`, из
+  [packages/auth/Dockerfile](../../packages/auth/Dockerfile) при каждом
+  пуше в `main` — обычный Node-образ, без стадий Rust/Vite.
+- **Хостинг.** Разверните его один раз на отдельном домене: Шаги 2–3 выше
+  (`install-system.sh`, затем `add-server.sh`) дают Nginx + SSL для любого
+  домена/порта, поэтому подходят и для auth-сервиса. Вместо одного
+  контейнера мастера запустите docker-compose стек из двух сервисов:
+
+  ```yaml
+  services:
+    postgres:
+      image: postgres:16-alpine
+      restart: always
+      environment:
+        POSTGRES_DB: vimp_auth
+        POSTGRES_USER: vimp
+        POSTGRES_PASSWORD: <secret>
+      volumes:
+        - pgdata:/var/lib/postgresql/data
+    auth:
+      image: ghcr.io/<repo>-auth:latest
+      restart: always
+      env_file: .env.prod
+      volumes:
+        - ./.keys:/app/.keys:ro
+      ports:
+        - '127.0.0.1:<port>:3010'
+  volumes:
+    pgdata:
+  ```
+
+  `.env.prod` на этом хосте должен содержать `VIMP_AUTH_DATABASE_URL`
+  (указывающий на сервис `postgres`), а также секреты OAuth-провайдера
+  (`VIMP_AUTH_GITHUB_CLIENT_ID`/`_SECRET`, см. [auth.md](auth.md#запуск)).
+  Пара RS256-ключей кладётся в `./.keys/` на хосте (генерируется один раз —
+  [auth.md](auth.md#запуск)); никогда не запекайте её в образ и не
+  коммитьте.
+
+- **Миграции.** Не запускаются автоматически при старте контейнера —
+  примените их один раз, и снова после любого изменения схемы: `docker
+  compose exec auth node src/db/migrate.js`.
+- **Привязка мастеров.** Задайте переменную репозитория
+  `AUTH_SERVICE_URL` (Settings → Secrets and variables → Actions →
+  Variables) публичным URL auth-сервиса; джоба `deploy` из `deploy.yml`
+  прописывает её в `.env.prod` каждого мастера как
+  `VIMP_AUTH_SERVICE_URL` (читается в
+  [packages/engine/src/master/main.js](../../packages/engine/src/master/main.js),
+  см. [configuration.md](configuration.md#переменные-окружения-env)) —
+  одна переменная применяется ко всем серверам из `SERVERS_MATRIX`.
+
 ## 🔒 Security-заголовки и CSP
 
-Гигиена среды: отсекает «уличных» злоумышленников — не хоста-читера: он физически исполняет симуляцию у себя в процессе, и WASM-память доступна ему из JS в обход логики ядра, этого CSP не предотвращает. В проде клиентскую статику и `.wasm` отдаёт **Nginx**, поэтому авторитетная точка Content-Security-Policy — заголовок Nginx в `server`-блоке домена. Строка политики — единый source of truth в [packages/engine/src/config/master.js](../../packages/engine/src/config/master.js) (`security.csp`); мастер ставит её на свои ответы, но HTML/`.wasm` идут через Nginx.
+Гигиена среды: отсекает «уличных» злоумышленников — не хоста-читера: он физически исполняет симуляцию у себя в процессе, и WASM-память доступна ему из JS в обход логики ядра, этого CSP не предотвращает. В проде клиентскую статику и `.wasm` отдаёт **Nginx**, поэтому авторитетная точка Content-Security-Policy — заголовок Nginx в `server`-блоке домена. Единый source of truth политики — [packages/engine/src/config/master.js](../../packages/engine/src/config/master.js) (`security.csp`, функция от `authServiceUrl` — см. [auth.md](auth.md#вход-в-лобби-клиент)); мастер ставит её на свои ответы, но HTML/`.wasm` идут через Nginx, поэтому реальный домен auth-сервиса нужно подставить в сниппет ниже вручную (или сгенерировать из `security.csp` и вставить в конфиг Nginx).
 
 Шаблон `install-system.sh` уже содержит эти заголовки; при ручной настройке добавьте в Nginx `server`-блок (или в общий `snippet`):
 
@@ -109,10 +167,10 @@
 add_header X-Content-Type-Options "nosniff" always;
 add_header Referrer-Policy "no-referrer" always;
 add_header X-Frame-Options "DENY" always;
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' wss: data:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' wss: data: https://auth.example.com; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
 ```
 
-Ключевые директивы: `script-src ... 'wasm-unsafe-eval'` (компиляция WASM-ядра в браузере), `worker-src 'self' blob:` (Web Worker хоста), `connect-src 'self' wss: data:` (сигнальный WebSocket мастера; `data:` — PixiJS проверяет поддержку `ImageBitmap` фетчем тестового `data:`-URL; WebRTC data channels CSP не гейтит). В **dev** CSP не применяется — ViteExpress + HMR требуют `'unsafe-inline'` и HMR-WebSocket.
+Ключевые директивы: `script-src ... 'wasm-unsafe-eval'` (компиляция WASM-ядра в браузере), `worker-src 'self' blob:` (Web Worker хоста), `connect-src 'self' wss: data: https://auth.example.com` (сигнальный WebSocket мастера; `data:` — PixiJS проверяет поддержку `ImageBitmap` фетчем тестового `data:`-URL; `https://auth.example.com` — заменить на реальный домен central auth-сервиса, нужен для fetch `POST /nick` лобби, см. [auth.md](auth.md#вход-в-лобби-клиент); WebRTC data channels CSP не гейтит). В **dev** CSP не применяется — ViteExpress + HMR требуют `'unsafe-inline'` и HMR-WebSocket.
 
 CSP сознательно не даёт `'unsafe-eval'` — PixiJS без него бросает `Current environment does not allow unsafe-eval`, поэтому `packages/engine/src/client/main.js` подключает `pixi.js/unsafe-eval` (до создания `Application`) — это переключает PixiJS на safe-eval путь без ослабления политики.
 

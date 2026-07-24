@@ -29,6 +29,7 @@ development — values from `packages/engine/src/config/master.js` apply instead
 | `NODE_ENV` | `production` / `development` | — |
 | `VIMP_DOMAIN` | The master's domain. **Required** in production (the process exits with an error otherwise) | `localhost` |
 | `VIMP_MASTER_PORT` | The master server's port | `3002` |
+| `VIMP_AUTH_SERVICE_URL` | The central auth service's origin (`packages/auth`), overrides `security.authServiceUrl` — used for the CSP `connect-src` and the `/auth/*` proxy routes ([auth.md](auth.md), [deployment.md](deployment.md#central-auth-service-packagesauth)) | `http://localhost:3010` |
 
 Game parameters (map, player limit, timers, friendly fire) aren't set
 through environment variables: the room's creator picks them in the lobby,
@@ -124,6 +125,22 @@ The schema declares which columns exist: engine-side writes
 (`name`/`status`/`score`/`deaths`/`latency` from RoundManager/RTTManager)
 into columns the schema does not declare are silently ignored, so a game
 may omit any of them.
+
+### Player rank/state (`playerState`)
+
+Stage B4 (see [auth.md](auth.md#rank-and-state-loading-and-sync-host) and
+[host.md](host.md#player-rank-and-state-sync-stage-b4)): declares the
+default shape of the opaque per-player "skills" blob synced with the
+central auth service.
+
+| Parameter | Value | Description |
+| --- | --- | --- |
+| `playerState.defaultState` | `{}` | What a participant starts with when the auth service has no saved state for them (or is unreachable on join) |
+
+The engine treats `state` as an opaque JSON blob (transport + storage
+only) — only the game interprets its shape, the same way `stat` above
+declares the scoreboard's columns. `rank` (a plain numeric kill-delta
+accumulator, ±1 per kill) has no game-config schema — it's just a number.
 
 ### HUD panel (`panel`)
 

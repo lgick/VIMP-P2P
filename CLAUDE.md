@@ -22,6 +22,7 @@ Bilingual user docs live in `docs/en/` (canonical, ToC at
 | ports, binary frame format, opcodes | `network.md` |
 | `packages/engine/src/config/*`, env vars, `games/tanks/src/data/*` (balance) | `configuration.md` |
 | master server `packages/engine/src/master/` | `master.md` |
+| central auth service `packages/auth/` | `auth.md` |
 | browser host `packages/engine/src/host/` (Worker, core adapter, meta, transport) | `host.md` |
 | Rust core `packages/engine/core/`, `games/tanks/core/` (ABI, events, build, tests) | `core.md` |
 | client modules / parts / ClientCore | `client.md` |
@@ -48,6 +49,9 @@ npm run core:build:node   # nodejs target only (for tests/core)
 npm run core:test         # Rust core tests (cargo test)
 npm run maps:export       # export maps to JSON
 npm run game:build        # build @vimp/tanks plugin bundle -> games/tanks/dist/
+npm run dev:auth          # auth service: http://localhost:3010 (nodemon)
+npm run start:auth        # production auth service (reads .env)
+npm run auth:db:migrate   # apply packages/auth/src/db/migrations/*.sql
 ```
 
 Dev requires local HTTPS certs (`mkcert`, see `docs/en/getting-started.md`)

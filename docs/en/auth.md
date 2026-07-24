@@ -1,0 +1,226 @@
+# Central Auth Service
+
+`packages/auth/` (`@vimp/auth`) is a standalone Node.js/Express service — a
+separate npm workspace, its own deploy/domain, its own PostgreSQL database
+(the project's first database dependency). It provides OAuth login, a
+globally-unique nick, JWT identity tokens (RS256, verified by a browser host
+via JWKS) and per-game rank/state storage. It carries no game logic and is
+independent of `@vimp/engine`.
+
+> Status: Stages B1–B6 of `plan/README.md` are implemented — B1 (service +
+> schema + REST), B2 (lobby login UI), B3 (JWT handoff into the game +
+> host-side `/jwks` verification), B4 (rank/state loading + sync between the
+> auth service, master and host), B5 (`/rank` chat command) and B6 (CI image,
+> deployment, config docs — see
+> [deployment.md](deployment.md#central-auth-service-packagesauth)).
+
+## Why a separate service
+
+The master server (`packages/engine/src/master/`) has no database and is
+deployed per-domain; several masters can share one auth service so a nick,
+rank and per-game state stay global across domains. See
+`plan/README.md` for the full rationale and the caveat that a browser host is
+untrusted — any rank/state it reports is technically forgeable; JWT only
+protects identity (the nick can't be spoofed), not match-result integrity.
+
+## Running
+
+```bash
+npm run dev:auth          # dev, http://localhost:3010 (nodemon)
+npm run start:auth        # production, reads .env
+npm run auth:db:migrate   # apply packages/auth/src/db/migrations/*.sql
+```
+
+Config file — [packages/auth/src/config/auth.js](../../packages/auth/src/config/auth.js).
+Requires a PostgreSQL database (`VIMP_AUTH_DATABASE_URL`, defaults to
+`postgres://localhost:5432/vimp_auth`) and an RS256 key pair under `.keys/`:
+
+```bash
+openssl genrsa -out .keys/jwt.pem 2048
+openssl rsa -in .keys/jwt.pem -pubout -out .keys/jwt.pub.pem
+```
+
+GitHub is the only wired-up OAuth provider so far (Google/Apple follow the
+same provider shape in `src/oauth/`). Register a GitHub OAuth App with
+callback `http://localhost:3010/oauth/github/callback` and set
+`VIMP_AUTH_GITHUB_CLIENT_ID` / `VIMP_AUTH_GITHUB_CLIENT_SECRET`.
+
+## Schema
+
+```
+users:    id, provider, provider_uid, nick(UNIQUE), created_at
+ratings:  user_id, game_id, rank, updated_at
+states:   user_id, game_id, state(JSONB opaque), updated_at   ← "skills"
+```
+
+`(provider, provider_uid)` is unique — one row per external identity;
+`nick` is unique across the whole service (one nick, all games).
+`packages/auth/src/UserRepository.js` is the only module touching these
+tables.
+
+## REST API
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /oauth/:provider/start?returnUrl=` | redirects to the provider's authorize page; `returnUrl` and a CSRF nonce are packed into a signed, stateless `state` param (`src/lib/oauthState.js` — HMAC, no server-side session) |
+| `GET /oauth/:provider/callback` | exchanges `code`, finds/creates the user by `(provider, providerUid)`, then redirects to `returnUrl` with either `?token=` (nick already set — full identity JWT) or `?pendingToken=` (first login — nick not chosen yet) |
+| `POST /nick` (Bearer pending token, `{ nick }`) | validates the nick against `NAME_REGEXP` and global uniqueness, sets it, returns `{ token }` (full identity JWT). `409 { error: 'nickTaken' }` on a race |
+| `GET /jwks` | RS256 public key as a JWK — a host verifies `token`'s signature against this before trusting its `nick` |
+| `GET /rank?game=` (Bearer identity token) | `{ rank }` for the caller and game |
+| `PUT /rank?game=` (Bearer, `{ rank }`) | upserts the rank (must be a finite number); mirrors `PUT /state` (Stage B4) |
+| `GET /state?game=` (Bearer) | `{ state }` (opaque JSON, the "skills" blob) |
+| `PUT /state?game=` (Bearer, `{ state }`) | upserts the state blob |
+
+The identity JWT (`src/lib/jwt.js`) carries `sub` (user id) and `nick`,
+signed RS256, short-lived (`config.jwt.expiresIn`, 15 min by default) and
+verified with `issuer: 'vimp-auth'`. A pending token (issued between the
+OAuth callback and `POST /nick`) instead carries `pending: true` and no
+nick — `requireAuth` in `src/main.js` rejects it on every other endpoint.
+
+## Modules
+
+| Module | Responsibility |
+| --- | --- |
+| `src/main.js` | Express app, routes, `requireAuth` Bearer-token middleware |
+| `src/config/auth.js` | port/domain, JWT key paths, DB connection string, OAuth provider config |
+| `src/lib/jwt.js` | RS256 sign/verify (identity + pending tokens), JWKS export |
+| `src/lib/oauthState.js` | signed stateless OAuth `state` param (return URL + CSRF nonce) |
+| `src/lib/validators.js` | nick regexp, duplicated from `packages/engine/src/lib/validators.js` (`NAME_REGEXP`) — the two workspaces don't share a runtime dependency |
+| `src/UserRepository.js` | all SQL: find/create user, set nick, get/upsert rank, get/upsert state |
+| `src/oauth/github.js`, `src/oauth/index.js` | provider registry; `getAuthorizationUrl`/`exchangeCode` shape, extensible for Google/Apple |
+| `src/db/pool.js`, `src/db/migrate.js`, `src/db/migrations/*.sql` | `pg.Pool`, a minimal idempotent migration runner (`CREATE TABLE IF NOT EXISTS`, no version table yet) |
+
+## Lobby login (client)
+
+`plan/auth_b2.md`. The engine's **LobbyAuth** MVC triplet
+(`packages/engine/src/client/components/{model,view,controller}/LobbyAuth.js`,
+documented in [client.md](client.md#mvc-components-packagesenginesrcclientcomponents))
+gates the lobby behind a sign-in screen — `#lobby` stays hidden until it's
+authenticated. Flow:
+
+1. **Start**: the player clicks a provider button
+   (`.lobby-auth-provider`) → the browser navigates (not a fetch) to
+   `GET {authServiceUrl}/oauth/:provider/start?returnUrl=<current lobby URL>`.
+2. **Callback**: the auth service exchanges the code, then redirects back to
+   `returnUrl` with `?token=` (existing nick) or `?pendingToken=` (first
+   login, no nick yet).
+3. **Client boot**: `LobbyAuthModel.boot(location.search)` reads whichever
+   query param is present (`main.js` then strips it via
+   `history.replaceState`), or — if neither is present — restores a
+   persisted identity JWT from `localStorage['vimpAuthToken']`. A
+   `?token=` or a restored token is decoded client-side (display only, no
+   signature check — see [client.md](client.md#mvc-components-packagesenginesrcclientcomponents))
+   to read `nick` and show the lobby; a `?pendingToken=` shows the nick-entry
+   screen instead.
+4. **Nick pick**: submitting the nick screen does `POST {authServiceUrl}/nick`
+   (Bearer pending token) directly from the browser — a cross-origin fetch,
+   not proxied by the master. On success the returned identity token is
+   persisted and the lobby opens; `409 nickTaken` / `400 invalidNick` render
+   inline.
+
+The auth-service origin is bundled client-side in
+[packages/engine/src/config/authClient.js](../../packages/engine/src/config/authClient.js)
+(`serviceUrl`, dev default `http://localhost:3010`) — set it to the real
+domain before building for production. The master's CSP `connect-src`
+(`packages/engine/src/config/master.js`, `security.csp`, applied only in
+production) is templated with the same origin
+(`security.authServiceUrl`, overridable via `VIMP_AUTH_SERVICE_URL`) so the
+`POST /nick` fetch isn't blocked; the OAuth redirects themselves are
+top-level navigation and aren't subject to CSP `connect-src` either way.
+
+## Joining a room (host verification)
+
+`plan/auth_b3.md`. The room-local **Auth** MVC triplet
+(`packages/engine/src/client/components/{model,view,controller}/Auth.js`)
+still runs the per-game auth form, but the form no longer has a `name`
+field — the game's `authSchema.params` (e.g. `games/tanks/src/config/auth.js`)
+now only declares game-specific fields (`model`). The nick is not typed: the
+client attaches the lobby identity JWT (`LobbyAuthModel.getToken()`) to the
+`AUTH_RESPONSE` payload (`packages/engine/src/client/main.js`, port 1) as
+`token`, alongside the form fields.
+
+The host (`packages/engine/src/host/host.worker.js`, the untrusted browser
+running the match) is the verification point:
+
+1. `validateAuth` still checks the game-specific `authSchema.params` (e.g.
+   `isValidModel`) — unrelated to the token.
+2. `verifyClientToken(data.token)` fetches (and caches for the Worker's
+   lifetime) the master's `GET /auth/jwks` (`config/lobby.js`'s
+   `auth.jwksUrl`), then calls `verifyIdentityToken` (`packages/engine/src/lib/jwt.js`)
+   — RS256 signature check via Web Crypto (`crypto.subtle`, no JWT library
+   needed; works identically in the browser, the host Worker and Node ≥19),
+   `iss` compared against `authClient.js`'s `issuer` (must match
+   `packages/auth`'s `config.jwt.issuer`, `'vimp-auth'`), and expiry.
+3. On success, `host.createUser({ ...data, name: payload.nick }, socketId, cb)`
+   uses the verified nick — `ParticipantManager.createHuman` is otherwise
+   unchanged (its per-room `checkName` dedup still runs as a defensive
+   fallback, though nicks are already globally unique). On failure,
+   `AUTH_RESULT` carries `[{ name: 'token', error: 'invalid' }]` and the user
+   is not created.
+
+The auth-service origin itself is never contacted by the host — it only
+trusts the master's proxied JWKS (`JwksProxy`, see
+[master.md](master.md#get-authjwks)), keeping the untrusted host off the
+auth service's attack surface.
+
+## Rank and state loading and sync (host)
+
+`plan/auth_b4.md`. Once a participant's identity token is verified (see
+above), the host auto-loads its rank/state and keeps them in sync with the
+auth service for the rest of the session — see
+[host.md](host.md#player-rank-and-state-sync-stage-b4) for the host-side
+mechanics (`PlayerDataSync`, flush points, the `HostGame` accessor API). In
+short:
+
+1. **Load on join**: `HostGame.createUser()` fires
+   `PlayerDataSync.load(participantId, token)` (fire-and-forget — it never
+   blocks the join flow), which calls the master's `GET /auth/rank` and
+   `GET /auth/state` (proxied to the central auth service — see
+   [master.md](master.md#getput-authrank-getput-authstate))
+   with the participant's own identity token. If the auth service is
+   unreachable, the participant simply keeps the defaults (rank `0`, the
+   game's `playerState.defaultState`, e.g. `games/tanks/src/config/game.js`)
+   — a join is never blocked by auth-service downtime.
+2. **Accumulate**: rank changes by ±1 per kill, accumulated at the same
+   choke point as the ephemeral `Stat` score —
+   `RoundManager.reportKill()` (win/team-kill branching included).
+3. **Sync back**: `PlayerDataSync.flush()`/`flushAll()` `PUT`s the
+   participant's current rank+state to the master's `PUT /auth/rank`/
+   `PUT /auth/state` (best-effort, `Promise.allSettled` — a failed flush is
+   silently retried on the next natural flush point, with whatever was
+   accumulated meanwhile). Flush points: map change and round end (both in
+   `RoundManager`), plus a final flush when a participant leaves
+   (`HostGame.removeUser()`).
+
+Rank here is a simple kill-delta accumulator (+1/-1), not an ELO or
+matchmaking rating. The Rust/WASM game core has no notion of rank/state at
+all — it's a purely engine/JS-side concept, exposed to game-plugin code via
+`HostGame.getPlayerRank()`/`getPlayerState()`/`setPlayerState()`, and to
+players via the engine-level `/rank` chat command (Stage B5,
+[CommandProcessor](../../packages/engine/src/host/meta/core/CommandProcessor.js),
+see [gameplay.md](gameplay.md#chat-c-key-and-commands)) — it reads the
+locally cached rank via `PlayerDataSync.getRank()`, no extra network round
+trip.
+
+## Tests
+
+`tests/auth/` (a node Vitest project): `validators.test.js`, `jwt.test.js`
+(signs with a throwaway RSA key pair, mocks `config/auth.js`), `github.test.js`
+(mocks `fetch`), `oauthState.test.js`, `UserRepository.test.js` (a stub
+`{ query() }` object — no real PostgreSQL needed for unit tests).
+
+Host-side verification (B3) and rank/state sync (B4) are tested in the
+engine tree instead: `tests/lib/jwt.test.js` (`verifyIdentityToken` — valid
+signature, forged key, wrong issuer, expired token, missing `nick`, unknown
+`kid`, malformed token — all against a throwaway RSA key pair signed with
+`jsonwebtoken`), `tests/master/JwksProxy.test.js` (proxying, TTL caching,
+upstream failure), `tests/master/PlayerDataProxy.test.js` (proxying
+GET/PUT `/rank`+`/state`, no caching, upstream failure) and
+`tests/host/PlayerDataSync.test.js` (load with defaults on auth-service
+failure, rank accumulation, flush/flushAll), plus rank/flush coverage added
+to `tests/host/RoundManager.test.js` and token passthrough in
+`tests/host/ParticipantManager.test.js`.
+
+---
+
+[← Previous: Master Server](master.md) · [Next: Browser Host →](host.md)

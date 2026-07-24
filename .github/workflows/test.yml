@@ -13,6 +13,8 @@ on:
 # только core:build:web — client/host-плагины танков грузят wasm-glue
 # статически); integration гоняет сквозные тесты на реальном ядре (нужны
 # оба таргета — core:build:node для JS↔WASM хелперов tests/core/helpers.js,
+# engine также гоняет vitest-проект auth (packages/auth — central
+# auth-сервис, чистый Node/Express, без Rust/WASM зависимостей),
 # core:build:web — для того же импорта плагина танков, что и в tanks-job).
 jobs:
   lint:
@@ -63,6 +65,9 @@ jobs:
 
       - name: JS tests (движок, без Rust-артефактов игры)
         run: npx vitest run --project engine-node --project engine-client
+
+      - name: JS tests (central auth-сервис, packages/auth — не тянет Rust)
+        run: npx vitest run --project auth
 
   tanks:
     runs-on: ubuntu-latest

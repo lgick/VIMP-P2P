@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import CommandProcessor from '../../packages/engine/src/host/meta/core/CommandProcessor.js';
 
-// Движковое ядро чат-команд: /name, /nr, /timeleft, /mapname +
+// Движковое ядро чат-команд: /name, /nr, /timeleft, /mapname, /rank +
 // регистрация игровых команд (registerCommand). Игровая /bot —
 // botCommand.test.js.
 
@@ -17,6 +17,9 @@ const makeCp = (overrides = {}) =>
       currentMap: 'm1',
     },
     timerManager: overrides.timerManager || { getMapTimeLeft: vi.fn(() => 0) },
+    playerDataSync: overrides.playerDataSync || {
+      getRank: vi.fn(() => 0),
+    },
     isDevMode: overrides.isDevMode ?? false,
   });
 
@@ -53,6 +56,16 @@ describe('CommandProcessor.parseCommand: движковые команды', () 
     const cp = makeCp({ timerManager: { getMapTimeLeft: () => 65000 } });
     cp.parseCommand('u', '/timeleft');
     expect(cp._chat.pushSystemByUser).toHaveBeenCalledWith('u', ['01:05']);
+  });
+
+  it('/rank отдаёт ранг игрока из PlayerDataSync', () => {
+    const playerDataSync = { getRank: vi.fn(() => 5) };
+    const cp = makeCp({ playerDataSync });
+
+    cp.parseCommand('u', '/rank');
+
+    expect(playerDataSync.getRank).toHaveBeenCalledWith('u');
+    expect(cp._chat.pushSystemByUser).toHaveBeenCalledWith('u', 'RANK', [5]);
   });
 
   it('неизвестная команда → COMMANDS_NOT_FOUND', () => {

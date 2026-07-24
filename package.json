@@ -16,11 +16,15 @@
   "type": "module",
   "workspaces": [
     "packages/engine",
+    "packages/auth",
     "games/tanks"
   ],
   "scripts": {
     "dev": "npm -w @vimp/engine run dev",
     "start": "npm -w @vimp/engine run start",
+    "dev:auth": "npm -w @vimp/auth run dev",
+    "start:auth": "npm -w @vimp/auth run start",
+    "auth:db:migrate": "npm -w @vimp/auth run db:migrate",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

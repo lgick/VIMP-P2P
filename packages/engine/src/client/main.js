@@ -41,6 +41,9 @@ import { supportsModuleWorker } from './network/workerSupport.js';
 import LobbyModel from './components/model/Lobby.js';
 import LobbyView from './components/view/Lobby.js';
 import LobbyCtrl from './components/controller/Lobby.js';
+import LobbyAuthModel from './components/model/LobbyAuth.js';
+import LobbyAuthView from './components/view/LobbyAuth.js';
+import LobbyAuthCtrl from './components/controller/LobbyAuth.js';
 import BakingProvider from './providers/BakingProvider.js';
 import DependencyProvider from './providers/DependencyProvider.js';
 import { HOT_FLAGS } from '../config/opcodes.js';
@@ -51,6 +54,7 @@ import {
   loadClientPlugin,
 } from '../lib/gamePlugin.js';
 import lobbyConfig from '../config/lobby.js';
+import authClientConfig from '../config/authClient.js';
 import clientDefaults from '../config/clientDefaults.js';
 
 // Динамическая загрузка игры по каталогу мастера (Этап 6.3): пока в каталоге
@@ -317,7 +321,9 @@ socketMethods[PS_AUTH_DATA] = data => {
       clientPlugin.hooks.onAuth(clientCore, data);
     }
 
-    sending(PC_AUTH_RESPONSE, data);
+    // ник больше не вводится в игровой форме — токен лобби несёт claim
+    // 'nick', хост проверяет его подпись по /jwks и берёт ник оттуда (Этап B3)
+    sending(PC_AUTH_RESPONSE, { ...data, token: lobbyAuthModel.getToken() });
   });
 
   modules.auth.init(params);
@@ -1461,5 +1467,35 @@ function initLobby() {
   lobby.open();
 }
 
-signaling.publisher.on('welcome', initLobby);
+// логин лобби (Этап B2): central auth-сервис выдаёт JWT, лобби открывается
+// только после успешной авторизации (глобальный ник вместо свободного ввода
+// в игре). Не зависит от сигнального сокета мастера — читает query string
+// (OAuth-редирект) и localStorage независимо от 'welcome'
+const lobbyAuthModel = new LobbyAuthModel(authClientConfig);
+const lobbyAuthView = new LobbyAuthView(lobbyAuthModel, authClientConfig);
+const lobbyAuthCtrl = new LobbyAuthCtrl(lobbyAuthModel, lobbyAuthView);
+
+let welcomeReceived = false;
+let authenticated = false;
+
+function maybeInitLobby() {
+  if (welcomeReceived && authenticated) {
+    initLobby();
+  }
+}
+
+signaling.publisher.on('welcome', () => {
+  welcomeReceived = true;
+  maybeInitLobby();
+});
+
+lobbyAuthModel.publisher.on('authenticated', () => {
+  authenticated = true;
+  maybeInitLobby();
+});
+
+if (lobbyAuthCtrl.init(window.location.search)) {
+  window.history.replaceState(null, '', window.location.pathname);
+}
+
 signaling.connect();

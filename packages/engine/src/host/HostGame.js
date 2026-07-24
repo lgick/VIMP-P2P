@@ -1,4 +1,5 @@
 import Panel from './meta/modules/Panel.js';
+import PlayerDataSync from './meta/modules/PlayerDataSync.js';
 import Stat from './meta/modules/Stat.js';
 import Chat from './meta/modules/chat/index.js';
 import { registerCodes } from './meta/modules/chat/systemMessages.js';
@@ -121,6 +122,11 @@ export default class HostGame {
 
     this._panel = new Panel(data.panel);
     this._stat = new Stat(data.stat, this._teams);
+    // rank/state участников (Этап B4) — подгрузка на join, синхронизация
+    // обратно на мастер по границам раунда/карты (см. RoundManager)
+    this._playerDataSync = new PlayerDataSync(this._gameId, {
+      defaultState: data.playerState?.defaultState ?? {},
+    });
     this._chat = new Chat();
     this._vote = new Vote();
 
@@ -169,6 +175,7 @@ export default class HostGame {
       scripted: this._scripted,
       voteCoordinator: this._voteCoordinator,
       snapshotManager: this._snapshotManager,
+      playerDataSync: this._playerDataSync,
       teams: this._teams,
       spectatorTeam: this._spectatorTeam,
       spectatorId: this._spectatorId,
@@ -187,6 +194,7 @@ export default class HostGame {
       roundManager: this._roundManager,
       voteCoordinator: this._voteCoordinator,
       timerManager: this._timerManager,
+      playerDataSync: this._playerDataSync,
       teams: this._teams,
       spectatorTeam: this._spectatorTeam,
       spectatorId: this._spectatorId,
@@ -681,6 +689,10 @@ export default class HostGame {
     this._panel.addUser(gameId);
     this._RTTManager.addUser(gameId);
 
+    // подгрузка rank/state с мастера (Этап B4) — асинхронно, не блокирует
+    // вход; сбой auth-сервиса оставляет участника с дефолтами
+    this._playerDataSync.load(gameId, params.token);
+
     queueMicrotask(() => {
       cb(gameId);
     });
@@ -701,6 +713,12 @@ export default class HostGame {
     this._chat.removeUser(gameId);
     this._vote.removeUser(gameId);
     this._panel.removeUser(gameId);
+
+    // финальная синхронизация rank/state перед уходом участника (Этап B4)
+    this._playerDataSync
+      .flush(gameId)
+      .catch(() => {})
+      .finally(() => this._playerDataSync.removeUser(gameId));
 
     // если не наблюдатель — удалить танк из ядра (null-маркер ставит ядро)
     if (team !== this._spectatorTeam) {
@@ -800,6 +818,20 @@ export default class HostGame {
         this._chat.pushSystemByUser(gameId, 'VOTE_ACCEPTED');
       }
     }
+  }
+
+  // rank/state участника (Этап B4) — для игровых модулей и чат-команды /rank
+  // (Этап B5, CommandProcessor)
+  getPlayerRank(gameId) {
+    return this._playerDataSync.getRank(gameId);
+  }
+
+  getPlayerState(gameId) {
+    return this._playerDataSync.getState(gameId);
+  }
+
+  setPlayerState(gameId, state) {
+    this._playerDataSync.setState(gameId, state);
   }
 
   // обновляет значение round trip time

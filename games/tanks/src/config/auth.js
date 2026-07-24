@@ -48,14 +48,6 @@ export default {
   },
   params: [
     {
-      name: 'name',
-      value: '',
-      options: {
-        validator: 'isValidName',
-        storage: 'userName',
-      },
-    },
-    {
       name: 'model',
       value: 'm1',
       options: {

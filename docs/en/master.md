@@ -33,6 +33,8 @@ Configuration — [packages/engine/src/config/master.js](../../packages/engine/s
 | `packages/engine/src/master/MapCatalog.js` | map catalog: an in-memory JSON representation of `games/tanks/src/data/maps` plus a content version hash; served to hosts without a rebuild |
 | `packages/engine/src/master/WorkerCatalog.js` | worker bundle catalog: a content version hash of `dist/assets/host.worker-*.js` plus its URL; hosts use it to detect a new code version and swap the Worker via a handoff |
 | `packages/engine/src/master/GameCatalog.js` | game-plugin catalog: scans `games/*/dist/manifest.json` (built by `npm run game:build`) and builds a per-game `MapCatalog` from `games/*/dist/maps/*.json`; in dev, `entries.client/host/wasm` are swapped for Vite `/@fs/` source URLs (HMR) — see [plugin-api.md](plugin-api.md#gamemanifest) |
+| `packages/engine/src/master/JwksProxy.js` | proxies `GET /jwks` of the central auth service under the master's own origin, cached (TTL) — see [GET /auth/jwks](#get-authjwks) |
+| `packages/engine/src/master/PlayerDataProxy.js` | proxies per-user `GET`/`PUT /rank` and `/state` of the central auth service, **not cached** (Stage B4) — see [GET/PUT /auth/rank, GET/PUT /auth/state](#getput-authrank-getput-authstate) |
 | `packages/engine/src/lib/rateLimiter.js` | a shared fixed-window rate limiter (event limit per key per interval) |
 
 `HostSession`: `hostId` (uuid), `name`, `maxPlayers` (clamped to `host.maxPlayersLimit`, the target room size — 8), `currentPlayers`, `mapName`, `region`, `ip`, `gameId`/`gameVersion` (which game plugin and manifest version the host declared at `register_host` — every host as of Stage 6.4), `status` (`online`/`banned`), `reportCount` + `reporters` (a `Map` reporter → timestamp: report uniqueness and window), `reportReasons` (report reasons, an audit trail — never exposed, capped), `lastSeen`.
@@ -120,6 +122,42 @@ manifest and compares `version` against the engine half of the composite
 catalog is empty (`{ "version": null, "url": null }`) — the Worker is served
 by Vite from source, and code updates are disabled. How a host consumes the
 manifest — see [host.md](host.md#worker-handoff).
+
+### GET /auth/jwks
+
+Proxies `GET /jwks` of the central auth service (`packages/auth`, see
+[auth.md](auth.md)) under the master's own origin (Stage B3): `JwksProxy`
+(`packages/engine/src/master/JwksProxy.js`) fetches
+`{security.authServiceUrl}/jwks` and caches it in memory (10 minutes TTL by
+default — the key only changes on rotation). The browser host's Worker
+(`packages/engine/src/host/host.worker.js`) fetches this endpoint (same
+origin as the Worker itself) to verify the signature of a client's identity
+JWT before trusting the `nick` claim, instead of depending on CORS/direct
+reachability of the auth service from an untrusted host. `502
+authServiceUnavailable` if the upstream fetch fails.
+
+### GET/PUT /auth/rank, GET/PUT /auth/state
+
+Proxies the central auth service's per-user `GET`/`PUT /rank` and
+`GET`/`PUT /state` (`packages/auth`, see [auth.md](auth.md)) under the
+master's own origin (Stage B4): `PlayerDataProxy`
+(`packages/engine/src/master/PlayerDataProxy.js`) forwards each call to
+`{security.authServiceUrl}{/rank|/state}?game=<gameId>` with the caller's
+own `Authorization: Bearer <token>` header — unlike `JwksProxy`, the
+response is **not cached** (this is per-user data, not a shared public
+key). A shared `forwardPlayerData(req, res, call)` helper in `main.js`
+extracts the Bearer token and `?game=` query param from the incoming
+request and passes the upstream status/JSON straight through:
+
+- `400 badRequest` if the token or `game` param is missing.
+- `502 authServiceUnavailable` if the upstream fetch fails.
+
+The browser host's `PlayerDataSync`
+(`packages/engine/src/host/meta/modules/PlayerDataSync.js`) calls these
+routes to load a participant's rank/state on join and flush them back at
+round-end/map-change/leave boundaries — see
+[host.md](host.md#player-rank-and-state-sync-stage-b4). `express.json()` is
+mounted in `main.js` to parse the `PUT` bodies (`{ rank }`/`{ state }`).
 
 ### Composite `codeVersion`
 
@@ -217,13 +255,13 @@ restart/room cleanup).
 - **Origin allowlist** — the `packages/engine/src/lib/security.js` pattern (`createOriginValidator` with the master's parameters).
 - **1 room per IP** — checked in `HostRegistry.add`; a banned IP is rejected (`isBanned`).
 - **Ping rate limiting** — `RateLimiter` (fixed window, 10 requests/sec per IP by default).
-- **Security headers** (environment hygiene) — the master sets `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `X-Frame-Options: DENY` on every response; `Content-Security-Policy` only in production (it would break Vite HMR in dev). Production static assets and `.wasm` are served with CSP by Nginx — see [deployment.md](deployment.md); the policy string's single source of truth is `packages/engine/src/config/master.js` (`security.csp`).
+- **Security headers** (environment hygiene) — the master sets `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `X-Frame-Options: DENY` on every response; `Content-Security-Policy` only in production (it would break Vite HMR in dev). Production static assets and `.wasm` are served with CSP by Nginx — see [deployment.md](deployment.md); the policy's single source of truth is `packages/engine/src/config/master.js` (`security.csp`, a function of `authServiceUrl` — see [auth.md](auth.md#lobby-login-client) — so `connect-src` allows the lobby's `POST /nick` fetch to the central auth service; `security.authServiceUrl` is overridable via `VIMP_AUTH_SERVICE_URL` in production).
 - Input string sanitization (`sanitizeMessage`), clamping numeric fields.
 
 ## Tests
 
-`tests/master/` (a node Vitest project): `HostRegistry.test.js` (registration, per-IP limit, heartbeat/cleanup, reports — including the required reason, all `GET /servers` selection logic, `gameId`/`gameVersion` storage), `SignalingServer.test.js` (connection lifecycle, routing of every signaling message on fake ws sockets, rate limiting, report membership checks, stale-host cleanup, `mapsVersion`/`codeVersion` in `host_registered`, per-game `mapsVersion` via a `gameCatalog` stub), `MapCatalog.test.js` (manifest, map serving, version stability), `WorkerCatalog.test.js` (bundle version hash and URL, empty catalog in dev, picking the newest of several), `GameCatalog.test.js` (scanning `games/*/dist/manifest.json`, per-game map catalogs, unbuilt/unknown games, dev `/@fs/` entry rewriting). Rate limiter — `tests/lib/rateLimiter.test.js`.
+`tests/master/` (a node Vitest project): `HostRegistry.test.js` (registration, per-IP limit, heartbeat/cleanup, reports — including the required reason, all `GET /servers` selection logic, `gameId`/`gameVersion` storage), `SignalingServer.test.js` (connection lifecycle, routing of every signaling message on fake ws sockets, rate limiting, report membership checks, stale-host cleanup, `mapsVersion`/`codeVersion` in `host_registered`, per-game `mapsVersion` via a `gameCatalog` stub), `MapCatalog.test.js` (manifest, map serving, version stability), `WorkerCatalog.test.js` (bundle version hash and URL, empty catalog in dev, picking the newest of several), `GameCatalog.test.js` (scanning `games/*/dist/manifest.json`, per-game map catalogs, unbuilt/unknown games, dev `/@fs/` entry rewriting), `JwksProxy.test.js` (proxying, TTL caching/expiry, upstream failure — injected `fetchImpl`), `PlayerDataProxy.test.js` (proxying GET/PUT `/rank`+`/state`, no caching, upstream failure — injected `fetchImpl`). Rate limiter — `tests/lib/rateLimiter.test.js`.
 
 ---
 
-[← Previous: Gameplay](gameplay.md) · [Next: Browser Host →](host.md)
+[← Previous: Gameplay](gameplay.md) · [Next: Central Auth Service →](auth.md)
