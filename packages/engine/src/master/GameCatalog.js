@@ -2,10 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import MapCatalog from './MapCatalog.js';
 
-// Каталог игр-плагинов мастера (Этап 6.2 плана отделения): сканирует
-// games/*/dist/manifest.json (продукт `npm run game:build`, Этап 6.1) и
-// строит per-game MapCatalog из games/*/dist/maps/*.json. Мастер не
-// исполняет код игры (только уже собранный манифест + статичные JSON карт).
+// Каталог игр-плагинов мастера (Этап A2 плана разделения): по конфигу
+// `master:games` ({id, package}[]) резолвит директорию пакета в node_modules
+// и читает <package>/dist/manifest.json (продукт `npm run game:build`) +
+// per-game MapCatalog из <package>/dist/maps/*.json. Мастер не исполняет код
+// игры (только уже собранный манифест + статичные JSON карт). До разъезда
+// репозиториев (Этап A3) пакет резолвится через npm workspace-симлинк
+// (node_modules/@vimp/tanks -> games/tanks); после — это обычная зависимость.
 //
 // В dev entries манифеста (client/host/wasm) подменяются на исходники через
 // Vite `/@fs/` (HMR штатный, как у остального движка); maps/assetsBase
@@ -13,58 +16,47 @@ import MapCatalog from './MapCatalog.js';
 // `npm run game:build` один раз перед первым запуском (см. CLAUDE.md).
 export default class GameCatalog {
   /**
-   * @param {string} gamesDir - директория games/ (родитель games/<id>/)
+   * @param {{id: string, package: string}[]} games - список игр из конфига (`master:games`)
+   * @param {string} nodeModulesDir - директория node_modules, где резолвятся пакеты игр
    * @param {{dev?: boolean}} [options]
    */
-  constructor(gamesDir, { dev = false } = {}) {
+  constructor(games, nodeModulesDir, { dev = false } = {}) {
     this._games = new Map(); // id -> { manifest, mapCatalog }
+    this._distDirs = new Map(); // id -> абсолютный путь к dist/ пакета
 
-    for (const id of this._findGameIds(gamesDir)) {
-      const gameDir = path.join(gamesDir, id);
-      const manifestPath = path.join(gameDir, 'dist', 'manifest.json');
+    for (const { id, package: pkg } of games) {
+      const gameDir = path.join(nodeModulesDir, pkg);
+      const distDir = path.join(gameDir, 'dist');
+      const manifestPath = path.join(distDir, 'manifest.json');
 
       let manifest;
 
       try {
         manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
       } catch (err) {
-        continue; // игра не собрана (npm run game:build) — пропускаем
+        continue; // игра не собрана/не установлена (npm run game:build) — пропускаем
       }
 
-      // статик-маунт мастера строит путь games/<id>/dist по manifest.id —
-      // при расхождении с именем директории он бьёт мимо
+      // статик-маунт мастера раздаёт dist/ по id из конфига — при
+      // расхождении с manifest.id он бьёт мимо
       if (manifest.id !== id) {
         console.warn(
           `GameCatalog: skip "${id}" — manifest.id "${manifest.id}" ` +
-            'does not match directory name',
+            'does not match configured id',
         );
         continue;
       }
 
       this._games.set(manifest.id, {
         manifest: dev ? this._toDevManifest(manifest, gameDir) : manifest,
-        mapCatalog: new MapCatalog(
-          this._readMaps(path.join(gameDir, 'dist', 'maps')),
-        ),
+        mapCatalog: new MapCatalog(this._readMaps(path.join(distDir, 'maps'))),
       });
+      this._distDirs.set(manifest.id, distDir);
     }
 
     this._manifestList = JSON.stringify(
       [...this._games.values()].map(game => game.manifest),
     );
-  }
-
-  // подкаталоги games/* — кандидаты в игры; валидность подтверждает
-  // наличие dist/manifest.json (проверяется отдельно, при чтении манифеста)
-  _findGameIds(gamesDir) {
-    try {
-      return fs
-        .readdirSync(gamesDir, { withFileTypes: true })
-        .filter(entry => entry.isDirectory())
-        .map(entry => entry.name);
-    } catch (err) {
-      return [];
-    }
   }
 
   _readMaps(mapsDir) {
@@ -135,5 +127,10 @@ export default class GameCatalog {
 
   getMapCatalog(id) {
     return this._games.get(id)?.mapCatalog;
+  }
+
+  // абсолютный путь к dist/ игры — под него мастер монтирует статику
+  getDistDir(id) {
+    return this._distDirs.get(id);
   }
 }

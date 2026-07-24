@@ -118,14 +118,20 @@ worthwhile. Checklist for when that day comes:
 
 1. **Publish `@vimp/engine`.** The game imports it only through its
    public `exports` map (`./lib/*`, `./config/*` —
-   [packages/engine/package.json](../../packages/engine/package.json)).
-   Either publish it to a registry (npm, GitHub Packages) or vendor it as
-   a tagged Git dependency; either way, pin a version instead of the
-   current workspace `"*"` range in
+   [packages/engine/package.json](../../packages/engine/package.json)),
+   which already carries a `files` allowlist (`src/lib`, `src/config`
+   only — `src/master/*` is master-server-only and stays out) and a
+   `publishConfig`, verified with `npm pack --dry-run`. What's still
+   pending: actually publishing it to a registry (npm, GitHub Packages)
+   or vendoring it as a tagged Git dependency, and pinning a version
+   instead of the current workspace `"*"` range in
    [games/tanks/package.json](../../games/tanks/package.json).
 2. **Publish `vimp-engine-core`.** `games/tanks/core/Cargo.toml`
    currently pulls it in as a relative `path` dependency
-   (`../../../packages/engine/core`); switch it to a `git` dependency
+   (`../../../packages/engine/core`); the crate already packages cleanly
+   standalone (`cargo package -p vimp-engine-core` resolves its
+   `workspace = true` deps into concrete versions on its own). What's
+   still pending: switching the game's dependency to a `git` dependency
    pinned to a tag/rev (crates.io only if the engine is meant to be
    publicly reusable outside this project).
 3. **Give the game its own CI.** Mirror the `tanks`/`integration` jobs of

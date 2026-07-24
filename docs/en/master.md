@@ -8,7 +8,7 @@ coordination.
 
 `packages/engine/src/master/main.js` is the **project's entry point** (the legacy
 authoritative game server has been fully removed). Filesystem paths
-(`games/*/dist`, `dist/assets`) are anchored to the module's location via
+(`node_modules/`, `dist/assets`) are anchored to the module's location via
 `import.meta.url`, so the master can be started from any working directory.
 
 ## Running
@@ -32,7 +32,7 @@ Configuration — [packages/engine/src/config/master.js](../../packages/engine/s
 | `packages/engine/src/master/SignalingServer.js` | signaling WebSocket: connection lifecycle, WebRTC message routing, ping rate limiting |
 | `packages/engine/src/master/MapCatalog.js` | map catalog: an in-memory JSON representation of `games/tanks/src/data/maps` plus a content version hash; served to hosts without a rebuild |
 | `packages/engine/src/master/WorkerCatalog.js` | worker bundle catalog: a content version hash of `dist/assets/host.worker-*.js` plus its URL; hosts use it to detect a new code version and swap the Worker via a handoff |
-| `packages/engine/src/master/GameCatalog.js` | game-plugin catalog: scans `games/*/dist/manifest.json` (built by `npm run game:build`) and builds a per-game `MapCatalog` from `games/*/dist/maps/*.json`; in dev, `entries.client/host/wasm` are swapped for Vite `/@fs/` source URLs (HMR) — see [plugin-api.md](plugin-api.md#gamemanifest) |
+| `packages/engine/src/master/GameCatalog.js` | game-plugin catalog: resolves the `master:games` config list (`{id, package}[]`) to packages under `node_modules/` and reads `<package>/dist/manifest.json` (built by `npm run game:build`) plus a per-game `MapCatalog` from `<package>/dist/maps/*.json`; in dev, `entries.client/host/wasm` are swapped for Vite `/@fs/` source URLs (HMR) — see [plugin-api.md](plugin-api.md#gamemanifest) |
 | `packages/engine/src/master/JwksProxy.js` | proxies `GET /jwks` of the central auth service under the master's own origin, cached (TTL) — see [GET /auth/jwks](#get-authjwks) |
 | `packages/engine/src/master/PlayerDataProxy.js` | proxies per-user `GET`/`PUT /rank` and `/state` of the central auth service, **not cached** (Stage B4) — see [GET/PUT /auth/rank, GET/PUT /auth/state](#getput-authrank-getput-authstate) |
 | `packages/engine/src/lib/rateLimiter.js` | a shared fixed-window rate limiter (event limit per key per interval) |
@@ -77,30 +77,34 @@ running pre-6.4 client code.
 
 ### GET /games/manifest.json, GET /games/:id/manifest.json, GET /games/:id/maps/\*
 
-The `GameManifest` catalog (`GameCatalog`, Stage 6.2 — see
+The `GameManifest` catalog (`GameCatalog`, Stage A2 — see
 [plugin-api.md](plugin-api.md#gamemanifest)):
-scans `games/*/dist/manifest.json` (built by `npm run game:build`) at master
-startup, one entry per game plugin. A game whose `manifest.id` differs from
-its directory name is skipped with a warning (the static mount builds paths
-from the id); a map file with broken JSON is skipped with a warning instead
-of crashing the master.
+at master startup, resolves the `master:games` config list (`{id, package,
+version}[]`, see [configuration.md](configuration.md#srcconfigmasterjs),
+overridable in production via the `GAMES_MATRIX` env var) to packages under
+`node_modules/` (a workspace symlink onto `games/<id>` until the repos split,
+an ordinary dependency after) and reads `<package>/dist/manifest.json` (built
+by `npm run game:build`), one entry per game plugin. A game whose
+`manifest.id` differs from its configured id is skipped with a warning (the
+static mount builds paths from the id); a map file with broken JSON is
+skipped with a warning instead of crashing the master.
 
 - `GET /games/manifest.json` → a JSON array of every known game's manifest.
 - `GET /games/:id/manifest.json` → one game's manifest; unknown id →
   `404 { "error": "unknownGame" }`.
 - `GET /games/:id/maps/manifest.json` / `GET /games/:id/maps/:name` —
   `{ "version": "<content hash>", "maps": ["canopy", …] }` and a map's JSON
-  respectively, scoped per game (built from `games/<id>/dist/maps/*.json`);
-  an unknown game/map → `404`. `MapCatalog` (per game, inside `GameCatalog`)
-  keeps the built `maps/*.json` in memory. How a host consumes the catalog —
-  see [host.md](host.md#dynamic-maps).
+  respectively, scoped per game (built from the resolved package's
+  `dist/maps/*.json`); an unknown game/map → `404`. `MapCatalog` (per game,
+  inside `GameCatalog`) keeps the built `maps/*.json` in memory. How a host
+  consumes the catalog — see [host.md](host.md#dynamic-maps).
 - `GET /games/:id/*` — the game's built assets (`dist/`: hashed client/host
   bundles, the shared hashed `.wasm`, sounds) are served as static files
-  under `assetsBase` (`/games/<id>/`).
+  under `assetsBase` (`/games/<id>/`), mounted from `GameCatalog.getDistDir(id)`.
 
 In dev, `entries.client`/`entries.host`/`entries.wasm` are rewritten to Vite
-`/@fs/` absolute source paths (`games/<id>/src/client/index.js` etc. and the
-`.wasm` under `games/tanks/core/pkg-web/`) so imports go through Vite's dev
+`/@fs/` absolute source paths (the resolved package's `src/client/index.js`
+etc. and the `.wasm` under its `core/pkg-web/`) so imports go through Vite's dev
 transform/HMR instead of the built bundle; everything else in the manifest
 (`maps`, `assetsBase`, `roomDefaults`, `version`) still comes from the built
 `dist/manifest.json` — a game must be built once (`npm run game:build`)
@@ -260,7 +264,7 @@ restart/room cleanup).
 
 ## Tests
 
-`tests/master/` (a node Vitest project): `HostRegistry.test.js` (registration, per-IP limit, heartbeat/cleanup, reports — including the required reason, all `GET /servers` selection logic, `gameId`/`gameVersion` storage), `SignalingServer.test.js` (connection lifecycle, routing of every signaling message on fake ws sockets, rate limiting, report membership checks, stale-host cleanup, `mapsVersion`/`codeVersion` in `host_registered`, per-game `mapsVersion` via a `gameCatalog` stub), `MapCatalog.test.js` (manifest, map serving, version stability), `WorkerCatalog.test.js` (bundle version hash and URL, empty catalog in dev, picking the newest of several), `GameCatalog.test.js` (scanning `games/*/dist/manifest.json`, per-game map catalogs, unbuilt/unknown games, dev `/@fs/` entry rewriting), `JwksProxy.test.js` (proxying, TTL caching/expiry, upstream failure — injected `fetchImpl`), `PlayerDataProxy.test.js` (proxying GET/PUT `/rank`+`/state`, no caching, upstream failure — injected `fetchImpl`). Rate limiter — `tests/lib/rateLimiter.test.js`.
+`tests/master/` (a node Vitest project): `HostRegistry.test.js` (registration, per-IP limit, heartbeat/cleanup, reports — including the required reason, all `GET /servers` selection logic, `gameId`/`gameVersion` storage), `SignalingServer.test.js` (connection lifecycle, routing of every signaling message on fake ws sockets, rate limiting, report membership checks, stale-host cleanup, `mapsVersion`/`codeVersion` in `host_registered`, per-game `mapsVersion` via a `gameCatalog` stub), `MapCatalog.test.js` (manifest, map serving, version stability), `WorkerCatalog.test.js` (bundle version hash and URL, empty catalog in dev, picking the newest of several), `GameCatalog.test.js` (resolving configured `{id, package}` entries to `node_modules/<package>/dist/manifest.json`, per-game map catalogs, unbuilt/unknown games, dev `/@fs/` entry rewriting), `JwksProxy.test.js` (proxying, TTL caching/expiry, upstream failure — injected `fetchImpl`), `PlayerDataProxy.test.js` (proxying GET/PUT `/rank`+`/state`, no caching, upstream failure — injected `fetchImpl`). Rate limiter — `tests/lib/rateLimiter.test.js`.
 
 ---
 

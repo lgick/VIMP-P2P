@@ -4,14 +4,15 @@ import path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import GameCatalog from '../../packages/engine/src/master/GameCatalog.js';
 
-// Каталог игр-плагинов мастера (Этап 6.2): сканирует games/*/dist/manifest.json
-// (продукт `npm run game:build`) + per-game карты dist/maps/*.json; в dev
-// подменяет entries на Vite '/@fs/' исходники для HMR.
+// Каталог игр-плагинов мастера (Этап A2): резолвит пакеты из конфига
+// {id, package}[] в node_modules/<package>/dist/manifest.json (продукт
+// `npm run game:build`) + per-game карты dist/maps/*.json; в dev подменяет
+// entries на Vite '/@fs/' исходники для HMR.
 
-let gamesDir;
+let nodeModulesDir;
 
-const writeManifest = (id, manifest) => {
-  const distDir = path.join(gamesDir, id, 'dist');
+const writeManifest = (pkg, manifest) => {
+  const distDir = path.join(nodeModulesDir, pkg, 'dist');
 
   fs.mkdirSync(distDir, { recursive: true });
   fs.writeFileSync(
@@ -20,8 +21,8 @@ const writeManifest = (id, manifest) => {
   );
 };
 
-const writeMap = (id, name, data) => {
-  const mapsDir = path.join(gamesDir, id, 'dist', 'maps');
+const writeMap = (pkg, name, data) => {
+  const mapsDir = path.join(nodeModulesDir, pkg, 'dist', 'maps');
 
   fs.mkdirSync(mapsDir, { recursive: true });
   fs.writeFileSync(path.join(mapsDir, `${name}.json`), JSON.stringify(data));
@@ -42,20 +43,22 @@ const fixtureManifest = {
   roomDefaults: { maxPlayers: 8, roundTime: 120000, mapTime: 600000, friendlyFire: false, map: 'arena' },
 };
 
+const tanksGames = [{ id: 'tanks', package: 'tanks' }];
+
 beforeEach(() => {
-  gamesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'game-catalog-'));
+  nodeModulesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'game-catalog-'));
 });
 
 afterEach(() => {
-  fs.rmSync(gamesDir, { recursive: true, force: true });
+  fs.rmSync(nodeModulesDir, { recursive: true, force: true });
 });
 
 describe('GameCatalog', () => {
-  it('сканирует games/*/dist/manifest.json и собирает список манифестов', () => {
+  it('резолвит пакеты из конфига в node_modules и собирает список манифестов', () => {
     writeManifest('tanks', fixtureManifest);
     writeMap('tanks', 'arena', { setId: 'c1', step: 32, layers: {} });
 
-    const catalog = new GameCatalog(gamesDir);
+    const catalog = new GameCatalog(tanksGames, nodeModulesDir);
 
     expect(catalog.ids).toEqual(['tanks']);
     expect(catalog.getManifest('tanks')).toEqual(fixtureManifest);
@@ -66,7 +69,7 @@ describe('GameCatalog', () => {
     writeManifest('tanks', fixtureManifest);
     writeMap('tanks', 'arena', { setId: 'c1', step: 32, layers: {} });
 
-    const catalog = new GameCatalog(gamesDir);
+    const catalog = new GameCatalog(tanksGames, nodeModulesDir);
     const mapCatalog = catalog.getMapCatalog('tanks');
 
     expect(JSON.parse(mapCatalog.manifest).maps).toEqual(['arena']);
@@ -77,8 +80,18 @@ describe('GameCatalog', () => {
     });
   });
 
-  it('неизвестная игра — undefined, каталог без директорий — пустой', () => {
-    const empty = new GameCatalog(path.join(gamesDir, 'missing'));
+  it('getDistDir отдаёт путь к dist/ пакета — под него монтируется статика', () => {
+    writeManifest('tanks', fixtureManifest);
+
+    const catalog = new GameCatalog(tanksGames, nodeModulesDir);
+
+    expect(catalog.getDistDir('tanks')).toBe(
+      path.join(nodeModulesDir, 'tanks', 'dist'),
+    );
+  });
+
+  it('пустой список игр в конфиге — пустой каталог', () => {
+    const empty = new GameCatalog([], nodeModulesDir);
 
     expect(empty.ids).toEqual([]);
     expect(empty.getManifest('tanks')).toBeUndefined();
@@ -86,25 +99,31 @@ describe('GameCatalog', () => {
     expect(JSON.parse(empty.manifestList)).toEqual([]);
   });
 
-  it('игра без dist/manifest.json (не собрана) пропускается', () => {
-    fs.mkdirSync(path.join(gamesDir, 'unbuilt'), { recursive: true });
+  it('игра без dist/manifest.json (не собрана/не установлена) пропускается', () => {
+    const catalog = new GameCatalog(
+      [{ id: 'unbuilt', package: 'unbuilt' }, ...tanksGames],
+      nodeModulesDir,
+    );
+
     writeManifest('tanks', fixtureManifest);
 
-    const catalog = new GameCatalog(gamesDir);
-
-    expect(catalog.ids).toEqual(['tanks']);
+    expect(new GameCatalog(tanksGames, nodeModulesDir).ids).toEqual(['tanks']);
+    expect(catalog.ids).toEqual([]);
   });
 
-  it('игра с manifest.id ≠ имени директории пропускается с warn (Д4.3)', () => {
+  it('игра с manifest.id ≠ id из конфига пропускается с warn (Д4.3)', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    writeManifest('wrong-dir', fixtureManifest); // manifest.id === 'tanks'
+    writeManifest('wrong-pkg', fixtureManifest); // manifest.id === 'tanks'
     writeManifest('tanks', fixtureManifest);
 
-    const catalog = new GameCatalog(gamesDir);
+    const catalog = new GameCatalog(
+      [{ id: 'wrong-pkg', package: 'wrong-pkg' }, ...tanksGames],
+      nodeModulesDir,
+    );
 
     expect(catalog.ids).toEqual(['tanks']);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('wrong-dir'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('wrong-pkg'));
 
     warn.mockRestore();
   });
@@ -115,11 +134,11 @@ describe('GameCatalog', () => {
     writeManifest('tanks', fixtureManifest);
     writeMap('tanks', 'arena', { setId: 'c1', step: 32, layers: {} });
 
-    const mapsDir = path.join(gamesDir, 'tanks', 'dist', 'maps');
+    const mapsDir = path.join(nodeModulesDir, 'tanks', 'dist', 'maps');
 
     fs.writeFileSync(path.join(mapsDir, 'broken.json'), '{oops');
 
-    const catalog = new GameCatalog(gamesDir);
+    const catalog = new GameCatalog(tanksGames, nodeModulesDir);
     const mapCatalog = catalog.getMapCatalog('tanks');
 
     expect(JSON.parse(mapCatalog.manifest).maps).toEqual(['arena']);
@@ -131,10 +150,10 @@ describe('GameCatalog', () => {
   it('dev: entries указывают на Vite /@fs/ исходники, остальное — из манифеста', () => {
     writeManifest('tanks', fixtureManifest);
 
-    const catalog = new GameCatalog(gamesDir, { dev: true });
+    const catalog = new GameCatalog(tanksGames, nodeModulesDir, { dev: true });
     const manifest = catalog.getManifest('tanks');
 
-    const gameDir = path.join(gamesDir, 'tanks');
+    const gameDir = path.join(nodeModulesDir, 'tanks');
 
     expect(manifest.entries.client).toBe(
       `/@fs/${path.join(gameDir, 'src', 'client/index.js')}`,
@@ -151,12 +170,12 @@ describe('GameCatalog', () => {
   it('dev: entries.wasm — Vite /@fs/ путь до собранного core/pkg-web/*_bg.wasm', () => {
     writeManifest('tanks', fixtureManifest);
 
-    const pkgWebDir = path.join(gamesDir, 'tanks', 'core', 'pkg-web');
+    const pkgWebDir = path.join(nodeModulesDir, 'tanks', 'core', 'pkg-web');
 
     fs.mkdirSync(pkgWebDir, { recursive: true });
     fs.writeFileSync(path.join(pkgWebDir, 'vimp_tanks_core_bg.wasm'), 'wasm');
 
-    const catalog = new GameCatalog(gamesDir, { dev: true });
+    const catalog = new GameCatalog(tanksGames, nodeModulesDir, { dev: true });
 
     expect(catalog.getManifest('tanks').entries.wasm).toBe(
       `/@fs/${path.join(pkgWebDir, 'vimp_tanks_core_bg.wasm')}`,

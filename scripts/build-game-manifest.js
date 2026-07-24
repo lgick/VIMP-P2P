@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { ENGINE_API_VERSION } from '../packages/engine/src/config/opcodes.js';
-import hostDefaults from '../packages/engine/src/config/hostDefaults.js';
+import { ENGINE_API_VERSION } from '@vimp/engine/config/opcodes.js';
+import hostDefaults from '@vimp/engine/config/hostDefaults.js';
 import gameConfig from '../games/tanks/src/config/game.js';
 
 // Генерация GameManifest (docs/{en,ru}/plugin-api.md) после сборки

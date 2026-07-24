@@ -21,7 +21,10 @@ config.set('master', (await import('../config/master.js')).default);
 // пути мастера якорятся от расположения этого файла, а не от cwd —
 // сервер можно запускать из любой директории
 const engineDir = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
-const gamesDir = path.resolve(engineDir, '..', '..', 'games');
+// node_modules, где резолвятся пакеты игр (Этап A2): до разъезда репозиториев
+// (Этап A3) это npm workspace-симлинк на games/<id>, после — обычная
+// зависимость, установленная деплоем
+const nodeModulesDir = path.resolve(engineDir, '..', '..', 'node_modules');
 
 const env = process.env;
 const isProduction = env.NODE_ENV === 'production';
@@ -48,6 +51,12 @@ if (isProduction) {
   if (env.VIMP_AUTH_SERVICE_URL) {
     config.set('master:security:authServiceUrl', env.VIMP_AUTH_SERVICE_URL);
   }
+
+  // список игр-плагинов мастера (Этап A2), по образцу остальных *_MATRIX
+  // env-переопределений — JSON-массив {id, package, version}
+  if (env.GAMES_MATRIX) {
+    config.set('master:games', JSON.parse(env.GAMES_MATRIX));
+  }
 }
 
 // проксирует JWKS central auth-сервиса под собственным origin (Этап B3) —
@@ -61,11 +70,12 @@ const playerDataProxy = new PlayerDataProxy(
   config.get('master:security:authServiceUrl'),
 );
 
-// каталог игр-плагинов (Этап 6.2): сканирует games/*/dist/manifest.json
-// (продукт `npm run game:build`); в dev entries указывают на Vite-исходники
-// (HMR), maps/assetsBase — из уже собранного dist (как и WorkerCatalog,
-// требует сборки игры один раз перед первым запуском)
-const gameCatalog = new GameCatalog(gamesDir, {
+// каталог игр-плагинов (Этап A2): по конфигу `master:games` резолвит пакеты
+// в node_modules и читает <package>/dist/manifest.json (продукт
+// `npm run game:build`); в dev entries указывают на Vite-исходники (HMR),
+// maps/assetsBase — из уже собранного dist (как и WorkerCatalog, требует
+// сборки игры один раз перед первым запуском)
+const gameCatalog = new GameCatalog(config.get('master:games'), nodeModulesDir, {
   dev: !isProduction,
 });
 
@@ -252,7 +262,7 @@ app.get('/games/:id/maps/:name', (req, res) => {
 // в dev entries манифеста указывают на Vite-исходники напрямую, но
 // assetsBase-содержимое (карты/звуки) всё равно раздаётся отсюда из dist
 for (const id of gameCatalog.ids) {
-  app.use(`/games/${id}`, express.static(path.join(gamesDir, id, 'dist')));
+  app.use(`/games/${id}`, express.static(gameCatalog.getDistDir(id)));
 }
 
 // в продакшене обычный HTTP сервер, Nginx будет обрабатывать HTTPS

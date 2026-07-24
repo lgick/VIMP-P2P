@@ -2,7 +2,7 @@
 
 Мастер-сервер (`packages/engine/src/master/`) — центральный узел P2P-архитектуры: хранит реестр активных комнат (браузерных хостов), отдаёт их список по REST и маршрутизирует WebRTC-координацию (SDP-офферы/ответы, ICE-кандидаты) между клиентами и хостами. **Игровой логики в нём нет** — только координация соединений.
 
-`packages/engine/src/master/main.js` — **точка входа проекта** (легаси авторитетный игровой сервер полностью демонтирован). Пути к файлам (`games/*/dist`, `dist/assets`) якорятся от расположения модуля через `import.meta.url`, поэтому мастер можно запускать из любой рабочей директории.
+`packages/engine/src/master/main.js` — **точка входа проекта** (легаси авторитетный игровой сервер полностью демонтирован). Пути к файлам (`node_modules/`, `dist/assets`) якорятся от расположения модуля через `import.meta.url`, поэтому мастер можно запускать из любой рабочей директории.
 
 ## Запуск
 
@@ -25,7 +25,7 @@ npm start         # production: HTTP за Nginx, читает .env
 | `packages/engine/src/master/SignalingServer.js` | сигнальный WebSocket: жизненный цикл соединений, маршрутизация WebRTC-сообщений, rate limiting пингов |
 | `packages/engine/src/master/MapCatalog.js` | каталог карт: JSON-представление `games/tanks/src/data/maps` в памяти + версия-хеш содержимого; раздача хостам без пересборки |
 | `packages/engine/src/master/WorkerCatalog.js` | каталог worker-бандла: версия-хеш содержимого `dist/assets/host.worker-*.js` + его URL; по нему хосты обнаруживают новую версию кода и меняют Worker эстафетой |
-| `packages/engine/src/master/GameCatalog.js` | каталог игр-плагинов: сканирует `games/*/dist/manifest.json` (продукт `npm run game:build`) и строит per-game `MapCatalog` из `games/*/dist/maps/*.json`; в dev `entries.client/host/wasm` подменяются на исходники Vite `/@fs/` (HMR) — см. [plugin-api.md](plugin-api.md#gamemanifest) |
+| `packages/engine/src/master/GameCatalog.js` | каталог игр-плагинов: резолвит список игр из конфига `master:games` (`{id, package}[]`) в пакеты `node_modules/` и читает `<package>/dist/manifest.json` (продукт `npm run game:build`) + строит per-game `MapCatalog` из `<package>/dist/maps/*.json`; в dev `entries.client/host/wasm` подменяются на исходники Vite `/@fs/` (HMR) — см. [plugin-api.md](plugin-api.md#gamemanifest) |
 | `packages/engine/src/master/JwksProxy.js` | проксирует `GET /jwks` центрального auth-сервиса под собственным origin мастера, с кэшем (TTL) — см. [GET /auth/jwks](#get-authjwks) |
 | `packages/engine/src/master/PlayerDataProxy.js` | проксирует per-user `GET`/`PUT /rank` и `/state` центрального auth-сервиса, **без кэша** (Этап B4) — см. [GET/PUT /auth/rank, GET/PUT /auth/state](#getput-authrank-getput-authstate) |
 | `packages/engine/src/lib/rateLimiter.js` | общий rate limiter с фиксированным окном (лимит событий на ключ за интервал) |
@@ -70,30 +70,36 @@ IP хоста и служебные поля наружу не отдаются.
 
 ### GET /games/manifest.json, GET /games/:id/manifest.json, GET /games/:id/maps/\*
 
-Каталог `GameManifest` (`GameCatalog`, Этап 6.2 — см.
-[plugin-api.md](plugin-api.md#gamemanifest)): при старте мастера сканирует
-`games/*/dist/manifest.json` (продукт `npm run game:build`), по одной записи
-на игру-плагин. Игра, у которой `manifest.id` не совпадает с именем
-директории, пропускается с предупреждением (статик-маунт строит пути по
-id); карта с битым JSON пропускается с предупреждением, не роняя мастер.
+Каталог `GameManifest` (`GameCatalog`, Этап A2 — см.
+[plugin-api.md](plugin-api.md#gamemanifest)): при старте мастера резолвит
+список игр из конфига `master:games` (`{id, package, version}[]`, см.
+[configuration.md](configuration.md#srcconfigmasterjs), переопределяется в
+проде переменной окружения `GAMES_MATRIX`) в пакеты `node_modules/` (до
+разъезда репозиториев — workspace-симлинк на `games/<id>`, после — обычная
+зависимость) и читает `<package>/dist/manifest.json` (продукт
+`npm run game:build`), по одной записи на игру-плагин. Игра, у которой
+`manifest.id` не совпадает с id из конфига, пропускается с предупреждением
+(статик-маунт строит пути по id); карта с битым JSON пропускается с
+предупреждением, не роняя мастер.
 
 - `GET /games/manifest.json` → JSON-массив манифестов всех известных игр.
 - `GET /games/:id/manifest.json` → манифест одной игры; неизвестный id →
   `404 { "error": "unknownGame" }`.
 - `GET /games/:id/maps/manifest.json` / `GET /games/:id/maps/:name` —
   `{ "version": "<хеш содержимого>", "maps": ["canopy", …] }` и JSON карты
-  соответственно, per-game (строится из `games/<id>/dist/maps/*.json`);
-  неизвестная игра/карта — `404`. `MapCatalog` (per-game, внутри
+  соответственно, per-game (строится из `dist/maps/*.json` резолвленного
+  пакета); неизвестная игра/карта — `404`. `MapCatalog` (per-game, внутри
   `GameCatalog`) держит собранные `maps/*.json` в памяти. Как хост
   потребляет каталог — см. [host.md](host.md#динамические-карты).
 - `GET /games/:id/*` — собранные ассеты игры (`dist/`: хешированные
   client/host-бандлы, общий хешированный `.wasm`, звуки) раздаются статикой
-  под `assetsBase` (`/games/<id>/`).
+  под `assetsBase` (`/games/<id>/`), маунтится из `GameCatalog.getDistDir(id)`.
 
 В dev `entries.client`/`entries.host`/`entries.wasm` подменяются на
-абсолютные пути исходников через Vite `/@fs/` (`games/<id>/src/client/index.js`
-и т.п., `.wasm` — из `games/tanks/core/pkg-web/`), чтобы импорт шёл через dev-трансформацию
-и HMR Vite, а не собранный бандл; остальное содержимое манифеста (`maps`,
+абсолютные пути исходников через Vite `/@fs/` (`src/client/index.js`
+резолвленного пакета и т.п., `.wasm` — из его `core/pkg-web/`), чтобы импорт
+шёл через dev-трансформацию и HMR Vite, а не собранный бандл; остальное
+содержимое манифеста (`maps`,
 `assetsBase`, `roomDefaults`, `version`) по-прежнему берётся из собранного
 `dist/manifest.json` — игру нужно собрать один раз (`npm run game:build`)
 перед первым запуском в dev, как и `npm run core:build` для WASM-ядра.
@@ -235,7 +241,7 @@ origin мастера (Этап B4): `PlayerDataProxy`
 
 ## Тесты
 
-`tests/master/` (node-проект Vitest): `HostRegistry.test.js` (регистрация, лимит по IP, heartbeat/уборка, жалобы — включая обязательность причины, вся логика выборки `GET /servers`, хранение `gameId`/`gameVersion`), `SignalingServer.test.js` (жизненный цикл соединений, маршрутизация всех сигнальных сообщений на фейковых ws, rate limiting, membership-проверка жалоб, уборка протухших хостов, `mapsVersion`/`codeVersion` в `host_registered`, per-game `mapsVersion` через стаб `gameCatalog`), `MapCatalog.test.js` (манифест, выдача карт, стабильность версии), `WorkerCatalog.test.js` (версия-хеш и URL бандла, пустой каталог в dev, выбор новейшего из нескольких), `GameCatalog.test.js` (сканирование `games/*/dist/manifest.json`, per-game каталоги карт, несобранная/неизвестная игра, подмена entries на `/@fs/` в dev), `JwksProxy.test.js` (проксирование, TTL-кэш и его истечение, сбой апстрима — инъекция `fetchImpl`), `PlayerDataProxy.test.js` (проксирование GET/PUT `/rank`+`/state`, отсутствие кэша, сбой апстрима — инъекция `fetchImpl`). Rate limiter — `tests/lib/rateLimiter.test.js`.
+`tests/master/` (node-проект Vitest): `HostRegistry.test.js` (регистрация, лимит по IP, heartbeat/уборка, жалобы — включая обязательность причины, вся логика выборки `GET /servers`, хранение `gameId`/`gameVersion`), `SignalingServer.test.js` (жизненный цикл соединений, маршрутизация всех сигнальных сообщений на фейковых ws, rate limiting, membership-проверка жалоб, уборка протухших хостов, `mapsVersion`/`codeVersion` в `host_registered`, per-game `mapsVersion` через стаб `gameCatalog`), `MapCatalog.test.js` (манифест, выдача карт, стабильность версии), `WorkerCatalog.test.js` (версия-хеш и URL бандла, пустой каталог в dev, выбор новейшего из нескольких), `GameCatalog.test.js` (резолв сконфигурированных `{id, package}` в `node_modules/<package>/dist/manifest.json`, per-game каталоги карт, несобранная/неизвестная игра, подмена entries на `/@fs/` в dev), `JwksProxy.test.js` (проксирование, TTL-кэш и его истечение, сбой апстрима — инъекция `fetchImpl`), `PlayerDataProxy.test.js` (проксирование GET/PUT `/rank`+`/state`, отсутствие кэша, сбой апстрима — инъекция `fetchImpl`). Rate limiter — `tests/lib/rateLimiter.test.js`.
 
 ---
 
