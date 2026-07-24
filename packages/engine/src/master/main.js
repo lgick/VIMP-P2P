@@ -71,10 +71,10 @@ const playerDataProxy = new PlayerDataProxy(
 );
 
 // каталог игр-плагинов (Этап A2): по конфигу `master:games` резолвит пакеты
-// в node_modules и читает <package>/dist/manifest.json (продукт
-// `npm run game:build`); в dev entries указывают на Vite-исходники (HMR),
-// maps/assetsBase — из уже собранного dist (как и WorkerCatalog, требует
-// сборки игры один раз перед первым запуском)
+// в node_modules и читает <package>/dist/manifest.json (продукт `npm run
+// build` в репозитории игры, например vimp-tanks); в dev entries указывают
+// на Vite-исходники (HMR), maps/assetsBase — из уже собранного dist (как и
+// WorkerCatalog, требует установки/сборки игры один раз перед первым запуском)
 const gameCatalog = new GameCatalog(config.get('master:games'), nodeModulesDir, {
   dev: !isProduction,
 });
@@ -91,7 +91,8 @@ if (gameCatalog.ids.length > 0) {
   console.info(`-> Games loaded: ${gameCatalog.ids.join(', ')}`);
 } else {
   console.warn(
-    '-> Games loaded: none (run `npm run game:build` before starting the master)',
+    '-> Games loaded: none (install/link the game package(s) listed in ' +
+      'master:games and build them in their own repository before starting the master)',
   );
 }
 

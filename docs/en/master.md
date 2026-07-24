@@ -32,7 +32,7 @@ Configuration — [packages/engine/src/config/master.js](../../packages/engine/s
 | `packages/engine/src/master/SignalingServer.js` | signaling WebSocket: connection lifecycle, WebRTC message routing, ping rate limiting |
 | `packages/engine/src/master/MapCatalog.js` | map catalog: an in-memory JSON representation of the game plugin's `src/data/maps` (e.g. `vimp-tanks`'s) plus a content version hash; served to hosts without a rebuild |
 | `packages/engine/src/master/WorkerCatalog.js` | worker bundle catalog: a content version hash of `dist/assets/host.worker-*.js` plus its URL; hosts use it to detect a new code version and swap the Worker via a handoff |
-| `packages/engine/src/master/GameCatalog.js` | game-plugin catalog: resolves the `master:games` config list (`{id, package}[]`) to packages under `node_modules/` and reads `<package>/dist/manifest.json` (built by `npm run game:build`) plus a per-game `MapCatalog` from `<package>/dist/maps/*.json`; in dev, `entries.client/host/wasm` are swapped for Vite `/@fs/` source URLs (HMR) — see [plugin-api.md](plugin-api.md#gamemanifest) |
+| `packages/engine/src/master/GameCatalog.js` | game-plugin catalog: resolves the `master:games` config list (`{id, package}[]`) to packages under `node_modules/` and reads `<package>/dist/manifest.json` (built by `npm run build` in the game repository) plus a per-game `MapCatalog` from `<package>/dist/maps/*.json`; in dev, `entries.client/host/wasm` are swapped for Vite `/@fs/` source URLs (HMR) — see [plugin-api.md](plugin-api.md#gamemanifest) |
 | `packages/engine/src/master/JwksProxy.js` | proxies `GET /jwks` of the central auth service under the master's own origin, cached (TTL) — see [GET /auth/jwks](#get-authjwks) |
 | `packages/engine/src/master/PlayerDataProxy.js` | proxies per-user `GET`/`PUT /rank` and `/state` of the central auth service, **not cached** (Stage B4) — see [GET/PUT /auth/rank, GET/PUT /auth/state](#getput-authrank-getput-authstate) |
 | `packages/engine/src/lib/rateLimiter.js` | a shared fixed-window rate limiter (event limit per key per interval) |
@@ -84,7 +84,7 @@ version}[]`, see [configuration.md](configuration.md#srcconfigmasterjs),
 overridable in production via the `GAMES_MATRIX` env var) to packages under
 `node_modules/` (a workspace symlink onto `games/<id>` until the repos split,
 an ordinary dependency after) and reads `<package>/dist/manifest.json` (built
-by `npm run game:build`), one entry per game plugin. A game whose
+by `npm run build` in the game repository), one entry per game plugin. A game whose
 `manifest.id` differs from its configured id is skipped with a warning (the
 static mount builds paths from the id); a map file with broken JSON is
 skipped with a warning instead of crashing the master.
@@ -107,7 +107,7 @@ In dev, `entries.client`/`entries.host`/`entries.wasm` are rewritten to Vite
 etc. and the `.wasm` under its `core/pkg-web/`) so imports go through Vite's dev
 transform/HMR instead of the built bundle; everything else in the manifest
 (`maps`, `assetsBase`, `roomDefaults`, `version`) still comes from the built
-`dist/manifest.json` — a game must be built once (`npm run game:build`)
+`dist/manifest.json` — a game must be built once (`npm run build` in the game repository)
 before its first dev run, same requirement as `npm run core:build` for the
 WASM core.
 

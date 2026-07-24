@@ -10,7 +10,7 @@
 > `src/client/index.js` игры-плагина, например в `vimp-tanks`); сборка игры
 > (её `vite.config.js`), выпускающая
 > `dist/{client,host}-<hash>.js`, общий хешированный `.wasm`,
-> `maps/*.json`, `sounds/*` и `manifest.json` (`npm run game:build`), которую
+> `maps/*.json`, `sounds/*` и `manifest.json` (`npm run build` в репозитории игры), которую
 > читает `GameCatalog` мастера (Этап 6.2, маршруты `/games/*`). Клиент (Этап
 > 6.3) динамически грузит `ClientPlugin` из манифеста активной игры и зовёт
 > `createClientCore`. Хост (Этап 6.4) динамически грузит `HostPlugin` по

@@ -39,7 +39,7 @@ export default class GameCatalog {
       try {
         manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
       } catch (err) {
-        continue; // игра не собрана/не установлена (npm run game:build) — пропускаем
+        continue; // игра не собрана/не установлена (npm run build в репозитории игры) — пропускаем
       }
 
       // статик-маунт мастера раздаёт dist/ по id из конфига — при

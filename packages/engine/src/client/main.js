@@ -218,7 +218,7 @@ socketMethods[PS_CONFIG_DATA] = async data => {
 
   // путь к звукам — из assetsBase манифеста активной игры (Этап 6.3), не из
   // бандла движка: сборка игры кладёт свою копию звуков рядом с
-  // client/host-бандлами (games/tanks/dist/sounds)
+  // client/host-бандлами (dist/sounds в пакете игры, например @vimp/tanks)
   soundData = {
     ...(data.parts.sounds || {}),
     path: `${activeGameManifest.assetsBase}sounds/`,

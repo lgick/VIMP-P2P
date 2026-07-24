@@ -10,7 +10,7 @@
 > `src/client/index.js`, e.g. `vimp-tanks`'s); the game build
 > (its `vite.config.js`) producing
 > `dist/{client,host}-<hash>.js`, a shared hashed `.wasm` asset,
-> `maps/*.json`, `sounds/*` and `manifest.json` (`npm run game:build`),
+> `maps/*.json`, `sounds/*` and `manifest.json` (`npm run build` in the game repository),
 > consumed by the master's `GameCatalog` (Stage 6.2, `/games/*` routes). The
 > client (Stage 6.3) dynamically loads `ClientPlugin` from the active game's
 > manifest and calls `createClientCore`. The host (Stage 6.4) dynamically

@@ -1,5 +1,5 @@
 // Игровая чат-команда фикстуры: '/spawn <count>' — создаёт scripted-
-// участников без голосования (зеркало games/tanks/src/host/botCommand.js,
+// участников без голосования (зеркало vimp-tanks/src/host/botCommand.js,
 // упрощённое — доказывает только регистрацию HostPlugin.chatCommands).
 // Регистрируется в движковом CommandProcessor.
 export default {

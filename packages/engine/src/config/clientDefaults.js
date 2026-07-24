@@ -1,8 +1,8 @@
 // Движковые дефолты клиентского CONFIG_DATA (порт 0): интерполяция,
 // режимы/служебные клавиши, DOM-структуры движковых модулей, технические
-// сообщения. Игровая половина бывшего config/client.js —
-// games/tanks/src/config/client.js; merge выполняет buildClientConfig
-// (в этапе 6 игровая часть приедет через HostPlugin.buildClientGameConfig).
+// сообщения. Игровая половина бывшего config/client.js — src/config/client.js
+// в репозитории игры (например vimp-tanks); merge выполняет buildClientConfig
+// через HostPlugin.buildClientGameConfig.
 export default {
   // ***** interpolation ***** //
   // snapshot-интерполяция: мир рендерится в прошлом (serverNow − delay)

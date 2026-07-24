@@ -1,7 +1,7 @@
 import gameConfig from './game.js';
 
 // Схема авторизации фикстуры (HostPlugin.authSchema, PLAN.md §3.2) —
-// зеркало games/tanks/src/config/auth.js с единственной моделью.
+// зеркало vimp-tanks/src/config/auth.js с единственной моделью.
 export default {
   elems: {
     authId: 'auth',

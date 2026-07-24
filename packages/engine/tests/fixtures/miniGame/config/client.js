@@ -1,5 +1,5 @@
 // Игровая половина клиентского CONFIG_DATA (HostPlugin.buildClientGameConfig,
-// PLAN.md §3.5) — зеркало games/tanks/src/config/client.js, минимальная
+// PLAN.md §3.5) — зеркало vimp-tanks/src/config/client.js, минимальная
 // схема: одно полотно, одна колонка статистики сверх имени, один keySet.
 export default {
   parts: {

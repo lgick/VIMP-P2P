@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "description": "VIMP Engine — движок-приложение (мастер, P2P-транспорт, Worker-хост, мета, MVC-каркас клиента)",
   "type": "module",
-  "main": "src/master/main.js",
   "exports": {
     "./lib/*": "./src/lib/*",
     "./config/*": "./src/config/*",
@@ -23,7 +22,6 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@vimp/tanks": "^0.1.0",
     "express": "^5.1.0",
     "uuid": "^13.0.0",
     "vite-express": "^0.21.1",

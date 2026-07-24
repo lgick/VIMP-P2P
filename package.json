@@ -40,5 +40,8 @@
     "globals": "^16.2.0",
     "happy-dom": "^20.10.6",
     "vitest": "^4.1.9"
+  },
+  "dependencies": {
+    "@vimp/tanks": "^0.1.0"
   }
 }

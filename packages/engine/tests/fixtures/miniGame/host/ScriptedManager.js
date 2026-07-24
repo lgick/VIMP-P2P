@@ -1,5 +1,5 @@
 // Игровой scripted-модуль фикстуры: зеркало
-// games/tanks/src/host/TanksBotManager.js — тот же контракт (createMap,
+// vimp-tanks/src/host/TanksBotManager.js — тот же контракт (createMap,
 // createScripted, removeScripted, removeOneForHuman, getCount,
 // getCountsPerTeam), проверяющий, что RoundManager/HostGame/CommandProcessor
 // работают с любым HostPlugin.createModules(ctx), а не только с ботами

@@ -1,7 +1,7 @@
 // Движковые дефолты хоста: лимиты комнаты, таймеры, RTT/idle-кики,
 // спектаторский keyset (наблюдение — механизм движка). Игровая половина
-// бывшего config/game.js — games/tanks/src/config/game.js; merge выполняет
-// host.worker.js (в этапе 6 игровая часть приедет через HostPlugin.gameConfig).
+// бывшего config/game.js — src/config/game.js в репозитории игры (например
+// vimp-tanks); merge выполняет host.worker.js через HostPlugin.gameConfig.
 export default {
   isDevMode: false, // флаг режима разработки
 

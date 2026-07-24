@@ -2,8 +2,9 @@ import { SNAPSHOT_FORMAT_VERSION } from '../config/opcodes.js';
 import hostDefaults from '../config/hostDefaults.js';
 import wsports from '../config/wsports.js';
 
-// Сборка JSON-конфига Rust-ядра (packages/engine/core + games/tanks/core):
-// движковая половина (timeStep/mapScale/mapSetId/snapshot/seed) + игровая
+// Сборка JSON-конфига Rust-ядра (packages/engine/core + core/ в репозитории
+// игры, например vimp-tanks): движковая половина
+// (timeStep/mapScale/mapSetId/snapshot/seed) + игровая
 // (models/weapons/playerKeys/panel/friendlyFire) — форма {engine, game} из
 // PLAN.md §3.4. Единственная точка соответствия JS-конфигов и ABI ядра
 // (см. docs/core.md).

@@ -25,7 +25,7 @@ npm start         # production: HTTP за Nginx, читает .env
 | `packages/engine/src/master/SignalingServer.js` | сигнальный WebSocket: жизненный цикл соединений, маршрутизация WebRTC-сообщений, rate limiting пингов |
 | `packages/engine/src/master/MapCatalog.js` | каталог карт: JSON-представление `src/data/maps` игры-плагина (например, в `vimp-tanks`) в памяти + версия-хеш содержимого; раздача хостам без пересборки |
 | `packages/engine/src/master/WorkerCatalog.js` | каталог worker-бандла: версия-хеш содержимого `dist/assets/host.worker-*.js` + его URL; по нему хосты обнаруживают новую версию кода и меняют Worker эстафетой |
-| `packages/engine/src/master/GameCatalog.js` | каталог игр-плагинов: резолвит список игр из конфига `master:games` (`{id, package}[]`) в пакеты `node_modules/` и читает `<package>/dist/manifest.json` (продукт `npm run game:build`) + строит per-game `MapCatalog` из `<package>/dist/maps/*.json`; в dev `entries.client/host/wasm` подменяются на исходники Vite `/@fs/` (HMR) — см. [plugin-api.md](plugin-api.md#gamemanifest) |
+| `packages/engine/src/master/GameCatalog.js` | каталог игр-плагинов: резолвит список игр из конфига `master:games` (`{id, package}[]`) в пакеты `node_modules/` и читает `<package>/dist/manifest.json` (продукт `npm run build` в репозитории игры) + строит per-game `MapCatalog` из `<package>/dist/maps/*.json`; в dev `entries.client/host/wasm` подменяются на исходники Vite `/@fs/` (HMR) — см. [plugin-api.md](plugin-api.md#gamemanifest) |
 | `packages/engine/src/master/JwksProxy.js` | проксирует `GET /jwks` центрального auth-сервиса под собственным origin мастера, с кэшем (TTL) — см. [GET /auth/jwks](#get-authjwks) |
 | `packages/engine/src/master/PlayerDataProxy.js` | проксирует per-user `GET`/`PUT /rank` и `/state` центрального auth-сервиса, **без кэша** (Этап B4) — см. [GET/PUT /auth/rank, GET/PUT /auth/state](#getput-authrank-getput-authstate) |
 | `packages/engine/src/lib/rateLimiter.js` | общий rate limiter с фиксированным окном (лимит событий на ключ за интервал) |
@@ -77,7 +77,7 @@ IP хоста и служебные поля наружу не отдаются.
 проде переменной окружения `GAMES_MATRIX`) в пакеты `node_modules/` (до
 разъезда репозиториев — workspace-симлинк на `games/<id>`, после — обычная
 зависимость) и читает `<package>/dist/manifest.json` (продукт
-`npm run game:build`), по одной записи на игру-плагин. Игра, у которой
+`npm run build` в репозитории игры), по одной записи на игру-плагин. Игра, у которой
 `manifest.id` не совпадает с id из конфига, пропускается с предупреждением
 (статик-маунт строит пути по id); карта с битым JSON пропускается с
 предупреждением, не роняя мастер.
@@ -101,7 +101,7 @@ IP хоста и служебные поля наружу не отдаются.
 шёл через dev-трансформацию и HMR Vite, а не собранный бандл; остальное
 содержимое манифеста (`maps`,
 `assetsBase`, `roomDefaults`, `version`) по-прежнему берётся из собранного
-`dist/manifest.json` — игру нужно собрать один раз (`npm run game:build`)
+`dist/manifest.json` — игру нужно собрать один раз (`npm run build` в репозитории игры)
 перед первым запуском в dev, как и `npm run core:build` для WASM-ядра.
 
 ### GET /worker/manifest.json

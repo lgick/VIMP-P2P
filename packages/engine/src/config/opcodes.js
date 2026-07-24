@@ -15,12 +15,12 @@ export const ENGINE_API_VERSION = 1;
 export const SNAPSHOT_FORMAT_VERSION = 3;
 
 // Реестр ключей снапшота (SNAPSHOT_KEYS) — игровая схема: живёт в
-// gameConfig.snapshot игры (games/tanks/src/config/snapshot.js), движок
-// передаёт её ядру (lib/coreConfig.js) и клиенту в CONFIG_DATA
+// gameConfig.snapshot игры (например src/config/snapshot.js в vimp-tanks),
+// движок передаёт её ядру (lib/coreConfig.js) и клиенту в CONFIG_DATA
 // (lib/buildClientConfig.js), не зная раскладки.
 
 // флаги hot-буфера рендер-тика клиентского ядра
-// (зеркало games/tanks/core/src/client/mod.rs)
+// (зеркало core/src/client/mod.rs в репозитории игры, например vimp-tanks)
 export const HOT_FLAGS = {
   GAME: 1,
   CAMERA: 2,
