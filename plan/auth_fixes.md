@@ -60,7 +60,12 @@
   + проверка, что `state` — объект (не массив/строка/число).
 - **F12. Rate-limit.** `packages/auth/src/lib/rateLimiter.js` (тот же
   паттерн, что у мастера) — 5 запросов/мин на IP для `POST /nick`, 20/мин
-  для `GET /oauth/:provider/start`.
+  для `GET /oauth/:provider/start`. IP клиента берётся из
+  `X-Forwarded-For` (первый адрес) с фолбэком на `req.socket.remoteAddress`
+  (`clientIp()` в `main.js`) — не через Express `req.ip`/`trust proxy`,
+  чтобы за Nginx в проде (см. `deployment.md`) лимит не схлопнулся в один
+  общий бакет на всех клиентов сразу; тот же приём, что и в
+  `packages/engine/src/master/SignalingServer.js`.
 - **F13. `\s` в regexp ника.** `packages/auth/src/lib/validators.js`:
   `[\w\s#]` → `[\w #]` (движковая копия не трогалась — ставки ниже, там ник
   не глобально-персистентная личность).

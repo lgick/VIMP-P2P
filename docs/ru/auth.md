@@ -87,6 +87,13 @@ states:   user_id, game_id, state(JSONB opaque), updated_at   ← «скиллы
 | `GET /state?game=` (Bearer) | `{ state }` (непрозрачный JSON, блок «скиллов») |
 | `PUT /state?game=` (Bearer, `{ state }`) | upsert блока state |
 
+Ключ rate-limit'а — IP клиента из `X-Forwarded-For` (первый адрес) с
+фолбэком на `req.socket.remoteAddress` (`clientIp()` в `src/main.js`), а не
+`req.ip`/`trust proxy` из Express — тот же приём, что и у мастера в
+`SignalingServer.handleConnection`, и по той же причине: за Nginx (прод-топология,
+см. [deployment.md](deployment.md)) `req.ip` сам по себе указывал бы на адрес
+Nginx, и лимит схлопнулся бы в один общий бакет на всех клиентов сразу.
+
 Identity JWT (`src/lib/jwt.js`) несёт `sub` (id пользователя) и `nick`,
 подписан RS256, короткоживущий (`config.jwt.expiresIn`, 4 часа по
 умолчанию — с запасом покрывает длительность матча; клиент также проверяет

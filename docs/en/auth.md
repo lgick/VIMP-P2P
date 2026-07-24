@@ -88,6 +88,14 @@ touching these tables.
 | `GET /state?game=` (Bearer) | `{ state }` (opaque JSON, the "skills" blob) |
 | `PUT /state?game=` (Bearer, `{ state }`) | upserts the state blob |
 
+Rate limiting keys on the client IP taken from `X-Forwarded-For` (first hop)
+with a `req.socket.remoteAddress` fallback (`clientIp()` in `src/main.js`) —
+not Express's `req.ip`/`trust proxy` — the same convention the master uses
+in `SignalingServer.handleConnection` for the same reason: behind Nginx
+(production topology, see [deployment.md](deployment.md)), `req.ip` alone
+would resolve to Nginx's address and collapse the limit into one shared
+bucket for every client.
+
 The identity JWT (`src/lib/jwt.js`) carries `sub` (user id) and `nick`,
 signed RS256, short-lived (`config.jwt.expiresIn`, 4 hours by default — long
 enough to outlast a match; the client also checks `exp` when restoring a

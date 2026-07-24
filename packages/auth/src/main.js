@@ -81,9 +81,19 @@ function isAllowedReturnUrl(returnUrl) {
 const nickLimiter = new RateLimiter({ limit: 5, windowMs: 60000 });
 const oauthStartLimiter = new RateLimiter({ limit: 20, windowMs: 60000 });
 
+// IP клиента за реверс-прокси (Nginx в проде, см. deployment.md) — тот же
+// приём, что и в packages/engine/src/master/SignalingServer.js: без
+// app.set('trust proxy', ...) req.ip у Express равен адресу самого Nginx,
+// и rate-limit стал бы одним общим лимитом на всех клиентов сразу
+function clientIp(req) {
+  const header = req.headers['x-forwarded-for'];
+
+  return header ? header.split(',')[0].trim() : req.socket.remoteAddress;
+}
+
 function rateLimit(limiter) {
   return (req, res, next) => {
-    if (!limiter.consume(req.ip)) {
+    if (!limiter.consume(clientIp(req))) {
       res.status(429).json({ error: 'rateLimited' });
       return;
     }
