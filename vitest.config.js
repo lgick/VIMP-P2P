@@ -1,16 +1,12 @@
 import { defineConfig } from 'vitest/config';
 
-// Конфигурация Vitest (этап 5 плана отделения движка).
-// Тесты разделены на четыре проекта:
+// Конфигурация Vitest (этап 5 плана отделения движка; A3.5 — проекты
+// tanks/integration переехали в репозиторий игры vimp-tanks).
+// Тесты разделены на три проекта:
 //   - engine-node:   мастер-сервер, хост (мета + Worker-фасад) и общие модули
 //                    движка (packages/engine/src/{master,host,lib,config})
 //   - engine-client: клиентский код движка (packages/engine/src/client)
 //                    в окружении happy-dom (браузерный DOM)
-//   - tanks:         игровые модули @vimp/tanks (host-плагин, ClientPlugin)
-//   - integration:   интеграция поверх реального ядра танков
-//                    (tests/host/HostGame.test.js + JS↔WASM харнесс tests/core;
-//                    пропускается, если games/tanks/core/pkg-node не собран —
-//                    см. npm run core:build)
 //   - auth:          центральный auth-сервис (packages/auth/src) —
 //                    JWT/JWKS, валидаторы, репозиторий, OAuth-провайдеры
 export default defineConfig({
@@ -31,12 +27,6 @@ export default defineConfig({
             'tests/host/**/*.test.js',
             'packages/engine/tests/fixtures/**/*.test.js',
           ],
-          exclude: [
-            'tests/host/HostGame.test.js',
-            'tests/host/hostPlugin.test.js',
-            'tests/host/botCommand.test.js',
-            'tests/host/TanksBotManager.test.js',
-          ],
         },
       },
       {
@@ -45,28 +35,6 @@ export default defineConfig({
           name: 'engine-client',
           environment: 'happy-dom',
           include: ['tests/client/**/*.test.js'],
-          exclude: ['tests/client/tanksClientPlugin.test.js'],
-        },
-      },
-      {
-        extends: true,
-        test: {
-          name: 'tanks',
-          environment: 'happy-dom',
-          include: [
-            'tests/host/hostPlugin.test.js',
-            'tests/host/botCommand.test.js',
-            'tests/host/TanksBotManager.test.js',
-            'tests/client/tanksClientPlugin.test.js',
-          ],
-        },
-      },
-      {
-        extends: true,
-        test: {
-          name: 'integration',
-          environment: 'node',
-          include: ['tests/host/HostGame.test.js', 'tests/core/**/*.test.js'],
         },
       },
       {
@@ -82,16 +50,11 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
-      include: [
-        'packages/engine/src/**/*.js',
-        'packages/auth/src/**/*.js',
-        'games/*/src/**/*.js',
-      ],
+      include: ['packages/engine/src/**/*.js', 'packages/auth/src/**/*.js'],
       exclude: [
         '**/_*/**', // игнорируемые директории (префикс _)
         '**/_*.js', // игнорируемые файлы (префикс _)
         '**/index.js', // ре-экспорты
-        'games/*/src/data/**', // статические игровые данные (карты, баланс)
       ],
     },
   },

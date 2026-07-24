@@ -6,21 +6,24 @@
   "main": "src/master/main.js",
   "exports": {
     "./lib/*": "./src/lib/*",
-    "./config/*": "./src/config/*"
+    "./config/*": "./src/config/*",
+    "./host/*": "./src/host/*"
   },
   "files": [
     "src/lib",
-    "src/config"
+    "src/config",
+    "src/host"
   ],
   "publishConfig": {
     "access": "restricted"
   },
   "scripts": {
-    "dev": "NODE_ENV=development nodemon src/master/main.js -w src/master -w src/lib -w src/config -w ../../games/tanks/src",
+    "dev": "NODE_ENV=development nodemon src/master/main.js -w src/master -w src/lib -w src/config",
     "start": "NODE_ENV=production node --env-file ../../.env src/master/main.js",
     "build": "vite build"
   },
   "dependencies": {
+    "@vimp/tanks": "^0.1.0",
     "express": "^5.1.0",
     "uuid": "^13.0.0",
     "vite-express": "^0.21.1",

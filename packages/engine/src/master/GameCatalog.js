@@ -1,19 +1,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { ENGINE_API_VERSION } from '../config/opcodes.js';
 import MapCatalog from './MapCatalog.js';
 
 // Каталог игр-плагинов мастера (Этап A2 плана разделения): по конфигу
 // `master:games` ({id, package}[]) резолвит директорию пакета в node_modules
-// и читает <package>/dist/manifest.json (продукт `npm run game:build`) +
-// per-game MapCatalog из <package>/dist/maps/*.json. Мастер не исполняет код
-// игры (только уже собранный манифест + статичные JSON карт). До разъезда
-// репозиториев (Этап A3) пакет резолвится через npm workspace-симлинк
-// (node_modules/@vimp/tanks -> games/tanks); после — это обычная зависимость.
+// и читает <package>/dist/manifest.json (продукт сборки пакета игры, см.
+// `docs/en/extending.md`) + per-game MapCatalog из <package>/dist/maps/*.json.
+// Мастер не исполняет код игры (только уже собранный манифест + статичные
+// JSON карт). Пакет игры — обычная npm-зависимость (`@vimp/tanks` и т.п.),
+// не workspace-член этого репозитория (Этап A3).
+//
+// Манифест с несовпадающим `engineApi` (Этап A4) пропускается тем же
+// гейтом, что `assertEngineApiCompatible` на клиенте/хосте — несовместимая
+// игра не должна попасть в manifestList, который отдаётся клиентам.
 //
 // В dev entries манифеста (client/host/wasm) подменяются на исходники через
 // Vite `/@fs/` (HMR штатный, как у остального движка); maps/assetsBase
-// остаются из уже собранного dist — как и WorkerCatalog, каталог требует
-// `npm run game:build` один раз перед первым запуском (см. CLAUDE.md).
+// остаются из уже собранного dist — каталог требует, чтобы пакет игры был
+// уже собран/установлен один раз перед первым запуском (см. CLAUDE.md).
 export default class GameCatalog {
   /**
    * @param {{id: string, package: string}[]} games - список игр из конфига (`master:games`)
@@ -43,6 +48,18 @@ export default class GameCatalog {
         console.warn(
           `GameCatalog: skip "${id}" — manifest.id "${manifest.id}" ` +
             'does not match configured id',
+        );
+        continue;
+      }
+
+      // игра собрана под другую версию плагинного контракта (Этап A4) —
+      // тот же гейт, что assertEngineApiCompatible на клиенте/хосте, но
+      // здесь ещё до раздачи манифеста: несовместимая игра не должна даже
+      // попасть в manifestList
+      if (manifest.engineApi !== ENGINE_API_VERSION) {
+        console.warn(
+          `GameCatalog: skip "${id}" — requires engine API ` +
+            `v${manifest.engineApi}, this engine build is v${ENGINE_API_VERSION}`,
         );
         continue;
       }

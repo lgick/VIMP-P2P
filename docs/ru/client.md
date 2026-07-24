@@ -77,7 +77,8 @@ Publisher-паттерн связей внутри тройки:
 
 Клиентская математика — интерполяция снапшотов, предикт своего танка,
 визуальный спавн снарядов и распаковка кадров v3 — живёт в Rust-ядре
-(`packages/engine/core/src/client/` + `games/tanks/core/src/client/`,
+(`packages/engine/core/src/client/` + собственный `core/src/client/`
+игры-плагина, например в `vimp-tanks`,
 wasm-bindgen класс `ClientCore` из того же WASM-бинаря,
 что `GameCore` хоста). JS-оболочка (`main.js`) только пересылает данные и
 применяет результат к рендеру; ABI и раскладки — в [core.md](core.md#clientcore--клиентский-режим-ядра).
@@ -111,14 +112,16 @@ wasm-bindgen класс `ClientCore` из того же WASM-бинаря,
   спавна для `applyGameData`; `nextWeapon`/`prevWeapon` — `cycle_weapon`).
   Отправка хосту `"seq:action:name"` не изменилась.
 
-**ClientPlugin танков** (`games/tanks/src/client/index.js`; грузится движком
+**ClientPlugin танков** (`src/client/index.js` игры-плагина, например в
+`vimp-tanks`; грузится движком
 динамически по `GameManifest` мастера, этап 6.3 —
 `packages/engine/src/lib/gamePlugin.js`) поставляет `parts` (рендеры сущностей), `bakers`
 (процедурные текстуры), игровой CSS и хуки. Игровые методы ядра зовутся только
 из его хуков — `onAuth` (`set_model` при авторизации), `onPanel` (`sync_panel` на
 кадр панели), `onLocalAction` (`try_fire`/`cycle_weapon`); `main.js` игровых
 методов ядра не знает. Игровой CSS (ячейки панели, полотна, цвета команд) —
-`games/tanks/src/client/tanks.css`, движковый каркас UI — `packages/engine/src/client/style.css`.
+`src/client/tanks.css` игры-плагина (например, в `vimp-tanks`), движковый
+каркас UI — `packages/engine/src/client/style.css`.
 
 Внутри ядро реализует следующие алгоритмы:
 
@@ -129,7 +132,8 @@ wasm-bindgen класс `ClientCore` из того же WASM-бинаря,
   событий опоздавших кадров;
 - **предикт** (`client/predictor.rs`): реплика авторитетного движения без
   Rapier-коллизий фикс-шагом `timeStep`; формулы тика **общие** с
-  `Tank::update` (`games/tanks/core/src/motion.rs`) — реплика не может разойтись с
+  `Tank::update` (`core/src/motion.rs` игры-плагина, например в `vimp-tanks`) —
+  реплика не может разойтись с
   авторитетным путём по формулам, паритет интеграции (ручная против Rapier)
   закрепляют cargo-тесты `client_parity`; история ввода, replay от `serverTime`
   кадра, `visualError` с экспоненциальным затуханием и снапом, freeze при
@@ -146,7 +150,7 @@ wasm-bindgen класс `ClientCore` из того же WASM-бинаря,
 
 ### parts/ — сущности
 
-[games/tanks/src/client/parts/](../../games/tanks/src/client/parts/) — классы, отрисовываемые на PixiJS-полотнах: `Tank` (один класс и для своего, и для чужих танков), `TankRadar`, `Map`, `MapRadar`, `Bomb`, `Smoke`, `Tracks` (+`TrackMark`), `ParticlePool`. Эффекты — в `parts/effects/` (`BaseEffect`, `explosion/` — взрыв/воронка/дым, `shot/` — трассер/попадание), анимируются на `Ticker.shared`.
+[`src/client/parts/` игры-плагина](https://github.com/lgick/vimp-tanks/tree/main/src/client/parts) (например, в `vimp-tanks`) — классы, отрисовываемые на PixiJS-полотнах: `Tank` (один класс и для своего, и для чужих танков), `TankRadar`, `Map`, `MapRadar`, `Bomb`, `Smoke`, `Tracks` (+`TrackMark`), `ParticlePool`. Эффекты — в `parts/effects/` (`BaseEffect`, `explosion/` — взрыв/воронка/дым, `shot/` — трассер/попадание), анимируются на `Ticker.shared`.
 
 Соответствие снапшот-ключей классам и распределение по полотнам — `gameSets`/`entitiesOnCanvas` в `client.js`. Фиксированного контракта у part нет — при создании новой смотреть существующие как образец.
 
@@ -156,12 +160,12 @@ wasm-bindgen класс `ClientCore` из того же WASM-бинаря,
 
 ### Провайдеры
 
-- **`BakingProvider`** ([providers/BakingProvider.js](../../packages/engine/src/client/providers/BakingProvider.js)) — однократная генерация процедурных текстур при старте по конфигу `bakedAssets`; функции запекания — в [bakers/ игры](../../games/tanks/src/client/bakers/) (фиксированного интерфейса нет, ориентироваться на существующие).
+- **`BakingProvider`** ([providers/BakingProvider.js](../../packages/engine/src/client/providers/BakingProvider.js)) — однократная генерация процедурных текстур при старте по конфигу `bakedAssets`; функции запекания — в [`src/client/bakers/` игры-плагина](https://github.com/lgick/vimp-tanks/tree/main/src/client/bakers) (например, в `vimp-tanks`; фиксированного интерфейса нет, ориентироваться на существующие).
 - **`DependencyProvider`** — инъекция сервисов (`renderer`, `soundManager`) в компоненты по карте `componentDependencies`.
 
 ## SoundManager
 
-[packages/engine/src/client/SoundManager.js](../../packages/engine/src/client/SoundManager.js) (на Howler.js). Звуки описаны в `games/tanks/src/config/sounds.js`; поле `path` переопределяется на клиенте (`main.js`, обработчик `CONFIG_DATA`) на `${activeGameManifest.assetsBase}sounds/` — собственную копию звуков сборки игры рядом с её client/host-бандлами (`games/tanks/dist/sounds/`), вместо бандловой `/sounds/` движка.
+[packages/engine/src/client/SoundManager.js](../../packages/engine/src/client/SoundManager.js) (на Howler.js). Звуки описаны в `src/config/sounds.js` игры-плагина (например, в `vimp-tanks`); поле `path` переопределяется на клиенте (`main.js`, обработчик `CONFIG_DATA`) на `${activeGameManifest.assetsBase}sounds/` — собственную копию звуков сборки игры рядом с её client/host-бандлами (`dist/sounds/` игры-плагина), вместо бандловой `/sounds/` движка.
 
 - **UI/системные** (без позиции): `playSystemSound(name)` — немедленно, в обход приоритетов (используется и для звуков порта 6).
 - **Пространственные** (позиция в мире): `registerSound(name, { position })` → `processAudibility()` → `updateActiveSounds()` — менеджер сам решает, что слышно, соблюдая лимит голосов (`WORLD_VOICE_LIMIT = 30`) и приоритеты из конфига.

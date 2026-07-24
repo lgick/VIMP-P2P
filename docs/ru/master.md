@@ -23,7 +23,7 @@ npm start         # production: HTTP за Nginx, читает .env
 | `packages/engine/src/master/main.js` | точка входа: Express + REST, HTTPS/HTTP-сервер, сигнальный `WebSocketServer`, периодическая уборка протухших комнат |
 | `packages/engine/src/master/HostRegistry.js` | реестр комнат `Map<hostId, HostSession>`: регистрация (не более 1 комнаты с IP), heartbeat/`lastSeen`, жалобы, выборка для `GET /servers` |
 | `packages/engine/src/master/SignalingServer.js` | сигнальный WebSocket: жизненный цикл соединений, маршрутизация WebRTC-сообщений, rate limiting пингов |
-| `packages/engine/src/master/MapCatalog.js` | каталог карт: JSON-представление `games/tanks/src/data/maps` в памяти + версия-хеш содержимого; раздача хостам без пересборки |
+| `packages/engine/src/master/MapCatalog.js` | каталог карт: JSON-представление `src/data/maps` игры-плагина (например, в `vimp-tanks`) в памяти + версия-хеш содержимого; раздача хостам без пересборки |
 | `packages/engine/src/master/WorkerCatalog.js` | каталог worker-бандла: версия-хеш содержимого `dist/assets/host.worker-*.js` + его URL; по нему хосты обнаруживают новую версию кода и меняют Worker эстафетой |
 | `packages/engine/src/master/GameCatalog.js` | каталог игр-плагинов: резолвит список игр из конфига `master:games` (`{id, package}[]`) в пакеты `node_modules/` и читает `<package>/dist/manifest.json` (продукт `npm run game:build`) + строит per-game `MapCatalog` из `<package>/dist/maps/*.json`; в dev `entries.client/host/wasm` подменяются на исходники Vite `/@fs/` (HMR) — см. [plugin-api.md](plugin-api.md#gamemanifest) |
 | `packages/engine/src/master/JwksProxy.js` | проксирует `GET /jwks` центрального auth-сервиса под собственным origin мастера, с кэшем (TTL) — см. [GET /auth/jwks](#get-authjwks) |
@@ -245,4 +245,4 @@ origin мастера (Этап B4): `PlayerDataProxy`
 
 ---
 
-[← Предыдущая: Игровой процесс](gameplay.md) · [Следующая: Центральный auth-сервис →](auth.md)
+[← Предыдущая: Архитектура](architecture.md) · [Следующая: Центральный auth-сервис →](auth.md)

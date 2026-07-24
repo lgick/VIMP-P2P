@@ -6,10 +6,10 @@
 > Контракты реализуются поэтапно по плану миграции (`PLAN.md`). В коде уже
 > есть: константа `ENGINE_API_VERSION`
 > (`packages/engine/src/config/opcodes.js`), проверяется при загрузке
-> плагина; объекты HostPlugin/ClientPlugin (`games/tanks/src/host/index.js`,
-> `games/tanks/src/client/index.js`); сборка игры
-> (`games/tanks/vite.config.js`), выпускающая
-> `games/tanks/dist/{client,host}-<hash>.js`, общий хешированный `.wasm`,
+> плагина; объекты HostPlugin/ClientPlugin (`src/host/index.js`,
+> `src/client/index.js` игры-плагина, например в `vimp-tanks`); сборка игры
+> (её `vite.config.js`), выпускающая
+> `dist/{client,host}-<hash>.js`, общий хешированный `.wasm`,
 > `maps/*.json`, `sounds/*` и `manifest.json` (`npm run game:build`), которую
 > читает `GameCatalog` мастера (Этап 6.2, маршруты `/games/*`). Клиент (Этап
 > 6.3) динамически грузит `ClientPlugin` из манифеста активной игры и зовёт
@@ -26,7 +26,10 @@ Worker-инфраструктура, мета-механизмы, MVC-карка
 
 Четыре контракта, все версионируются единой константой `ENGINE_API_VERSION`
 (владелец — движок, `packages/engine/src/config/opcodes.js`). Плагин с несовпадающим
-`engineApi` отвергается при загрузке с внятной ошибкой:
+`engineApi` отвергается при загрузке с внятной ошибкой — на мастере `GameCatalog`
+полностью пропускает такой манифест (Этап A4, он не попадает в `manifestList`);
+на клиенте/хосте `assertEngineApiCompatible` бросает исключение ещё до импорта
+бандла плагина:
 
 1. **GameManifest** — JSON-описание сборки игры (мастер → лобби/хост/клиент);
 2. **HostPlugin API** — default export host-entry игры (worker-safe);
@@ -35,8 +38,8 @@ Worker-инфраструктура, мета-механизмы, MVC-карка
 
 ## GameManifest
 
-Генерируется сборкой игры в `games/tanks/dist/manifest.json` (мастер отдаёт
-его под `/games/<id>/`); версия — хеш
+Генерируется сборкой игры в `dist/manifest.json` игры-плагина (например, в
+`vimp-tanks`; мастер отдаёт его под `/games/<id>/`); версия — хеш
 контента бандлов (по образцу `WorkerCatalog`). **Мастер не исполняет код
 игры** — ему хватает манифеста и статических JSON карт (продукт
 `maps:export` при сборке игры).
@@ -81,7 +84,7 @@ export default {
   gameConfig: {                       // игровая половина бывшего config/game.js
     teams: { team1: 1, team2: 2, spectators: 3 },   // произвольное число команд
     spectatorTeam: 'spectators',
-    models, weapons,                  // из games/tanks/src/data
+    models, weapons,                  // из src/data игры-плагина (например, vimp-tanks)
     snapshot,                         // снапшот-схема ключей (config/snapshot.js) — обязательное поле
     playerKeys, // spectatorKeys — движковые (наблюдение — механизм движка)
     panel: { fields: { health: {key:'h', value:100}, w1: {…}, w2: {…} }, activeKey: 'wa' },
@@ -222,8 +225,8 @@ engine-crate от wasm-bindgen не зависит вовсе.
 класс `hot` (интерполируется) / `event` (только кадром), `idPrefix`. Пакер
 (`snapshot.rs`), анпакер (`client/unpack.rs`), интерполятор и hot-буфер
 движка — интерпретаторы схемы; game-crate поставляет строки как плоские
-`RowData`. Сама схема — данные игры: `games/tanks/src/config/snapshot.js`
-(`HostPlugin.gameConfig.snapshot`, обязательное поле). Та же схема едет
+`RowData`. Сама схема — данные игры: `src/config/snapshot.js` игры-плагина
+(например, в `vimp-tanks`) (`HostPlugin.gameConfig.snapshot`, обязательное поле). Та же схема едет
 клиентскому JS в CONFIG_DATA → generic `reconstructHot` в
 `packages/engine/src/client/main.js` (ширина записи = 2 служебных поля +
 число `fields` ключа); движковый бандл снапшот-ключей не содержит (схему

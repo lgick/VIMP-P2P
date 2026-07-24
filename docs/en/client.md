@@ -253,7 +253,8 @@ What each component does:
 
 Client-side math — snapshot interpolation, the local tank's prediction,
 visual shot spawning, and v3 frame decoding — lives in the Rust core
-(`packages/engine/core/src/client/` + `games/tanks/core/src/client/`, the
+(`packages/engine/core/src/client/` + the game plugin's own `core/src/client/`,
+e.g. `vimp-tanks`'s, the
 wasm-bindgen class `ClientCore` from the same WASM
 binary as the host's `GameCore`). The JS shell (`main.js`) only forwards
 data and applies the result to rendering; ABI and layouts —
@@ -291,15 +292,17 @@ Data flow:
   `nextWeapon`/`prevWeapon` — `cycle_weapon`). Sending `"seq:action:name"`
   to the host is unchanged.
 
-**The tanks ClientPlugin** (`games/tanks/src/client/index.js`; loaded
-dynamically by the engine from the master's `GameManifest`, stage 6.3 —
+**The tanks ClientPlugin** (the game plugin's `src/client/index.js`, e.g.
+`vimp-tanks`'s; loaded dynamically by the engine from the master's
+`GameManifest`, stage 6.3 —
 `packages/engine/src/lib/gamePlugin.js`) supplies `parts` (entity renderers),
 `bakers` (procedural textures), the game CSS and the hooks. The core's game
 methods are called only from its hooks — `onAuth` (`set_model` on auth), `onPanel` (`sync_panel`
 per panel frame), `onLocalAction` (`try_fire`/`cycle_weapon`); `main.js`
 doesn't know the core's game methods. The game's CSS (panel cells,
-canvases, team colors) is `games/tanks/src/client/tanks.css`; the engine
-UI skeleton is `packages/engine/src/client/style.css`.
+canvases, team colors) is the game plugin's `src/client/tanks.css` (e.g.
+`vimp-tanks`'s); the engine UI skeleton is
+`packages/engine/src/client/style.css`.
 
 Internally the core implements the following algorithms:
 
@@ -310,7 +313,8 @@ Internally the core implements the following algorithms:
   seq-based insertion + immediate emission of late-frame events;
 - **prediction** (`client/predictor.rs`): a replica of the authoritative
   motion without Rapier collisions, at a fixed `timeStep`; tick formulas
-  are **shared** with `Tank::update` (`games/tanks/core/src/motion.rs`) — the replica
+  are **shared** with `Tank::update` (the game plugin's `core/src/motion.rs`,
+  e.g. `vimp-tanks`'s) — the replica
   can't diverge from the authoritative path on formulas, integration
   parity (manual vs. Rapier) is locked in by the `client_parity` cargo
   tests; input history, replay from the frame's `serverTime`,
@@ -329,7 +333,7 @@ Internally the core implements the following algorithms:
 
 ### parts/ — entities
 
-[games/tanks/src/client/parts/](../../games/tanks/src/client/parts/) — classes rendered on the
+[the game plugin's `src/client/parts/`](https://github.com/lgick/vimp-tanks/tree/main/src/client/parts) (e.g. `vimp-tanks`'s) — classes rendered on the
 PixiJS canvases: `Tank` (one class for both your own tank and others'),
 `TankRadar`, `Map`, `MapRadar`, `Bomb`, `Smoke`, `Tracks` (+`TrackMark`),
 `ParticlePool`. Effects live in `parts/effects/` (`BaseEffect`,
@@ -352,7 +356,7 @@ data, calls `update(data)` on an existing one, or removes it (`null`).
   ([providers/BakingProvider.js](../../packages/engine/src/client/providers/BakingProvider.js))
   — one-time procedural texture generation at startup from the
   `bakedAssets` config; baking functions live in
-  [the game's bakers/](../../games/tanks/src/client/bakers/) (no fixed
+  [the game plugin's `src/client/bakers/`](https://github.com/lgick/vimp-tanks/tree/main/src/client/bakers) (e.g. `vimp-tanks`'s; no fixed
   interface, follow the existing ones).
 - **`DependencyProvider`** — injects services (`renderer`, `soundManager`)
   into components via the `componentDependencies` map.
@@ -360,10 +364,11 @@ data, calls `update(data)` on an existing one, or removes it (`null`).
 ## SoundManager
 
 [packages/engine/src/client/SoundManager.js](../../packages/engine/src/client/SoundManager.js) (built on
-Howler.js). Sounds are described in `games/tanks/src/config/sounds.js`; its
+Howler.js). Sounds are described in the game plugin's `src/config/sounds.js`
+(e.g. `vimp-tanks`'s); its
 `path` field is overridden client-side (`main.js`, `CONFIG_DATA` handler) to
 `${activeGameManifest.assetsBase}sounds/` — the game build's own sound copy
-served alongside its client/host bundles (`games/tanks/dist/sounds/`),
+served alongside its client/host bundles (the game plugin's `dist/sounds/`),
 rather than the engine-bundled `/sounds/` static copy.
 
 - **UI/system** (no position): `playSystemSound(name)` — plays instantly,

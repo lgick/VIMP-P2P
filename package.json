@@ -16,8 +16,7 @@
   "type": "module",
   "workspaces": [
     "packages/engine",
-    "packages/auth",
-    "games/tanks"
+    "packages/auth"
   ],
   "scripts": {
     "dev": "npm -w @vimp/engine run dev",
@@ -28,15 +27,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "build": "npm run core:build:web && npm run game:build && npm run build:app",
+    "build": "npm run build:app",
     "build:app": "npm -w @vimp/engine run build",
-    "audio:process": "node scripts/process-audio.js",
-    "core:build": "npm run core:build:web && npm run core:build:node",
-    "core:build:web": "wasm-pack build games/tanks/core --release --target web --out-dir pkg-web",
-    "core:build:node": "wasm-pack build games/tanks/core --release --target nodejs --out-dir pkg-node",
-    "core:test": "cargo test --workspace",
-    "maps:export": "node scripts/export-maps.js",
-    "game:build": "npm run audio:process && npm -w @vimp/tanks run build"
+    "core:test": "cargo test --workspace"
   },
   "devDependencies": {
     "@eslint/js": "^9.37.0",

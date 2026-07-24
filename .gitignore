@@ -3,7 +3,6 @@ _*
 node_modules/
 coverage/
 .TRASH
-games/tanks/build/
 dist
 logs
 *.log
@@ -12,7 +11,5 @@ npm-debug.log*
 .certs/
 .keys/
 
-# Rust-ядро: артефакты сборки (workspace target/ + wasm-pack output)
+# Rust-ядро: артефакты сборки (workspace target/)
 target/
-games/tanks/core/pkg-node/
-games/tanks/core/pkg-web/

@@ -3,7 +3,19 @@ import {
   buildSystemMessage,
   registerCodes,
 } from '../../packages/engine/src/host/meta/modules/chat/systemMessages.js';
-import tanksSystemMessages from '@vimp/tanks/host/systemMessages.js';
+// Стенд-ин игровых кодов (зеркалит форму реальных game-кодов, например
+// b:* танков — vimp-tanks/src/host/systemMessages.js): registerCodes не
+// завязан на конкретную игру, поэтому тест использует собственную фикстуру,
+// а не импорт из @vimp/tanks.
+const fixtureSystemMessages = {
+  BOT_PLAYERS_ONLY: 'b:0',
+  BOT_INVALID_COUNT: 'b:1',
+  BOT_INVALID_TEAM: 'b:2',
+  BOT_CREATED_FOR_TEAM: 'b:3',
+  BOT_REMOVED_FROM_TEAM: 'b:4',
+  BOT_CREATED: 'b:5',
+  BOT_REMOVED: 'b:6',
+};
 
 // Chat — синглтон, перезагружаем модуль для изоляции
 let Chat;
@@ -35,7 +47,7 @@ describe('registerCodes: игровые коды', () => {
   });
 
   it('merge кодов игры в реестр движка (группа b:* танков)', () => {
-    registerCodes(tanksSystemMessages);
+    registerCodes(fixtureSystemMessages);
 
     expect(buildSystemMessage('BOT_PLAYERS_ONLY')).toBe('b:0');
     expect(buildSystemMessage('BOT_CREATED', [3])).toBe('b:5:3');
@@ -45,8 +57,8 @@ describe('registerCodes: игровые коды', () => {
   });
 
   it('повторная регистрация идемпотентна', () => {
-    registerCodes(tanksSystemMessages);
-    registerCodes(tanksSystemMessages);
+    registerCodes(fixtureSystemMessages);
+    registerCodes(fixtureSystemMessages);
 
     expect(buildSystemMessage('BOT_REMOVED')).toBe('b:6');
   });

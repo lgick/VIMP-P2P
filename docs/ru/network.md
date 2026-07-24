@@ -31,7 +31,7 @@
 
 | Порт | Имя | Формат | Описание |
 | :--: | --- | :--: | --- |
-| 0 | `CONFIG_DATA` | JSON | Клиентский конфиг (merge `packages/engine/src/config/clientDefaults.js` + `games/tanks/src/config/client.js` + `prediction`) |
+| 0 | `CONFIG_DATA` | JSON | Клиентский конфиг (merge `packages/engine/src/config/clientDefaults.js` + `src/config/client.js` игры-плагина (например, в `vimp-tanks`) + `prediction`) |
 | 1 | `AUTH_DATA` | JSON | Данные формы авторизации |
 | 2 | `AUTH_RESULT` | JSON | Ошибки авторизации (или `null`) |
 | 3 | `MAP_DATA` | JSON | Данные карты |
@@ -97,7 +97,7 @@
 
 ## Бинарный snapshot-кадр (порт 5)
 
-Кодек целиком в Rust-ядре: упаковка — `packages/engine/core/src/snapshot.rs` (у хоста), распаковка — `packages/engine/core/src/client/unpack.rs` (у клиента); обе стороны в одном crate — расхождение раскладок исключено по построению. Реестр ключей — данные игры: [games/tanks/src/config/snapshot.js](../../games/tanks/src/config/snapshot.js) (`gameConfig.snapshot`); версия формата остаётся у движка — [packages/engine/src/config/opcodes.js](../../packages/engine/src/config/opcodes.js) (`SNAPSHOT_FORMAT_VERSION = 3`). Big-endian, ручной block-layout без библиотек. При несовпадении версии клиент отбрасывает кадр.
+Кодек целиком в Rust-ядре: упаковка — `packages/engine/core/src/snapshot.rs` (у хоста), распаковка — `packages/engine/core/src/client/unpack.rs` (у клиента); обе стороны в одном crate — расхождение раскладок исключено по построению. Реестр ключей — данные игры: `src/config/snapshot.js` игры-плагина (например, [в `vimp-tanks`](https://github.com/lgick/vimp-tanks/blob/main/src/config/snapshot.js)) (`gameConfig.snapshot`); версия формата остаётся у движка — [packages/engine/src/config/opcodes.js](../../packages/engine/src/config/opcodes.js) (`SNAPSHOT_FORMAT_VERSION = 3`). Big-endian, ручной block-layout без библиотек. При несовпадении версии клиент отбрасывает кадр.
 
 Сервер пакует **тело** (broadcast-часть) один раз за тик (`packBody`), затем для каждого пользователя собирает кадр `packFrame` = персональный заголовок + копия тела.
 
@@ -127,11 +127,11 @@
 | `w2e` | 4 | `explosions` | массив `[x, y, radius]` |
 | `c1`/`c2` | 5/6 | `dynamics` | `{'dN': [x, y, angle]}` — динамические элементы карты |
 
-Все float исходно округлены хостом до 2 знаков; декодер восстанавливает значения повторным округлением Float32 (player-блок — без округления). События оружия несут id автора (`shooterId`/`ownerId`, добавлены в v3) — по нему стрелок подавляет авторитетные дубли локально заспавненных выстрелов (клиентское ядро, `games/tanks/core/src/client/shot.rs`).
+Все float исходно округлены хостом до 2 знаков; декодер восстанавливает значения повторным округлением Float32 (player-блок — без округления). События оружия несут id автора (`shooterId`/`ownerId`, добавлены в v3) — по нему стрелок подавляет авторитетные дубли локально заспавненных выстрелов (клиентское ядро, `core/src/client/shot.rs` игры-плагина, например в `vimp-tanks`).
 
 Запись схемы — не только `{id, kind}`: `class` (`'hot'` — интерполируется клиентом между кадрами, `'event'` — одноразовый, кадром как есть) и `fields` — схема полей строки (`name`, `ty`: `f32`/`u8`/`u16`/`u32`, `interp`: `lerp`/`lerpAngle`/`discrete` для `class: 'hot'`). `fields` обязана точно совпадать по количеству и порядку типов с Row-структурой ключа в `packages/engine/core/src/snapshot.rs` (`GameCore`/`ClientCore` отклоняют конструктор при расхождении).
 
-При добавлении нового оружия/сущности его snapshot-ключ **обязан** быть зарегистрирован в снапшот-схеме игры (`games/tanks/src/config/snapshot.js`) — с полным `fields` для своего `kind`, иначе `pack_body`/конструктор ядра бросят ошибку. Если существующие `kind` не подходят — добавить новую раскладку блока в `packages/engine/core/src/snapshot.rs` + `packages/engine/core/src/client/unpack.rs` и поднять версию формата. См. [extending.md](extending.md#новое-оружие).
+При добавлении нового оружия/сущности его snapshot-ключ **обязан** быть зарегистрирован в снапшот-схеме игры-плагина (`src/config/snapshot.js`, например в `vimp-tanks`) — с полным `fields` для своего `kind`, иначе `pack_body`/конструктор ядра бросят ошибку. Если существующие `kind` не подходят — добавить новую раскладку блока в `packages/engine/core/src/snapshot.rs` + `packages/engine/core/src/client/unpack.rs` и поднять версию формата. См. доки активной игры-плагина (например, [vimp-tanks/docs/ru/extending.md](https://github.com/lgick/vimp-tanks/blob/main/docs/ru/extending.md#новое-оружие)).
 
 ## Формат ввода: `"seq:action:name"`
 

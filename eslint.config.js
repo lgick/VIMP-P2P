@@ -23,7 +23,7 @@ export default [
 
   // конфигурация для конфигов корня и воркспейсов (vite.config.js и т.д.)
   {
-    files: ['*.js', '*.cjs', '*.mjs', 'packages/*/*.js', 'games/*/*.js'],
+    files: ['*.js', '*.cjs', '*.mjs', 'packages/*/*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -57,9 +57,8 @@ export default [
   // конфигурация для клиентского кода
   {
     files: [
-      // клиент движка и клиентская часть игры (parts/bakers)
+      // клиент движка
       'packages/engine/src/client/**/*.js',
-      'games/*/src/client/**/*.js',
     ],
     languageOptions: {
       ecmaVersion: 'latest',
@@ -95,7 +94,6 @@ export default [
       'packages/engine/src/lib/**/*.js',
       'packages/engine/src/config/**/*.js',
       'scripts/*.js',
-      'games/*/src/**/*.js', // игровые данные/конфиги (@vimp/tanks)
     ],
     languageOptions: {
       ecmaVersion: 'latest',
@@ -111,9 +109,11 @@ export default [
     },
   },
 
-  // ESLint-граница движок↔игра (этапы 5/6.4 плана отделения): движок не
-  // импортирует игру статически вовсе — игра грузится динамически по
-  // GameManifest (import() с рантаймовым URL, который ESLint не проверяет)
+  // ESLint-граница движок↔игра (этапы 5/6.4 плана отделения, A3.5: игра
+  // выехала в отдельный репозиторий vimp-tanks — правило по-прежнему
+  // страхует от случайного статического импорта @vimp/tanks из node_modules):
+  // движок не импортирует игру статически вовсе — игра грузится динамически
+  // по GameManifest (import() с рантаймовым URL, который ESLint не проверяет)
   {
     files: ['packages/engine/**/*.js'],
     rules: {
@@ -125,30 +125,6 @@ export default [
               group: ['@vimp/tanks', '@vimp/tanks/*', '@vimp/tanks/**'],
               message:
                 'Движок не импортирует игру напрямую — только динамически по GameManifest.',
-            },
-            {
-              group: ['**/games/**'],
-              message:
-                'Движок не импортирует файлы games/** — только динамически по GameManifest.',
-            },
-          ],
-        },
-      ],
-    },
-  },
-
-  // игра импортирует движок только через публичные entry @vimp/engine
-  {
-    files: ['games/**/*.js'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['**/packages/engine/**'],
-              message:
-                'Игра импортирует движок только через публичные entry @vimp/engine.',
             },
           ],
         },
@@ -235,13 +211,9 @@ export default [
       'node_modules/**',
       'dist/**', // результаты сборки Vite
       'packages/*/dist/**', // сборка Vite движка
-      'games/*/dist/**', // сборка бандлов игры (этап 6)
       'public/**', // статика, которую не нужно линтить
       'build/**',
-      'games/*/core/pkg-node/**', // сгенерированный wasm-pack glue (nodejs)
-      'games/*/core/pkg-web/**', // сгенерированный wasm-pack glue (web)
       'target/**', // артефакты cargo (workspace)
-      'games/*/src/data/maps/json/**', // сгенерированные JSON-карты (maps:export)
       '**/.*', // игнорировать все файлы/директории, начинающиеся с '.'
       '**/_*', // игнорировать все файлы/директории, начинающиеся с '_'
     ],

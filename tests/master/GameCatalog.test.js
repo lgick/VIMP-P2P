@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import GameCatalog from '../../packages/engine/src/master/GameCatalog.js';
+import { ENGINE_API_VERSION } from '../../packages/engine/src/config/opcodes.js';
 
 // Каталог игр-плагинов мастера (Этап A2): резолвит пакеты из конфига
 // {id, package}[] в node_modules/<package>/dist/manifest.json (продукт
@@ -143,6 +144,21 @@ describe('GameCatalog', () => {
 
     expect(JSON.parse(mapCatalog.manifest).maps).toEqual(['arena']);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('broken.json'));
+
+    warn.mockRestore();
+  });
+
+  it('игра с несовпадающим engineApi пропускается с warn (Этап A4)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    writeManifest('tanks', { ...fixtureManifest, engineApi: ENGINE_API_VERSION + 1 });
+
+    const catalog = new GameCatalog(tanksGames, nodeModulesDir);
+
+    expect(catalog.ids).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('requires engine API'),
+    );
 
     warn.mockRestore();
   });

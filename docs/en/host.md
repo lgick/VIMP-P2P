@@ -22,7 +22,7 @@ Host tab
 │   └─ HostConnectionManager: WebRTC answerer for remote clients
 │      (register_host, meta/state, backpressure)
 └─ Web Worker (packages/engine/src/host/host.worker.js): authoritative simulation
-    ├─ GameCore (WASM, games/tanks/core/pkg-web)
+    ├─ GameCore (WASM, the game plugin's core/pkg-web, e.g. vimp-tanks's)
     ├─ GameCoreAdapter: physics/bots/packing surface over the core
     └─ HostGame facade + meta packages/engine/src/host/meta/ (RoundManager, Participant-
        Manager, Chat, Vote, Stat, Panel, TimerManager, RTTManager,
@@ -101,7 +101,8 @@ out to participants ready to play.
 
 Port 1 (`AUTH_RESPONSE`) still runs `validateAuth` against the game's
 `HostPlugin.authSchema.params`/`.validators` (game-specific fields only,
-e.g. `model` — `name` was removed from `games/tanks/src/config/auth.js`).
+e.g. `model` — `name` was removed from the game plugin's `src/config/auth.js`,
+e.g. `vimp-tanks`'s).
 Once those pass, the Worker itself is the authority on identity: it calls
 `verifyClientToken(data.token)`, which lazily fetches and caches
 `GET /auth/jwks` (the master's proxy of the central auth service, see
@@ -139,7 +140,8 @@ to still being the join-time default:
   participant's own token. On any failure (auth service down, network
   error) it silently keeps the defaults — rank `0` and the game's declared
   `playerState.defaultState` (`HostGame` reads it from
-  `data.playerState?.defaultState`, e.g. `games/tanks/src/config/game.js`,
+  `data.playerState?.defaultState`, e.g. the game plugin's
+  `src/config/game.js`, `vimp-tanks`'s,
   cloned per participant rather than shared) — a join is never blocked by
   auth-service unavailability, and `rankLoaded`/`stateLoaded` stay `false`
   until a real value is confirmed. A rank delta applied via `addRank` while
@@ -251,17 +253,19 @@ Implements the physics/bots/packing surface consumed by
   full player snapshot without draining accumulators — for
   `FIRST_SHOT_DATA`).
 
-`TanksBotManager` (`games/tanks/src/host/TanksBotManager.js`) is the game's
+`TanksBotManager` (the game plugin's `src/host/TanksBotManager.js`, e.g.
+`vimp-tanks`'s) is the game's
 scripted module: a thin bot manager registering participants and linking
 them to `Stat`/`Panel` (AI, navigation, and the spatial grid live in the
 core). It's built by the `createModules(ctx)` factory
-(`games/tanks/src/host/createModules.js` returns `{ scripted }`); the
+(the game plugin's `src/host/createModules.js` returns `{ scripted }`); the
 engine calls the scripted-module contract: `createMap`,
 `createScripted(count, team?)`, `removeScripted(team?)`,
 `removeOneForHuman(team)`, `getCount`, `getCountsPerTeam`. Parameters come
 from the game config's `scripted` (`namePrefix`, `defaultModel`).
 
-**The tanks HostPlugin** (`games/tanks/src/host/index.js`, the default export
+**The tanks HostPlugin** (the game plugin's `src/host/index.js`, e.g.
+`vimp-tanks`'s; the default export
 of the game's host-entry bundle) — the whole game half of the host as a
 single object: `id`, `engineApi`, `createCore(coreConfigJson, { wasmUrl })`,
 `gameConfig`, `authSchema`, `chatCommands` (`/bot`), `systemMessages` (the
@@ -334,7 +338,7 @@ The engine core: `/name <nick>`, `/timeleft`, `/mapname`, `/nr` (new round,
 **dev mode only**); game commands are registered via
 `registerCommand(name, handler)` and receive the meta context —
 `handler(ctx, gameId, args)`. Tanks registers `/bot`
-(`games/tanks/src/host/botCommand.js`):
+(the game plugin's `src/host/botCommand.js`, e.g. `vimp-tanks`'s):
 
 ```
 /bot 5 team1   # spawn 5 bots into team1
@@ -377,7 +381,8 @@ callback + participant list), `reset`. Topic cooldown — `timeBlockedVote`
   `pushSystemByUser` (templated `'group:number:params'`), queues
   `shift`/`shiftByUser`. The code registry holds the engine groups
   `s`/`v`/`m`/`c`/`n`; game codes are registered via `registerCodes` (tanks
-  brings the `b:*` group, `games/tanks/src/host/systemMessages.js`); the
+  brings the `b:*` group, the game plugin's `src/host/systemMessages.js`,
+  e.g. `vimp-tanks`'s); the
   template texts live on the client.
 - **`Vote`** — vote mechanics: a queue (a new vote during an active one
   isn't rejected, it waits), lifetime `voteTime`, list pagination (more
@@ -616,18 +621,18 @@ Host and meta module tests live in `tests/host/`:
 
 ## Build
 
-The Worker loads `games/tanks/core/pkg-web` (the web target of the core). The production
-build (`npm run build`) builds it itself (`core:build:web`) — this requires
-the Rust toolchain (see [getting-started.md](getting-started.md),
-[deployment.md](deployment.md)). For dev, `games/tanks/core/pkg-web` must be built by
-hand once (`npm run core:build`).
+The Worker loads the game plugin's `core/pkg-web` (the web target of the
+core, e.g. `vimp-tanks`'s). That WASM build happens in the game plugin's own
+repository, not here — see [core.md](core.md#build) and
+[getting-started.md](getting-started.md) for how a game plugin package gets
+installed/linked into `node_modules` for local development.
 
 ## Manual run checklist
 
 The P2P migration is complete: client-side math (interpolation, prediction,
 projectile spawning, frame unpacking) now lives entirely in the Rust core
 (`packages/engine/core/src/client/` +
-`games/tanks/core/src/client/`); legacy JS equivalents and the JS-parity tests were
+the game plugin's own `core/src/client/`, e.g. `vimp-tanks`'s); legacy JS equivalents and the JS-parity tests were
 removed. What's left is this manual two-tab smoke test — Vitest doesn't
 reproduce real WebRTC reordering, so an end-to-end match check is manual, in
 the browser:

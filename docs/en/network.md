@@ -79,7 +79,7 @@ complaint about itself. Ban logic lives on the master
 
 | Port | Name | Format | Description |
 | :--: | --- | :--: | --- |
-| 0 | `CONFIG_DATA` | JSON | The client config (a merge of `packages/engine/src/config/clientDefaults.js` + `games/tanks/src/config/client.js` + `prediction`) |
+| 0 | `CONFIG_DATA` | JSON | The client config (a merge of `packages/engine/src/config/clientDefaults.js` + the game plugin's `src/config/client.js` (e.g. `vimp-tanks`'s) + `prediction`) |
 | 1 | `AUTH_DATA` | JSON | Auth form data |
 | 2 | `AUTH_RESULT` | JSON | Auth errors (or `null`) |
 | 3 | `MAP_DATA` | JSON | Map data |
@@ -167,8 +167,8 @@ The codec lives entirely in the Rust core: packing —
 `packages/engine/core/src/snapshot.rs` (host side), decoding —
 `packages/engine/core/src/client/unpack.rs` (client side); both sides live
 in the same crate — layout mismatches are impossible by construction. The
-key registry is game data:
-[games/tanks/src/config/snapshot.js](../../games/tanks/src/config/snapshot.js)
+key registry is game data: the game plugin's `src/config/snapshot.js`
+(e.g. [`vimp-tanks`'s](https://github.com/lgick/vimp-tanks/blob/main/src/config/snapshot.js))
 (`gameConfig.snapshot`); the format version stays with the engine —
 [packages/engine/src/config/opcodes.js](../../packages/engine/src/config/opcodes.js)
 (`SNAPSHOT_FORMAT_VERSION = 3`). Big-endian, a manual block layout with no
@@ -211,7 +211,8 @@ Every float is originally rounded by the host to 2 decimals; the decoder
 restores values by rounding the Float32 again (the player block isn't
 rounded). Weapon events carry the author's id (`shooterId`/`ownerId`,
 added in v3) — the shooter uses it to suppress authoritative duplicates of
-locally spawned shots (the client core, `games/tanks/core/src/client/shot.rs`).
+locally spawned shots (the client core, the game plugin's
+`core/src/client/shot.rs`, e.g. `vimp-tanks`'s).
 
 Each schema entry is more than `{id, kind}`: `class` (`'hot'` —
 interpolated by the client between frames, `'event'` — one-shot, delivered
@@ -222,12 +223,12 @@ as-is in the frame) and `fields` — the row's field schema (`name`, `ty`:
 order (`GameCore`/`ClientCore` reject the constructor on a mismatch).
 
 When adding a new weapon/entity, its snapshot key **must** be registered in
-the game's schema (`games/tanks/src/config/snapshot.js`) — with a full
+the game plugin's schema (`src/config/snapshot.js`, e.g. `vimp-tanks`'s) — with a full
 `fields` list for its `kind` — or `pack_body`/the core constructor will
 throw. If the existing `kind` values don't fit the data shape, add a new
 block layout to `packages/engine/core/src/snapshot.rs` +
 `packages/engine/core/src/client/unpack.rs` and bump the format version.
-See [extending.md](extending.md#new-weapon).
+See the active game plugin's own docs (e.g. [vimp-tanks/docs/en/extending.md](https://github.com/lgick/vimp-tanks/blob/main/docs/en/extending.md#new-weapon)).
 
 ## Input format: `"seq:action:name"`
 

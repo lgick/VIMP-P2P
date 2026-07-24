@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import tanksAuthConfig from '@vimp/tanks/config/auth.js';
 import { isValidName, validateAuth } from '../../packages/engine/src/lib/validators.js';
 
 describe('isValidName', () => {
@@ -83,23 +82,5 @@ describe('validateAuth', () => {
   it('параметр без валидатора считается валидным, если это строка', () => {
     const params = [{ name: 'free', options: {} }];
     expect(validateAuth({ free: 'anything' }, params)).toBeUndefined();
-  });
-});
-
-describe('authSchema танков (@vimp/tanks/config/auth.js)', () => {
-  it('isValidModel принимает модели из данных игры', () => {
-    const { isValidModel } = tanksAuthConfig.validators;
-
-    expect(isValidModel('m1')).toBe(true);
-    expect(isValidModel('m2')).toBe(false);
-    expect(isValidModel('')).toBe(false);
-  });
-
-  it('все params ссылаются на существующие валидаторы', () => {
-    const known = new Set(['isValidName', ...Object.keys(tanksAuthConfig.validators)]);
-
-    for (const { options } of tanksAuthConfig.params) {
-      expect(known.has(options.validator)).toBe(true);
-    }
   });
 });

@@ -12,19 +12,18 @@ Docker image and publishes it to GHCR → SSHes into every server in
 container. On the VPS, Nginx terminates HTTPS and proxies to the app port
 (the master listens on `3002` inside the container).
 
-> **Rust toolchain in the build.** The game's WASM core
-> (`games/tanks/core/`) is a cdylib built by `wasm-pack`, with the engine
-> half (`packages/engine/core/`, a plain rlib) pulled in as a path
-> dependency — [Dockerfile](../../Dockerfile) builds it in a separate
-> `core-builder` stage (`rust:slim` + `wasm-pack build games/tanks/core`).
-> The node stage then runs `npm run game:build` (builds the `@vimp/tanks`
-> plugin bundle — client/host entries, the WASM asset, maps, sounds,
-> `manifest.json` — into `games/tanks/dist/`) followed by `npm run
-> build:app` (engine Vite build), with `pkg-web` already in
-> place. The runner stage copies both `packages/engine/dist/` and
-> `games/tanks/dist/`; the master reads the plugin only through
-> `GameCatalog` (`dist/manifest.json` + `dist/maps/*.json`) — it never
-> imports game source, so `games/tanks/src/` isn't shipped in the image.
+> **No Rust toolchain needed.** Since the game plugin (`@vimp/tanks`) moved
+> to its own repository (Stage A3), [Dockerfile](../../Dockerfile) no
+> longer builds any WASM core — the game repo's own CI does that and
+> publishes the package. The node stage just runs `npm ci` (installs
+> `@vimp/tanks` from the registry, which brings its already-built `dist/` —
+> client/host entries, the WASM asset, maps, sounds, `manifest.json`)
+> followed by `npm run build:app` (engine Vite build). The runner stage
+> copies `packages/engine/dist/` and `node_modules/@vimp/tanks/dist/`; the
+> master reads the plugin only through `GameCatalog`
+> (`dist/manifest.json` + `dist/maps/*.json`) and rejects it at load time if
+> its `engineApi` doesn't match this engine build's `ENGINE_API_VERSION`
+> — it never imports game source.
 
 ## 📋 Prerequisites
 
@@ -279,4 +278,4 @@ project folder, and stops the container.
 
 ---
 
-[← Previous: Extending the Game](extending.md) · [Next: Plugin API →](plugin-api.md)
+[← Previous: Configuration](configuration.md) · [Next: Plugin API →](plugin-api.md)

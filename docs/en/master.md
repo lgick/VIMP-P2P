@@ -30,7 +30,7 @@ Configuration — [packages/engine/src/config/master.js](../../packages/engine/s
 | `packages/engine/src/master/main.js` | entry point: Express + REST, HTTPS/HTTP server, signaling `WebSocketServer`, periodic cleanup of stale rooms |
 | `packages/engine/src/master/HostRegistry.js` | room registry `Map<hostId, HostSession>`: registration (max 1 room per IP), heartbeat/`lastSeen`, reports, selection for `GET /servers` |
 | `packages/engine/src/master/SignalingServer.js` | signaling WebSocket: connection lifecycle, WebRTC message routing, ping rate limiting |
-| `packages/engine/src/master/MapCatalog.js` | map catalog: an in-memory JSON representation of `games/tanks/src/data/maps` plus a content version hash; served to hosts without a rebuild |
+| `packages/engine/src/master/MapCatalog.js` | map catalog: an in-memory JSON representation of the game plugin's `src/data/maps` (e.g. `vimp-tanks`'s) plus a content version hash; served to hosts without a rebuild |
 | `packages/engine/src/master/WorkerCatalog.js` | worker bundle catalog: a content version hash of `dist/assets/host.worker-*.js` plus its URL; hosts use it to detect a new code version and swap the Worker via a handoff |
 | `packages/engine/src/master/GameCatalog.js` | game-plugin catalog: resolves the `master:games` config list (`{id, package}[]`) to packages under `node_modules/` and reads `<package>/dist/manifest.json` (built by `npm run game:build`) plus a per-game `MapCatalog` from `<package>/dist/maps/*.json`; in dev, `entries.client/host/wasm` are swapped for Vite `/@fs/` source URLs (HMR) — see [plugin-api.md](plugin-api.md#gamemanifest) |
 | `packages/engine/src/master/JwksProxy.js` | proxies `GET /jwks` of the central auth service under the master's own origin, cached (TTL) — see [GET /auth/jwks](#get-authjwks) |
@@ -268,4 +268,4 @@ restart/room cleanup).
 
 ---
 
-[← Previous: Gameplay](gameplay.md) · [Next: Central Auth Service →](auth.md)
+[← Previous: Architecture](architecture.md) · [Next: Central Auth Service →](auth.md)

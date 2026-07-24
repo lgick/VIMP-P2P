@@ -6,16 +6,12 @@ on:
     branches: ['**']
   pull_request:
 
-# Матрица Этапа 7 плана отделения движка (PLAN.md): lint не требует Rust;
-# engine доказывает, что движковые тесты (cargo + vitest engine-*) проходят
-# БЕЗ единого Rust-артефакта игры (fixture-миниигра, packages/engine/tests/
-# fixtures/miniGame/); tanks собирает и тестирует игру изолированно (нужен
-# только core:build:web — client/host-плагины танков грузят wasm-glue
-# статически); integration гоняет сквозные тесты на реальном ядре (нужны
-# оба таргета — core:build:node для JS↔WASM хелперов tests/core/helpers.js,
-# engine также гоняет vitest-проект auth (packages/auth — central
-# auth-сервис, чистый Node/Express, без Rust/WASM зависимостей),
-# core:build:web — для того же импорта плагина танков, что и в tanks-job).
+# lint не требует Rust; engine доказывает, что движковые тесты (cargo +
+# vitest engine-*) проходят БЕЗ единого Rust-артефакта игры (fixture-миниигра,
+# packages/engine/tests/fixtures/miniGame/) и гоняет vitest-проект auth
+# (packages/auth — central auth-сервис, чистый Node/Express, без Rust/WASM
+# зависимостей). Игровые (tanks/integration) job'ы переехали в CI
+# репозитория игры (A3.5 плана отделения движка).
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -68,84 +64,3 @@ jobs:
 
       - name: JS tests (central auth-сервис, packages/auth — не тянет Rust)
         run: npx vitest run --project auth
-
-  tanks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6.0.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Setup Rust (vimp-tanks-core)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: cargo-tanks-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-
-      - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Rust tests (игровой crate)
-        run: cargo test -p vimp-tanks-core
-
-      - name: Build core (web-таргет — client/host-плагины танков грузят wasm-glue статически)
-        run: npm run core:build:web
-
-      - name: JS tests (игра)
-        run: npx vitest run --project tanks
-
-  integration:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6.0.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Setup Rust (cargo workspace: packages/engine/core + games/tanks/core)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-
-      - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
-      - name: Install dependencies
-        run: npm ci
-
-      # web-таргет нужен harness.js (динамический import @vimp/tanks/host/index.js
-      # статически грузит pkg-web) наравне с node-таргетом (JS↔WASM хелперы
-      # tests/core/helpers.js) — сборка только node-таргета ловится этим
-      # шагом молча в других раскладках CI, поэтому оба явно
-      - name: Build core (оба таргета — web и nodejs)
-        run: npm run core:build
-
-      - name: JS↔WASM integration tests (реальное ядро танков)
-        run: npx vitest run --project integration

@@ -4,7 +4,7 @@
 
 - **Node.js 22** (CI использует Node 22), npm;
 - **mkcert** — локальные HTTPS-сертификаты обязательны для разработки (сигнальный WebSocket работает по `wss://`, WebRTC требует secure context);
-- **Rust-тулчейн** (`rustup` + `wasm-pack`) — для сборки WASM-ядра, которое грузят браузерный хост и клиент (см. [ниже](#rust-тулчейн-ядро-core)).
+- **Rust-тулчейн** (`rustup`) — только если вы правите сам `packages/engine/core/` (у движкового crate нет собственного WASM-таргета — см. [core.md](core.md)). Для игры тулчейн здесь не нужен: WASM-бинарь приходит из сборки игры-плагина (её собственный репозиторий).
 
 ## Установка
 
@@ -14,7 +14,19 @@ cd vimp-engine
 npm install
 ```
 
-Репозиторий — npm workspaces: `packages/engine` (`@vimp/engine`, движок-приложение) и `games/tanks` (`@vimp/tanks`, игра-плагин). Корневые скрипты (`npm run dev`, `npm run build`) проксируют в `@vimp/engine`; граница «движок не импортирует игру» — игра грузится динамически в рантайме по `GameManifest` (см. [plugin-api.md](plugin-api.md)) — закреплена правилом ESLint.
+Репозиторий — npm workspaces: `packages/engine` (`@vimp/engine`,
+движок-приложение) и `packages/auth` (`@vimp/auth`, центральный
+auth-сервис). Корневые скрипты (`npm run dev`, `npm run build`)
+проксируют в `@vimp/engine`.
+
+**Для реальной игры нужен пакет игры-плагина** — этот репозиторий его
+больше не собирает. Установите/подключите игру (например, `@vimp/tanks`,
+собранную и опубликованную из отдельного репозитория `vimp-tanks`) в
+`node_modules`; про её локальную сборку — см. getting-started того
+репозитория (для разработки подходит `npm link` или локальная
+`file:`/`path:`-зависимость). Движок никогда не импортирует игру
+статически — она грузится динамически в рантайме по `GameManifest` (см.
+[plugin-api.md](plugin-api.md)), граница закреплена правилом ESLint.
 
 ## HTTPS-сертификаты (один раз)
 
@@ -30,25 +42,20 @@ mkcert -key-file key.pem -cert-file cert.pem localhost 127.0.0.1 ::1
 ## Запуск
 
 ```bash
-npm run core:build     # WASM-ядро (один раз; повторять при правках core/)
-npm run game:build     # бандл игры-плагина, включая обработанные звуки (нужен ffmpeg)
 npm run dev
 ```
 
-Поднимается **мастер-сервер** на `https://localhost:3002` (лобби + сигналинг, [master.md](master.md)); ViteExpress отдаёт клиент рядом с Express-сервером, nodemon следит за `packages/engine/src/master`, `packages/engine/src/lib`, `packages/engine/src/config`, `games/tanks/src`.
+Поднимается **мастер-сервер** на `https://localhost:3002` (лобби + сигналинг, [master.md](master.md)); ViteExpress отдаёт клиент рядом с Express-сервером, nodemon следит за `packages/engine/src/master`, `packages/engine/src/lib`, `packages/engine/src/config`.
 
-Матч идёт через **браузерный хост** ([host.md](host.md)): в лобби «Создать сервер» поднимает Web Worker с Rust-ядром в текущей вкладке; остальные вкладки/машины заходят в комнату из списка серверов.
+Матч идёт через **браузерный хост** ([host.md](host.md)): в лобби «Создать сервер» поднимает Web Worker с Rust-ядром активной игры-плагина в текущей вкладке; остальные вкладки/машины заходят в комнату из списка серверов. Для этого нужна установленная/подключённая игра-плагин (см. «Установка» выше).
 
 Остальные команды:
 
 ```bash
 npm start              # production-запуск мастера (читает .env: VIMP_DOMAIN и др.)
-npm run build          # прод-сборка (WASM-ядро + бандл игры-плагина, включая аудио + Vite bundle движка)
-npm run build:app      # сборка только движка (Vite; ядро и игра-плагин уже собраны)
-npm run core:build     # сборка Rust-ядра в WASM (web + nodejs; нужен Rust-тулчейн)
-npm run core:test      # Rust-тесты ядра (cargo test)
-npm run maps:export    # экспорт карт в JSON (games/tanks/dist/maps/) для мастера/ядра
-npm run game:build     # сборка плагина @vimp/tanks (games/tanks/dist/, включая manifest.json)
+npm run build          # прод-сборка (Vite bundle движка; игра-плагин поставляет свой dist/ сама)
+npm run build:app      # сегодня то же самое, что npm run build (алиас)
+npm run core:test      # Rust-тесты движкового crate (cargo test --workspace, только packages/engine/core)
 npx eslint .           # линтер
 npm test               # тесты (Vitest), одиночный прогон
 npm run test:watch     # тесты в watch-режиме
@@ -57,40 +64,48 @@ npm run test:coverage  # покрытие
 
 Переменные `.env` для production описаны в [configuration.md](configuration.md#переменные-окружения-env).
 
-## Rust-тулчейн (ядро core/)
+## Rust-тулчейн (packages/engine/core/)
 
-Браузерный хост грузит web-таргет ядра (`games/tanks/core/pkg-web/`), поэтому для игры и
-прод-сборки (`npm run build` включает `core:build:web`) Rust-тулчейн обязателен.
-Для чистой JS-разработки без запуска матча он не нужен — тесты ядра
-пропускаются, если `games/tanks/core/pkg-node/` не собран.
+Нужен только при правке самого движкового Rust-crate (`vimp-engine-core`,
+без своего WASM-таргета — см. [core.md](core.md)):
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # rustc + cargo
-rustup target add wasm32-unknown-unknown
-brew install wasm-pack        # или: cargo install wasm-pack
-
-npm run core:build            # сборка обоих WASM-таргетов
 npm run core:test             # Rust-тесты
 ```
+
+Сборка и тестирование собственного WASM-ядра игры (`wasm-pack`, таргет
+`wasm32-unknown-unknown`) — забота репозитория игры, см. его собственные
+доки по локальной настройке.
 
 ## Локальный мультиплеер
 
 - Откройте несколько вкладок браузера — каждая станет отдельным игроком: одна создаёт сервер, остальные заходят из лобби.
-- Ботов удобно добавлять чат-командой `/bot 5` (см. [gameplay.md](gameplay.md#чат-клавиша-c-и-команды)).
+- Боты и прочие внутриигровые команды зависят от активной игры-плагина (например, `/bot 5` для танков — см. игровой процесс в доках той игры).
 - Debug-режима нет; при необходимости реализуется отдельно.
 
 ## Тесты
 
-Стек: **Vitest** + happy-dom (клиентские тесты) + coverage-v8. Конфиг `vitest.config.js` делит прогон на четыре проекта:
+Стек: **Vitest** + happy-dom (клиентские тесты) + coverage-v8. Конфиг `vitest.config.js` делит прогон на три проекта:
 
-- `engine-node` — `tests/master`, `tests/host` (кроме игровых файлов ниже), `tests/lib`, `tests/config`, `packages/engine/tests/fixtures` (окружение node);
-- `engine-client` — `tests/client` (кроме `tanksClientPlugin.test.js`, окружение happy-dom);
-- `tanks` — `tests/host/hostPlugin.test.js`, `botCommand.test.js`, `TanksBotManager.test.js`, `tests/client/tanksClientPlugin.test.js`;
-- `integration` — `tests/host/HostGame.test.js` + `tests/core/**` (реальное ядро, пропускается без собранного `games/tanks/core/pkg-node/`).
+- `engine-node` — `tests/master`, `tests/lib`, `tests/config`, `tests/host`, `packages/engine/tests/fixtures` (окружение node);
+- `engine-client` — `tests/client` (окружение happy-dom);
+- `auth` — `tests/auth` (центральный auth-сервис, `packages/auth/src`).
 
-Тесты лежат в `tests/` и зеркалят структуру `packages/engine/src/` и `games/tanks/src/`. Интеграция host-фасада поверх реального ядра — `tests/host/HostGame.test.js`; JS↔WASM харнесс Rust-ядра — в `tests/core/` (см. [core.md](core.md)); Rust-тесты ядра гоняются отдельно (`npm run core:test`). `packages/engine/tests/fixtures/miniGame/` — самостоятельная вторая пара HostPlugin/ClientPlugin (fake-core, без WASM), доказывающая, что движок и его мета (Panel/Stat/RoundManager/CommandProcessor/…) работают с любой игрой, а не только с `@vimp/tanks` — `engine-node`/`engine-client` зелёные без единого собранного Rust-артефакта игры. Правило проекта: **любое изменение кода завершается зелёными `npx eslint .` и `npm test`**; при правке движения в ядре или `models.js` обязателен cargo-паритет реплики предикта (`npm run core:test`).
+Тесты лежат в `tests/` и зеркалят структуру `packages/engine/src/`.
+Интеграция host-фасада проверяется на **fake-core фикстуре**
+(`packages/engine/tests/fixtures/miniGame/` — самостоятельная вторая пара
+HostPlugin/ClientPlugin, без WASM), доказывающей, что движок и его мета
+(Panel/Stat/RoundManager/CommandProcessor/…) работают с любой игрой, а не
+только с конкретной — поэтому `npm test` здесь проходит без единого
+собранного Rust-артефакта и вообще без установленной игры-плагина.
+Правило проекта: **любое изменение кода завершается зелёными
+`npx eslint .` и `npm test`**. Репозиторий игры (например, `vimp-tanks`)
+гоняет свои тесты против реального WASM-ядра — см. его собственные доки.
 
-CI (`.github/workflows/test.yml`) — четыре независимых job: `lint` (только eslint); `engine` (`cargo test -p vimp-engine-core` + Vitest-проекты `engine-node`/`engine-client`, без сборки WASM вообще); `tanks` (`cargo test -p vimp-tanks-core` + `core:build:web` + Vitest-проект `tanks`); `integration` (`core:build` — оба таргета — + Vitest-проект `integration`).
+CI (`.github/workflows/test.yml`) гоняет job'ы линтинга, Rust-тестов
+движкового crate и Vitest-проектов выше — для тестирования этого
+репозитория сборка WASM не требуется.
 
 ---
 

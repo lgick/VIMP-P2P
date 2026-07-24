@@ -167,8 +167,8 @@ top-level navigation and aren't subject to CSP `connect-src` either way.
 `plan/auth_b3.md`. The room-local **Auth** MVC triplet
 (`packages/engine/src/client/components/{model,view,controller}/Auth.js`)
 still runs the per-game auth form, but the form no longer has a `name`
-field — the game's `authSchema.params` (e.g. `games/tanks/src/config/auth.js`)
-now only declares game-specific fields (`model`). The nick is not typed: the
+field — the game plugin's `authSchema.params` (e.g. `vimp-tanks`'s
+`src/config/auth.js`) now only declares game-specific fields (`model`). The nick is not typed: the
 client attaches the lobby identity JWT (`LobbyAuthModel.getToken()`) to the
 `AUTH_RESPONSE` payload (`packages/engine/src/client/main.js`, port 1) as
 `token`, alongside the form fields.
@@ -213,8 +213,8 @@ short:
    [master.md](master.md#getput-authrank-getput-authstate))
    with the participant's own identity token. If the auth service is
    unreachable, the participant simply keeps the defaults (rank `0`, the
-   game's `playerState.defaultState`, e.g. `games/tanks/src/config/game.js`)
-   — a join is never blocked by auth-service downtime.
+   game plugin's `playerState.defaultState`, e.g. `vimp-tanks`'s
+   `src/config/game.js`) — a join is never blocked by auth-service downtime.
 2. **Accumulate**: rank changes by ±1 per kill, accumulated at the same
    choke point as the ephemeral `Stat` score —
    `RoundManager.reportKill()` (win/team-kill branching included).
@@ -232,7 +232,7 @@ all — it's a purely engine/JS-side concept, exposed to game-plugin code via
 `HostGame.getPlayerRank()`/`getPlayerState()`/`setPlayerState()`, and to
 players via the engine-level `/rank` chat command (Stage B5,
 [CommandProcessor](../../packages/engine/src/host/meta/core/CommandProcessor.js),
-see [gameplay.md](gameplay.md#chat-c-key-and-commands)) — it reads the
+see the active game plugin's own gameplay docs, e.g. [vimp-tanks/docs/en/gameplay.md](https://github.com/lgick/vimp-tanks/blob/main/docs/en/gameplay.md#chat-c-key-and-commands)) — it reads the
 locally cached rank via `PlayerDataSync.getRank()`, no extra network round
 trip.
 

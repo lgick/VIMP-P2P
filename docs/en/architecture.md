@@ -27,17 +27,25 @@ game logic: lobby, WebRTC signaling, map catalog, social moderation.
 
 ## Repository layout
 
+This repository holds the **engine only** — the game (currently tanks) is a
+separately published, dynamically loaded plugin package that lives in its
+own repository (e.g. `vimp-tanks`) and is installed here as `@vimp/tanks`
+under `node_modules/`; the engine never imports it statically (ESLint
+`no-restricted-imports` enforces the boundary). See
+[vimp-tanks/docs/en/architecture.md](https://github.com/lgick/vimp-tanks/blob/main/docs/en/architecture.md) for its own layout.
+
 ```
 packages/engine/ — @vimp/engine: the engine application (npm workspace)
   index.html / vite.config.js — the engine's Vite root
   public/        — static assets (sounds, favicon)
   src/
     master/      — master server (entry point): room registry, REST,
-                   signaling, map catalog (docs/master.md)
+                   signaling, map/game catalog (docs/master.md)
     host/        — browser host (docs/host.md)
-      host.worker.js — Web Worker: WASM core + meta + port state machine + ~120 Hz loop
+      host.worker.js — Web Worker: dynamically loaded game core + meta + port
+                   state machine + ~120 Hz loop
       HostGame.js — host facade: wires meta modules, drives the core tick
-      GameCoreAdapter.js — physics/bots/packing surface over GameCore
+      GameCoreAdapter.js — physics/bots/packing surface over the game's core
       meta/      — JS meta running in the Worker: core/ (RoundManager, CommandProcessor,
                    VoteCoordinator), modules/ (Panel, Stat, Vote, chat/,
                    TimerManager, RTTManager), player/ (Participant/Human/Bot +
@@ -57,29 +65,25 @@ packages/engine/ — @vimp/engine: the engine application (npm workspace)
                    sanitizers, security, config, clientCoreConfig, …
   core/          — vimp-engine-core (Rust rlib): physics, the snapshot codec,
                    interpolation, frame unpacking, ABI macros (docs/core.md)
-games/tanks/     — @vimp/tanks: the game (npm workspace)
-  src/host/      — HostPlugin: core-event router, TanksBotManager, /bot,
-                   b:* system messages
-  src/client/    — ClientPlugin: parts/ (PixiJS entities and effects),
-                   bakers/ (procedural textures), hooks, game CSS
-  src/config/    — game config halves (game.js, client.js, auth.js, sounds.js)
-  src/data/      — static data: maps/, models.js, weapons.js
-  core/          — vimp-tanks-core (Rust → WASM, pkg-web/pkg-node): tanks,
-                   weapons, bots, prediction, shot spawning (docs/core.md)
-tests/           — Vitest projects: engine-node, engine-client, tanks,
-                   integration (tests/host/HostGame.test.js + tests/core)
-scripts/         — helper scripts (audio processing, map export to JSON)
+tests/           — Vitest projects: engine-node, engine-client,
+                   integration (tests/host/HostGame.test.js + tests/core,
+                   skipped unless a game plugin's WASM core is built/linked)
+scripts/         — helper scripts (map export to JSON, etc.)
 .github/         — CI/CD (test.yml, deploy.yml) and deployment scripts
 ```
 
-`packages/engine/src/config/`, `games/tanks/src/data/`, and `packages/engine/src/lib/` form a **shared layer**: imported
-by the master (Node.js), the host Worker, and the client (Vite bundle). This
-guarantees the snapshot codec, math, validators, and model parameters stay
-identical on every side.
+`packages/engine/src/config/` and `packages/engine/src/lib/` form a **shared
+layer**: imported by the master (Node.js), the host Worker, and the client
+(Vite bundle). This guarantees the snapshot codec, math, validators, and
+merge logic stay identical on every side; the game plugin supplies its own
+data (models, weapons, maps) through the plugin contract, see
+[plugin-api.md](plugin-api.md).
 
 The project originally revolved around an authoritative WS server; the
 current P2P architecture (browser host + master server) is the result of a
-completed migration — the legacy server has been fully removed.
+completed migration — the legacy server has been fully removed. The game
+itself (formerly `games/tanks/` in this repo) was later split into its own
+repository along the plugin-contract boundary described below.
 
 ## The host tab
 
@@ -100,7 +104,7 @@ Host tab
 │   ├─ LoopbackTransport         — host-player transport over postMessage
 │   └─ HostConnectionManager     — WebRTC answerer for remote clients + backpressure
 └─ Web Worker (host.worker.js)   — authoritative simulation ~120 Hz
-    ├─ GameCore (WASM, games/tanks/core/) — physics, weapons, bots
+    ├─ GameCore (WASM, from the game plugin, e.g. @vimp/tanks/core) — physics, weapons, bots
     ├─ GameCoreAdapter           — physics/bots/packing surface over the core
     └─ HostGame facade + meta     — RoundManager, ParticipantManager, Chat, Vote,
                                     Stat, Panel, TimerManager… (packages/engine/src/host/meta/)
@@ -115,10 +119,10 @@ HostGame (facade/wiring + core-driven tick)
  ├─ RoundManager         — rounds, team wipe, map changes, spectator↔active
  ├─ CommandProcessor     — chat commands (/name, /bot, /nr, /timeleft, /mapname)
  ├─ VoteCoordinator      — vote creation/cooldown/reset
- ├─ GameCoreAdapter      — the core: physics, Tank/Bomb/Hitscan, bots, packBody/packFrame
+ ├─ GameCoreAdapter      — the core: physics, game entities/weapons, bots, packBody/packFrame
  ├─ Cold path: Panel, Stat, Chat, Vote (JSON, on change)
  ├─ TimerManager         — all timers  /  RTTManager — pings and kicks
- └─ TanksBotManager      — the game's scripted module (games/tanks; AI lives in the core)
+ └─ the game's scripted module (e.g. TanksBotManager, from the plugin; AI lives in the core)
 ```
 
 **The core's boundary is simulation, not meta**: physics, tanks, both weapon
@@ -161,8 +165,8 @@ live in the client core — the `ClientCore` WASM class from the same Rust
 binary (details — [client.md](client.md), ABI — [core.md](core.md#clientcore--the-cores-client-mode)):
 
 - **Interpolation** (`packages/engine/core/src/client/interpolator.rs`): frames are buffered, the world renders in the past (`serverNow − 100 ms`); events are emitted exactly once, positions are interpolated.
-- **Prediction** (`games/tanks/core/src/client/predictor.rs`): the local tank is simulated by a replica of the authoritative motion model (formulas shared with the core — `motion.rs`); the host confirms input (`lastInputSeq`), reconciliation replays unconfirmed input, and the discrepancy decays smoothly.
-- **Client-side shot spawning** (`games/tanks/core/src/client/shot.rs`): a shot is seen and heard instantly; duplicates from the host are suppressed by author id.
+- **Prediction** (game plugin core, e.g. `vimp-tanks`'s `core/src/client/predictor.rs`): the local entity is simulated by a replica of the authoritative motion model (formulas shared with the game's core); the host confirms input (`lastInputSeq`), reconciliation replays unconfirmed input, and the discrepancy decays smoothly.
+- **Client-side shot spawning** (game plugin core, e.g. `vimp-tanks`'s `core/src/client/shot.rs`): a shot is seen and heard instantly; duplicates from the host are suppressed by author id.
 
 The JS shell reads the render-tick result as a zero-copy flat Float32 buffer
 from WASM memory (hot positions) and as a JSON string (rare event frames),
@@ -173,52 +177,46 @@ canvases (`vimp`, `radar`); procedural textures are baked at startup.
 
 ## ADR: the engine is an application, the game is a dynamic plugin
 
-**Status: accepted, migration in progress** (stages and order — `PLAN.md`;
-target contracts — [plugin-api.md](plugin-api.md)).
+**Status: accepted, migration complete.** The engine and the reference game
+(tanks) now live in separate repositories, connected only through the
+runtime plugin contract described in [plugin-api.md](plugin-api.md). A full
+record of the migration stages lives in `plan/done/` (this repository) and
+`plan/split_*.md`.
 
 **Decision.** The project is split into an **engine** — an application
 deployed once (master, P2P transport, Worker infrastructure and handoff,
 meta *mechanisms*, client MVC framework, render/sound infrastructure, the
 Rust framework crate) — and a **game** — a dynamic plugin (client/host JS
 bundles, a WASM binary, assets) loaded by a manifest from the master.
-Composition: npm workspaces `packages/engine` (`@vimp/engine`) +
-`games/tanks` (`@vimp/tanks`); the Rust core splits into two crates —
-`vimp-engine-core` (rlib, framework) and `vimp-tanks-core` (cdylib, game +
-wasm-bindgen wrappers) — linked by traits with static monomorphization.
-Engine meta modules (Panel/Stat/Chat/Vote/Timer/RTT/Participant/Round/
-CommandProcessor) stay in the engine, but **all their parameterization comes
-from the game config**. The engine has no bots — only the neutral notion of
-a "scripted participant".
+Composition: this repository publishes `@vimp/engine` (npm) and
+`vimp-engine-core` (Rust rlib crate); the game repository (e.g.
+`vimp-tanks`) publishes `@vimp/tanks`, installed here as a regular
+`node_modules` dependency, and its own `vimp-tanks-core` crate (cdylib +
+wasm-bindgen wrappers), depending on `vimp-engine-core` and linked by traits
+with static monomorphization. Engine meta modules
+(Panel/Stat/Chat/Vote/Timer/RTT/Participant/Round/CommandProcessor) stay in
+the engine, but **all their parameterization comes from the game config**.
+The engine has no bots — only the neutral notion of a "scripted
+participant".
 
-**Rationale.** Other games will run on the same engine; the game may later
-move to its own repository; one master should serve several games. A
+**Rationale.** Other games can run on the same engine; one master can serve
+several games; a game repository can ship on its own release cadence. A
 dynamic plugin (rather than a build-time dependency) lets the engine deploy
-once while games version independently (`codeVersion` becomes composite,
-a mismatch triggers the Worker handoff).
+once while games version independently (`codeVersion` is composite, a
+mismatch triggers the Worker handoff).
 
-### File split (ENGINE / GAME / MIXED)
-
-Full markup of the pre-migration tree. The migration is complete: the MIXED
-files listed here have been cut apart as described (the split is listed per
-file); the table is kept as a record of what went where.
-
-| Area | ENGINE | GAME | MIXED (what got cut out) |
-| --- | --- | --- | --- |
-| Master | all of `packages/engine/src/master/` (`HostRegistry`, `SignalingServer`, `WorkerCatalog`, `MapCatalog` becomes per-game; new `GameCatalog`) | — | `packages/engine/src/master/main.js` — the static import of `games/tanks/src/data/maps` |
-| Host | `host.worker.js` (plugin loading), `HostGame.js`, `GameCoreAdapter.js` (generic), `meta/player/*` (`isScripted` replaces `isBot`), `meta/core/RoundManager`, `VoteCoordinator`, `meta/modules/*` (Panel, Stat, Vote, chat mechanism, TimerManager, RTTManager) | `HostBotManager.js` → `TanksBotManager` (scripted-module contract), the `/bot` command, `b:*` system messages, the core-event router | `GameCoreAdapter._drainEvents` (game event vocabulary), `SocketManager` (sound cues `roundStart/victory/…`, `sendFirstVote`), `CommandProcessor` (`/bot`), `chat/systemMessages.js` (the `b:*` group), `Panel.js` (the `'wa'` hardcode) |
-| Client | `main.js` (bootstrap/dispatcher), `network/*`, MVC components, `CanvasManager`, `SoundManager`, `InputListener`, `providers/*`, schema-driven Panel/Stat views | `parts/*` (9 classes), `bakers/*` (8 textures), game CSS, client hooks (`set_model`/`sync_panel`/`try_fire`/`cycle_weapon`) | `main.js` (game hooks, the hardcoded `reconstructHot` tank layout), `index.html`+`views/includes/{panel,stat}.pug` (game DOM ids), `style.css` |
-| Config | `wsports.js`, `opcodes.js` (framing, `HOT_FLAGS`, `ENGINE_API_VERSION`), `master.js`, `lobby.js`, new `hostDefaults.js`/`clientDefaults.js` | `sounds.js`, `auth.js`, the snapshot key schema (`m1/w1/w2/w2e/c1/c2`) | `game.js` (engine: `maxPlayers`, timers, rtt, idle kick / game: teams, panel, stat, playerKeys, map params), `client.js` (engine: interpolation, controls modes/cmds, elems, techInformList / game: parts, keySetList, panel/stat schemas, texts, canvases), `opcodes.js` (`SNAPSHOT_KEYS` is game data) |
-| Data | the map *format* and loader | `games/tanks/src/data/` entirely: `maps/`, `models.js`, `weapons.js`; `assets/audio-raw` | — |
-| Lib | `Publisher`, `factory`, `math`, `formatters`, `sanitizers`, `security`, `rateLimiter`, `buildClientConfig`/`coreConfig`/`clientCoreConfig` (become generic mergers) | — | `validators.js` (`isValidModel` hardcodes `'m1'` → the plugin's `authSchema`) |
-| Rust core | `physics.rs` (world, generic BodyTag, math), `rng.rs`, `map.rs`, `bots/pathfinder.rs`+`spatial.rs` (→ `nav/`), `snapshot.rs` framing, `client/{interpolator,predictor,raycast,unpack,hot}`, fixed-step/contacts, the handoff skeleton | `tank.rs`, `bomb.rs`, `motion.rs` (+parity tests), `bots/{controller,navigation}.rs`, the game logic of `game.rs` (→ `sim.rs`), `client/shot.rs`, block layouts, `#[wasm_bindgen]` wrappers, `tests/sim.rs` | `game.rs` (engine loop vs game rules), `snapshot.rs` (framing vs block layouts), `events` mapping |
+For the historical per-file breakdown of what moved into the engine vs. the
+game during the migration, see `plan/done/` in this repository's git
+history — it's no longer reproduced here since the two trees have since
+diverged independently.
 
 ## Key invariants
 
-- **Source of truth for ports** — `packages/engine/src/config/wsports.js`; for the binary format version — `packages/engine/src/config/opcodes.js`; for snapshot keys — the game schema `games/tanks/src/config/snapshot.js` (`gameConfig.snapshot`).
-- **Motion replica parity**: authoritative motion (Rapier) and the client prediction replica share the tick formulas (`games/tanks/core/src/motion.rs`); integration parity is locked in by cargo tests (`client::predictor::parity`) — any edit to motion in the core or the `models.js` coefficients requires running `npm run core:test`.
+- **Source of truth for ports** — `packages/engine/src/config/wsports.js`; for the binary format version — `packages/engine/src/config/opcodes.js`; for snapshot keys — the game's own schema, supplied through `HostPlugin.gameConfig.snapshot` (see [plugin-api.md](plugin-api.md)).
+- **Motion replica parity**: authoritative motion and the client prediction replica must share the tick formulas — this is a game-repository concern (e.g. `vimp-tanks`'s `core/src/motion.rs` + its cargo `client::predictor::parity` tests); the engine only provides the generic `Predictor<G>`/interpolation machinery.
 - **A single numeric id space** for humans and scripted participants (bots); distinguished via `isScripted`/`isNetworked`. The core operates on numeric ids, meta keys by string — the conversion happens at the `GameCoreAdapter` boundary.
 - Every send to a client goes only through `SocketManager`.
 
 ---
 
-[← Previous: Local Setup](getting-started.md) · [Next: Gameplay →](gameplay.md)
+[← Previous: Local Setup](getting-started.md) · [Next: Master Server →](master.md)
