@@ -128,12 +128,22 @@ export default class LobbyAuthModel {
   }
 
   // payload JWT не проверяется подписью на клиенте (только для отображения
-  // ника) — авторитетная проверка по /jwks на хосте (Этап B3)
+  // ника) — авторитетная проверка по /jwks на хосте (Этап B3). exp
+  // проверяется (F5 кодревью) — иначе восстановленная из localStorage сессия
+  // показывает «залогинен» токеном, который хост уже отклонит при входе в игру
   _setIdentity(token, tokenStorageKey, persist = true) {
     const payload = decodeJwtPayload(token);
+    const isExpired = typeof payload?.exp === 'number' && Date.now() >= payload.exp * 1000;
 
-    if (!payload || !payload.nick) {
-      this.publisher.emit('login-error', 'invalidToken');
+    if (!payload || !payload.nick || isExpired) {
+      delete localStorage[tokenStorageKey];
+
+      if (isExpired) {
+        this.publisher.emit('login-error', 'tokenExpired');
+      } else {
+        this.publisher.emit('login-error', 'invalidToken');
+      }
+
       this.publisher.emit('login-required', this._config.providers);
       return;
     }

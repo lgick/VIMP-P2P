@@ -12,7 +12,9 @@ independent of `@vimp/engine`.
 > host-side `/jwks` verification), B4 (rank/state loading + sync between the
 > auth service, master and host), B5 (`/rank` chat command) and B6 (CI image,
 > deployment, config docs — see
-> [deployment.md](deployment.md#central-auth-service-packagesauth)).
+> [deployment.md](deployment.md#central-auth-service-packagesauth)). A
+> follow-up code-review pass (`plan/auth_fixes.md`) hardened the production
+> path — CORS/open-redirect/callback-URL/token-renaming/TTL fixes below.
 
 ## Why a separate service
 
@@ -45,6 +47,19 @@ same provider shape in `src/oauth/`). Register a GitHub OAuth App with
 callback `http://localhost:3010/oauth/github/callback` and set
 `VIMP_AUTH_GITHUB_CLIENT_ID` / `VIMP_AUTH_GITHUB_CLIENT_SECRET`.
 
+In production (`NODE_ENV=production`) the service refuses to start unless
+these are set (`src/main.js`):
+
+| Env var | Purpose |
+| --- | --- |
+| `VIMP_AUTH_PUBLIC_URL` | public origin used to build the OAuth `redirect_uri` (`callbackUrl()`); without it the callback URL falls back to `http://localhost:PORT`, which OAuth providers can't reach |
+| `VIMP_AUTH_ALLOWED_ORIGINS` | CSV of master origins allowed to CORS `POST /nick` and to receive an OAuth redirect (`returnUrl` origin checked on both `/start` and `/callback` — closes an open-redirect that would otherwise leak an identity token) |
+| `VIMP_AUTH_STATE_SECRET` | HMAC secret for the stateless OAuth `state` param (`src/lib/oauthState.js`); compared with `crypto.timingSafeEqual`, not `!==` |
+| `VIMP_AUTH_GITHUB_CLIENT_ID` / `VIMP_AUTH_GITHUB_CLIENT_SECRET` | GitHub OAuth App credentials |
+
+In dev, `VIMP_AUTH_ALLOWED_ORIGINS` defaults to the dev master's origin
+(`https://localhost:3002`).
+
 ## Schema
 
 ```
@@ -54,17 +69,19 @@ states:   user_id, game_id, state(JSONB opaque), updated_at   ← "skills"
 ```
 
 `(provider, provider_uid)` is unique — one row per external identity;
-`nick` is unique across the whole service (one nick, all games).
-`packages/auth/src/UserRepository.js` is the only module touching these
-tables.
+`nick` is unique across the whole service (one nick, all games), enforced
+case-insensitively (`002_nick_case_insensitive.sql`, a `UNIQUE INDEX` on
+`lower(nick)` on top of the plain `UNIQUE(nick)`) so `"Admin"` and `"admin"`
+can't coexist. `packages/auth/src/UserRepository.js` is the only module
+touching these tables.
 
 ## REST API
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /oauth/:provider/start?returnUrl=` | redirects to the provider's authorize page; `returnUrl` and a CSRF nonce are packed into a signed, stateless `state` param (`src/lib/oauthState.js` — HMAC, no server-side session) |
-| `GET /oauth/:provider/callback` | exchanges `code`, finds/creates the user by `(provider, providerUid)`, then redirects to `returnUrl` with either `?token=` (nick already set — full identity JWT) or `?pendingToken=` (first login — nick not chosen yet) |
-| `POST /nick` (Bearer pending token, `{ nick }`) | validates the nick against `NAME_REGEXP` and global uniqueness, sets it, returns `{ token }` (full identity JWT). `409 { error: 'nickTaken' }` on a race |
+| `GET /oauth/:provider/start?returnUrl=` | redirects to the provider's authorize page; `returnUrl`'s origin must be in `VIMP_AUTH_ALLOWED_ORIGINS` (`400 returnUrlNotAllowed` otherwise) and a CSRF nonce are packed into a signed, stateless `state` param (`src/lib/oauthState.js` — HMAC, no server-side session), rate-limited per IP (`rateLimit(oauthStartLimiter)`) |
+| `GET /oauth/:provider/callback` | exchanges `code`, finds/creates the user by `(provider, providerUid)`, re-checks the decoded `returnUrl` origin, then redirects to it with either `?token=` (nick already set — full identity JWT) or `?pendingToken=` (first login — nick not chosen yet) |
+| `POST /nick` (Bearer pending token, `{ nick }`) | CORS-enabled for `VIMP_AUTH_ALLOWED_ORIGINS` origins (preflight `OPTIONS` too — the only endpoint called directly from the browser lobby, not proxied by a master), rate-limited per IP; rejects an identity token (`403 nickAlreadySet` — a pending token is required, so `/nick` can't rename an existing user); validates the nick against `NAME_REGEXP` (case-insensitively unique — see Schema) and sets it, returns `{ token }` (full identity JWT). `409 { error: 'nickTaken' }` on a race |
 | `GET /jwks` | RS256 public key as a JWK — a host verifies `token`'s signature against this before trusting its `nick` |
 | `GET /rank?game=` (Bearer identity token) | `{ rank }` for the caller and game |
 | `PUT /rank?game=` (Bearer, `{ rank }`) | upserts the rank (must be a finite number); mirrors `PUT /state` (Stage B4) |
@@ -72,10 +89,13 @@ tables.
 | `PUT /state?game=` (Bearer, `{ state }`) | upserts the state blob |
 
 The identity JWT (`src/lib/jwt.js`) carries `sub` (user id) and `nick`,
-signed RS256, short-lived (`config.jwt.expiresIn`, 15 min by default) and
-verified with `issuer: 'vimp-auth'`. A pending token (issued between the
-OAuth callback and `POST /nick`) instead carries `pending: true` and no
-nick — `requireAuth` in `src/main.js` rejects it on every other endpoint.
+signed RS256, short-lived (`config.jwt.expiresIn`, 4 hours by default — long
+enough to outlast a match; the client also checks `exp` when restoring a
+persisted token, see Lobby login below) and verified with
+`issuer: 'vimp-auth'`. A pending token (issued between the OAuth callback and
+`POST /nick`) instead carries `pending: true` and no nick — `requireAuth` in
+`src/main.js` rejects it on every other endpoint, and `/nick` itself rejects
+the opposite case (an identity token, i.e. `pending` missing).
 
 ## Modules
 
@@ -114,9 +134,15 @@ authenticated. Flow:
    screen instead.
 4. **Nick pick**: submitting the nick screen does `POST {authServiceUrl}/nick`
    (Bearer pending token) directly from the browser — a cross-origin fetch,
-   not proxied by the master. On success the returned identity token is
-   persisted and the lobby opens; `409 nickTaken` / `400 invalidNick` render
-   inline.
+   not proxied by the master, which needs the auth service's own CORS
+   handling (`VIMP_AUTH_ALLOWED_ORIGINS`, see Running above) to succeed. On
+   success the returned identity token is persisted and the lobby opens;
+   `409 nickTaken` / `400 invalidNick` render inline.
+5. **Restore/expiry**: on a fresh visit with no query params,
+   `LobbyAuthModel._restore()` reads `localStorage['vimpAuthToken']`; if the
+   decoded `exp` has already passed, the stored token is dropped and the
+   sign-in screen shows again (`login-error: 'tokenExpired'`) instead of a
+   stuck "authenticated" state that the host would reject at join time.
 
 The auth-service origin is bundled client-side in
 [packages/engine/src/config/authClient.js](../../packages/engine/src/config/authClient.js)
@@ -204,10 +230,12 @@ trip.
 
 ## Tests
 
-`tests/auth/` (a node Vitest project): `validators.test.js`, `jwt.test.js`
-(signs with a throwaway RSA key pair, mocks `config/auth.js`), `github.test.js`
-(mocks `fetch`), `oauthState.test.js`, `UserRepository.test.js` (a stub
-`{ query() }` object — no real PostgreSQL needed for unit tests).
+`tests/auth/` (a node Vitest project): `validators.test.js` (incl. the F13
+control-whitespace case), `jwt.test.js` (signs with a throwaway RSA key pair,
+mocks `config/auth.js`), `github.test.js` (mocks `fetch`), `oauthState.test.js`
+(incl. the timing-safe compare still rejecting a tampered signature),
+`UserRepository.test.js` (a stub `{ query() }` object — no real PostgreSQL
+needed for unit tests, incl. the `nick IS NULL` rename guard).
 
 Host-side verification (B3) and rank/state sync (B4) are tested in the
 engine tree instead: `tests/lib/jwt.test.js` (`verifyIdentityToken` — valid
@@ -217,9 +245,14 @@ signature, forged key, wrong issuer, expired token, missing `nick`, unknown
 upstream failure), `tests/master/PlayerDataProxy.test.js` (proxying
 GET/PUT `/rank`+`/state`, no caching, upstream failure) and
 `tests/host/PlayerDataSync.test.js` (load with defaults on auth-service
-failure, rank accumulation, flush/flushAll), plus rank/flush coverage added
-to `tests/host/RoundManager.test.js` and token passthrough in
-`tests/host/ParticipantManager.test.js`.
+failure, rank accumulation, flush/flushAll, plus the fix-up cases: `flush`
+skips `PUT` entirely when `load` never succeeded and retries `load` instead
+of clobbering a stored value with the default, a rank delta applied while
+`load` is in flight isn't lost, and `defaultState` is cloned per participant
+rather than shared), plus rank/flush coverage added to
+`tests/host/RoundManager.test.js` and token passthrough in
+`tests/host/ParticipantManager.test.js`. Client-side,
+`tests/client/LobbyAuthModel.test.js` covers the expired-token restore path.
 
 ---
 

@@ -10,6 +10,17 @@ export default {
   domain: 'localhost',
   port: 3010,
 
+  // публичный origin сервиса в проде (используется для redirect_uri, которую
+  // видят OAuth-провайдеры и браузер жертвы); в dev не задан — callbackUrl()
+  // строится из protocol/domain/port выше. Переопределяется VIMP_AUTH_PUBLIC_URL
+  publicUrl: '',
+
+  // origin'ы мастеров, которым разрешён CORS на POST /nick и redirect
+  // returnUrl (F1/F3 кодревью, plan-readme-md-b-zippy-giraffe.md) —
+  // CSV из VIMP_AUTH_ALLOWED_ORIGINS, напр. "https://vimp.example.com".
+  // Дефолт — origin мастера из dev-конфига (packages/engine/src/config/master.js)
+  allowedOrigins: ['https://localhost:3002'],
+
   // RS256-ключ подписи JWT (private) + публичная часть отдаётся на /jwks;
   // сгенерировать локально: openssl genrsa -out .keys/jwt.pem 2048 &&
   // openssl rsa -in .keys/jwt.pem -pubout -out .keys/jwt.pub.pem
@@ -18,7 +29,11 @@ export default {
     publicKeyPath: path.join(rootDir, '.keys', 'jwt.pub.pem'),
     keyId: 'vimp-auth-1', // kid в JWKS; сменить при ротации ключа
     issuer: 'vimp-auth',
-    expiresIn: '15m', // короткоживущий токен (host верифицирует по /jwks)
+    // F5 кодревью: 15 минут короче типичного матча — flush (PUT rank/state) на
+    // границе долгого матча получал 401 и переставал сохраняться; 4 часа с
+    // запасом покрывают сессию, при этом токен остаётся короткоживущим
+    // относительно возможной компрометации (см. lib/jwt.js verifyIdentityToken)
+    expiresIn: '4h',
     pendingExpiresIn: '10m', // токен на выбор ника между OAuth-колбэком и POST /nick
   },
 

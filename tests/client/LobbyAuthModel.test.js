@@ -57,6 +57,27 @@ describe('LobbyAuthModel: boot', () => {
     expect(model.getNick()).toBe('Vanya');
   });
 
+  it('просроченный identity-токен в localStorage не восстанавливает сессию (F5)', () => {
+    store[config.tokenStorageKey] = makeToken({
+      sub: 'u1',
+      nick: 'Vanya',
+      exp: Math.floor(Date.now() / 1000) - 10,
+    });
+
+    const errors = [];
+    const required = [];
+
+    model.publisher.on('login-error', e => errors.push(e));
+    model.publisher.on('login-required', () => required.push(true));
+
+    model.boot('');
+
+    expect(errors).toEqual(['tokenExpired']);
+    expect(required).toEqual([true]);
+    expect(model.getNick()).toBeNull();
+    expect(store[config.tokenStorageKey]).toBeUndefined();
+  });
+
   it('?token= в query авторизует и сохраняет в localStorage', () => {
     const token = makeToken({ sub: 'u1', nick: 'Vanya' });
     const events = [];

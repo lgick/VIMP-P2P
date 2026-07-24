@@ -9,6 +9,15 @@ export class NickTakenError extends Error {
   }
 }
 
+// F6: пользователь уже имеет ник — POST /nick не переименование
+export class NickAlreadySetError extends Error {
+  constructor(userId) {
+    super(`user ${userId} already has a nick`);
+    this.name = 'NickAlreadySetError';
+    this.userId = userId;
+  }
+}
+
 export default class UserRepository {
   constructor(db) {
     this._db = db;
@@ -34,13 +43,19 @@ export default class UserRepository {
     return created.rows[0];
   }
 
-  // глобальная уникальность ника (заменяет пер-комнатный checkName хоста)
+  // глобальная уникальность ника (заменяет пер-комнатный checkName хоста).
+  // "AND nick IS NULL" (F6) — защищает от переименования уже зарегистрированного
+  // пользователя; 0 обновлённых строк трактуется как "ник уже задан"
   async setNick(userId, nick) {
     try {
       const result = await this._db.query(
-        'UPDATE users SET nick = $1 WHERE id = $2 RETURNING *',
+        'UPDATE users SET nick = $1 WHERE id = $2 AND nick IS NULL RETURNING *',
         [nick, userId],
       );
+
+      if (!result.rows[0]) {
+        throw new NickAlreadySetError(userId);
+      }
 
       return result.rows[0];
     } catch (err) {

@@ -37,6 +37,21 @@ through environment variables: the room's creator picks them in the lobby,
 and defaults live in `packages/engine/src/config/hostDefaults.js` (engine) and
 `games/tanks/src/config/game.js` (game).
 
+### Auth service (`packages/auth`)
+
+Read in [packages/auth/src/main.js](../../packages/auth/src/main.js) when
+`NODE_ENV=production`; the service exits at startup if any of these are
+missing (see [auth.md](auth.md#running)).
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `VIMP_AUTH_DATABASE_URL` | PostgreSQL connection string | `postgres://localhost:5432/vimp_auth` |
+| `VIMP_AUTH_PORT` | The auth service's port | `3010` |
+| `VIMP_AUTH_PUBLIC_URL` | Its own public origin, used to build the OAuth `redirect_uri`. **Required** in production | — (dev falls back to `http://localhost:PORT`) |
+| `VIMP_AUTH_ALLOWED_ORIGINS` | CSV of master origins allowed to CORS `POST /nick` and to receive an OAuth redirect (`returnUrl`). **Required** in production | `https://localhost:3002` (dev only) |
+| `VIMP_AUTH_STATE_SECRET` | HMAC secret for the stateless OAuth `state` param. **Required** in production | — |
+| `VIMP_AUTH_GITHUB_CLIENT_ID` / `VIMP_AUTH_GITHUB_CLIENT_SECRET` | GitHub OAuth App credentials. **Required** in production | — |
+
 ## packages/engine/src/config/hostDefaults.js — engine host defaults
 
 Source: [packages/engine/src/config/hostDefaults.js](../../packages/engine/src/config/hostDefaults.js).

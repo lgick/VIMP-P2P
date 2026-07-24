@@ -1,4 +1,4 @@
-import UserRepository, { NickTakenError } from '../../packages/auth/src/UserRepository.js';
+import UserRepository, { NickTakenError, NickAlreadySetError } from '../../packages/auth/src/UserRepository.js';
 
 function createDbStub(handlers) {
   return { query: vi.fn((text, values) => handlers(text, values)) };
@@ -51,6 +51,17 @@ describe('UserRepository', () => {
     const repo = new UserRepository(db);
 
     await expect(repo.setNick(1, 'Taken')).rejects.toThrow(NickTakenError);
+  });
+
+  it('setNick бросает NickAlreadySetError, если ник уже задан (F6 — запрет переименования)', async () => {
+    const db = createDbStub(text => {
+      expect(text).toMatch(/nick IS NULL/);
+      return { rows: [] }; // WHERE nick IS NULL не нашёл строк — ник уже задан
+    });
+
+    const repo = new UserRepository(db);
+
+    await expect(repo.setNick(1, 'NewNick')).rejects.toThrow(NickAlreadySetError);
   });
 
   it('setNick возвращает обновлённого пользователя при успехе', async () => {

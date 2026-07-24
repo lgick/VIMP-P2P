@@ -27,9 +27,20 @@ export default class PlayerDataSync {
 
   // подгружает rank+state с мастера при входе игрока. Сбой auth-сервиса не
   // должен блокировать вход — участник стартует с дефолтами (rank 0, пустой
-  // state) и попробует синхронизироваться на следующем flush
+  // state) и попробует синхронизироваться на следующем flush.
+  // rankLoaded/stateLoaded (F4 кодревью) отражают, был ли реально получен
+  // серверный rank/state — flush не должен PUT'ить дефолт поверх настоящих
+  // сохранённых значений, если загрузка не удалась (auth недоступен на join)
   async load(participantId, token) {
-    const entry = { token, rank: 0, state: this._defaultState };
+    const entry = this._entries.get(participantId) ?? {
+      token,
+      rank: 0,
+      state: structuredClone(this._defaultState),
+      rankLoaded: false,
+      stateLoaded: false,
+    };
+
+    entry.token = token;
     this._entries.set(participantId, entry);
 
     try {
@@ -38,18 +49,23 @@ export default class PlayerDataSync {
         this._authedFetch(lobbyConfig.auth.stateUrl, token),
       ]);
 
-      if (rankRes.ok) {
-        entry.rank = (await rankRes.json()).rank ?? 0;
+      if (rankRes.ok && !entry.rankLoaded) {
+        // F9: во время await мог накопиться addRank-дельта поверх
+        // стартового 0 — прибавляем, а не перетираем серверным значением
+        entry.rank += (await rankRes.json()).rank ?? 0;
+        entry.rankLoaded = true;
       }
 
-      if (stateRes.ok) {
+      if (stateRes.ok && !entry.stateLoaded) {
         const { state } = await stateRes.json();
 
         entry.state =
-          state && Object.keys(state).length ? state : this._defaultState;
+          state && Object.keys(state).length ? state : structuredClone(this._defaultState);
+        entry.stateLoaded = true;
       }
     } catch {
-      // недоступность auth-сервиса — остаёмся на дефолтах
+      // недоступность auth-сервиса — остаёмся на дефолтах, следующий
+      // flush повторит load() перед синхронизацией (см. flush)
     }
 
     return entry;
@@ -87,26 +103,38 @@ export default class PlayerDataSync {
 
   // синхронизирует накопленные rank+state участника на мастер. Сбой не
   // бросается дальше — следующий flush попробует снова с уже накопленными
-  // (не потерянными) данными
+  // (не потерянными) данными. F4: если исходная load() не удалась, PUT
+  // дефолтом затёр бы реальный сохранённый rank/state — вместо этого
+  // повторяем load() и шлём PUT только для того, что реально загрузилось
   async flush(participantId) {
-    const entry = this._entries.get(participantId);
+    let entry = this._entries.get(participantId);
 
     if (!entry) {
       return;
     }
 
-    const { token, rank, state } = entry;
+    if (!entry.rankLoaded || !entry.stateLoaded) {
+      entry = await this.load(participantId, entry.token);
+    }
 
-    await Promise.allSettled([
-      this._authedFetch(lobbyConfig.auth.rankUrl, token, {
+    const { token, rank, state, rankLoaded, stateLoaded } = entry;
+    const requests = [];
+
+    if (rankLoaded) {
+      requests.push(this._authedFetch(lobbyConfig.auth.rankUrl, token, {
         method: 'PUT',
         body: { rank },
-      }),
-      this._authedFetch(lobbyConfig.auth.stateUrl, token, {
+      }));
+    }
+
+    if (stateLoaded) {
+      requests.push(this._authedFetch(lobbyConfig.auth.stateUrl, token, {
         method: 'PUT',
         body: { state },
-      }),
-    ]);
+      }));
+    }
+
+    await Promise.allSettled(requests);
   }
 
   // синхронизирует всех текущих участников (границы раунда/карты)

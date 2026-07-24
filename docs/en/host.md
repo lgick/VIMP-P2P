@@ -125,7 +125,10 @@ on the participant — `HumanParticipant.token` (set from `params.token` by
 the auth service can reuse it without re-verifying.
 
 `meta/modules/PlayerDataSync.js` is a per-participant in-memory map of
-`{ token, rank, state }`:
+`{ token, rank, state, rankLoaded, stateLoaded }`. `rankLoaded`/`stateLoaded`
+(added in a post-B4 code-review pass, `plan/auth_fixes.md`) track whether the
+value currently held was actually confirmed by the auth service, as opposed
+to still being the join-time default:
 
 - **Load on join**: `HostGame.createUser()` fires
   `playerDataSync.load(gameId, params.token)` fire-and-forget — it doesn't
@@ -136,18 +139,26 @@ the auth service can reuse it without re-verifying.
   participant's own token. On any failure (auth service down, network
   error) it silently keeps the defaults — rank `0` and the game's declared
   `playerState.defaultState` (`HostGame` reads it from
-  `data.playerState?.defaultState`, e.g.
-  `games/tanks/src/config/game.js`) — a join is never blocked by
-  auth-service unavailability.
+  `data.playerState?.defaultState`, e.g. `games/tanks/src/config/game.js`,
+  cloned per participant rather than shared) — a join is never blocked by
+  auth-service unavailability, and `rankLoaded`/`stateLoaded` stay `false`
+  until a real value is confirmed. A rank delta applied via `addRank` while
+  the load is still in flight is added to, not overwritten by, the server
+  value once it arrives.
 - **Accumulate**: `RoundManager.reportKill()` is the single choke point for
   rank, mirroring how it already accumulates the ephemeral `Stat` score
   there — `playerDataSync.addRank(killerId, +1 or -1)` with the same
   win/team-kill branching as the score update.
 - **Sync back**: `flush(participantId)` `PUT`s the participant's current
   rank+state to the master (`Promise.allSettled`, best-effort — errors are
-  swallowed and a later flush retries with whatever's accumulated by then);
-  `flushAll()` flushes every current participant. Two lifecycle points call
-  `flushAll()`: `RoundManager.createMap()` (map change) and
+  swallowed and a later flush retries with whatever's accumulated by then).
+  If `rankLoaded`/`stateLoaded` is still `false` (the initial `load` never
+  succeeded), `flush` retries `load()` first and only `PUT`s the part that's
+  now confirmed loaded — otherwise a transient auth-service outage at join
+  time would `PUT` the rank-`0` default over a player's real saved rank on
+  the very next map/round boundary. `flushAll()` flushes every current
+  participant. Two lifecycle points call `flushAll()`:
+  `RoundManager.createMap()` (map change) and
   `RoundManager._checkTeamWipe()` (round end) — both alongside the existing
   `Stat.reset()`/`Stat.updateHead()` calls at those same boundaries.
   `HostGame.removeUser()` does one more best-effort `flush()` for the

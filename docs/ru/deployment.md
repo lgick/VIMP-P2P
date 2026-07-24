@@ -139,8 +139,13 @@
   ```
 
   `.env.prod` на этом хосте должен содержать `VIMP_AUTH_DATABASE_URL`
-  (указывающий на сервис `postgres`), а также секреты OAuth-провайдера
-  (`VIMP_AUTH_GITHUB_CLIENT_ID`/`_SECRET`, см. [auth.md](auth.md#запуск)).
+  (указывающий на сервис `postgres`), секреты OAuth-провайдера
+  (`VIMP_AUTH_GITHUB_CLIENT_ID`/`_SECRET`, см. [auth.md](auth.md#запуск)) и
+  ещё три переменные, без которых сервис отказывается стартовать в проде:
+  `VIMP_AUTH_PUBLIC_URL` (собственный публичный origin — для OAuth
+  `redirect_uri`, зарегистрированного у провайдера), `VIMP_AUTH_ALLOWED_ORIGINS`
+  (CSV origin'ов мастеров — CORS на `POST /nick` и allowlist `returnUrl` для
+  OAuth-редиректа) и `VIMP_AUTH_STATE_SECRET` (HMAC-секрет параметра `state`).
   Пара RS256-ключей кладётся в `./.keys/` на хосте (генерируется один раз —
   [auth.md](auth.md#запуск)); никогда не запекайте её в образ и не
   коммитьте.

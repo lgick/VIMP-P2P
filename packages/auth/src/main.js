@@ -5,20 +5,91 @@ import jwtLib from './lib/jwt.js';
 import oauthState from './lib/oauthState.js';
 import { getProvider } from './oauth/index.js';
 import dbPool from './db/pool.js';
-import UserRepository, { NickTakenError } from './UserRepository.js';
+import UserRepository, { NickTakenError, NickAlreadySetError } from './UserRepository.js';
 import { isValidNick } from './lib/validators.js';
+import RateLimiter from './lib/rateLimiter.js';
 
 const env = process.env;
 const isProduction = env.NODE_ENV === 'production';
 
-if (isProduction && env.VIMP_AUTH_PORT) {
-  config.port = Number(env.VIMP_AUTH_PORT);
+if (isProduction) {
+  if (env.VIMP_AUTH_PORT) {
+    config.port = Number(env.VIMP_AUTH_PORT);
+  }
+
+  // публичный origin сервиса (F2) — без него redirect_uri уходит провайдерам
+  // как http://localhost:PORT и OAuth ломается в проде
+  if (!env.VIMP_AUTH_PUBLIC_URL) {
+    console.error(`
+      ERROR: VIMP_AUTH_PUBLIC_URL must be set in the .env file for production.
+    `);
+    process.exit(1);
+  }
+
+  config.publicUrl = env.VIMP_AUTH_PUBLIC_URL;
+
+  // allowlist origin'ов мастеров (F1/F3) — без него CORS на /nick закрыт для
+  // всех, а returnUrl/redirect отклоняется целиком
+  if (!env.VIMP_AUTH_ALLOWED_ORIGINS) {
+    console.error(`
+      ERROR: VIMP_AUTH_ALLOWED_ORIGINS must be set in the .env file for production.
+    `);
+    process.exit(1);
+  }
+
+  config.allowedOrigins = env.VIMP_AUTH_ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean);
+
+  if (!env.VIMP_AUTH_STATE_SECRET) {
+    console.error(`
+      ERROR: VIMP_AUTH_STATE_SECRET must be set in the .env file for production.
+    `);
+    process.exit(1);
+  }
+
+  if (!env.VIMP_AUTH_GITHUB_CLIENT_ID || !env.VIMP_AUTH_GITHUB_CLIENT_SECRET) {
+    console.error(`
+      ERROR: VIMP_AUTH_GITHUB_CLIENT_ID and VIMP_AUTH_GITHUB_CLIENT_SECRET must be set
+      in the .env file for production.
+    `);
+    process.exit(1);
+  }
+} else if (env.VIMP_AUTH_ALLOWED_ORIGINS) {
+  config.allowedOrigins = env.VIMP_AUTH_ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean);
 }
 
 const userRepo = new UserRepository(dbPool.getPool());
 
 function callbackUrl(provider) {
-  return `${config.protocol}//${config.domain}:${config.port}/oauth/${provider}/callback`;
+  const base = config.publicUrl || `${config.protocol}//${config.domain}:${config.port}`;
+
+  return `${base}/oauth/${provider}/callback`;
+}
+
+// проверяет, что origin returnUrl в allowlist (F3: без этого — open redirect,
+// ворующий identity-токен через чужой домен). В dev с пустым allowlist ничего
+// не разрешает — allowlist нужно явно задать даже локально
+function isAllowedReturnUrl(returnUrl) {
+  try {
+    return config.allowedOrigins.includes(new URL(returnUrl).origin);
+  } catch {
+    return false;
+  }
+}
+
+// F12: ограничение перебора/сквоттинга ников и OAuth-запуска по IP
+// (тот же паттерн, что и мастеровый RateLimiter, см. lib/rateLimiter.js)
+const nickLimiter = new RateLimiter({ limit: 5, windowMs: 60000 });
+const oauthStartLimiter = new RateLimiter({ limit: 20, windowMs: 60000 });
+
+function rateLimit(limiter) {
+  return (req, res, next) => {
+    if (!limiter.consume(req.ip)) {
+      res.status(429).json({ error: 'rateLimited' });
+      return;
+    }
+
+    next();
+  };
 }
 
 // извлекает и проверяет Bearer identity-токен, кладёт { id, nick } в req.user
@@ -48,15 +119,41 @@ function requireAuth(req, res, next) {
 
 const app = express();
 
-app.use(express.json());
+app.use(express.json({ limit: '16kb' }));
+
+// CORS для POST /nick (F1) — вызывается прямым fetch из браузера лобби,
+// origin которого отличается от auth-сервиса; остальные ручки идут через
+// прокси мастера (JwksProxy/PlayerDataProxy) и CORS не требуют
+app.use('/nick', (req, res, next) => {
+  const origin = req.get('origin');
+
+  if (origin && config.allowedOrigins.includes(origin)) {
+    res.set('Access-Control-Allow-Origin', origin);
+    res.set('Vary', 'Origin');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'authorization, content-type');
+  }
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+
+  next();
+});
 
 // GET /oauth/:provider/start?returnUrl=... — редирект на страницу провайдера
-app.get('/oauth/:provider/start', (req, res) => {
+app.get('/oauth/:provider/start', rateLimit(oauthStartLimiter), (req, res) => {
   const { provider: providerName } = req.params;
   const returnUrl = req.query.returnUrl;
 
   if (typeof returnUrl !== 'string' || !returnUrl) {
     res.status(400).json({ error: 'returnUrlRequired' });
+    return;
+  }
+
+  if (!isAllowedReturnUrl(returnUrl)) {
+    res.status(400).json({ error: 'returnUrlNotAllowed' });
     return;
   }
 
@@ -85,6 +182,14 @@ app.get('/oauth/:provider/callback', async (req, res) => {
     return;
   }
 
+  // F3: state подписан сервисом, но подделать сам returnUrl мог start-запрос
+  // до появления проверки выше — перепроверяем на выходе на случай будущих
+  // источников state (напр. предыдущей версии токена, ещё не истёкшей)
+  if (!isAllowedReturnUrl(decodedState.returnUrl)) {
+    res.status(400).json({ error: 'returnUrlNotAllowed' });
+    return;
+  }
+
   try {
     const provider = getProvider(providerName);
     const { providerUid } = await provider.exchangeCode(code, callbackUrl(providerName));
@@ -110,7 +215,7 @@ app.get('/oauth/:provider/callback', async (req, res) => {
 
 // POST /nick { nick } — первый вход: привязывает глобально уникальный ник
 // к pending-токену и выдаёт полноценный identity-токен
-app.post('/nick', async (req, res) => {
+app.post('/nick', rateLimit(nickLimiter), async (req, res) => {
   const header = req.get('authorization') || '';
   const pendingToken = header.startsWith('Bearer ') ? header.slice(7) : null;
   const { nick } = req.body || {};
@@ -134,6 +239,14 @@ app.post('/nick', async (req, res) => {
     return;
   }
 
+  // F6: только pending-токен может задавать ник — identity-токен уже
+  // указывает на существующий ник, иначе POST /nick становится способом
+  // переименования (см. plan-readme-md-b-zippy-giraffe.md)
+  if (!payload.pending) {
+    res.status(403).json({ error: 'nickAlreadySet' });
+    return;
+  }
+
   try {
     const user = await userRepo.setNick(Number(payload.sub), nick);
 
@@ -141,6 +254,11 @@ app.post('/nick', async (req, res) => {
   } catch (err) {
     if (err instanceof NickTakenError) {
       res.status(409).json({ error: 'nickTaken' });
+      return;
+    }
+
+    if (err instanceof NickAlreadySetError) {
+      res.status(403).json({ error: 'nickAlreadySet' });
       return;
     }
 
@@ -202,7 +320,16 @@ app.put('/state', requireAuth, async (req, res) => {
     return;
   }
 
-  await userRepo.upsertState(req.user.id, gameId, req.body?.state ?? {});
+  const state = req.body?.state ?? {};
+
+  // F11: state — непрозрачный JSON игры, но должен остаться объектом (не
+  // массив/строка/число) — тело в целом уже ограничено express.json({ limit })
+  if (typeof state !== 'object' || state === null || Array.isArray(state)) {
+    res.status(400).json({ error: 'invalidState' });
+    return;
+  }
+
+  await userRepo.upsertState(req.user.id, gameId, state);
   res.json({ ok: true });
 });
 

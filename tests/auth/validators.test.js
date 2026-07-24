@@ -13,6 +13,12 @@ describe('validators (auth)', () => {
     expect(isValidNick('')).toBe(false);
   });
 
+  it('отклоняет управляющие пробельные символы внутри ника (F13)', () => {
+    expect(isValidNick('Pla\tyer')).toBe(false);
+    expect(isValidNick('Pla\nyer')).toBe(false);
+    expect(isValidNick('Pla yer')).toBe(true);
+  });
+
   it('отклоняет не-строки', () => {
     expect(isValidNick(undefined)).toBe(false);
     expect(isValidNick(null)).toBe(false);

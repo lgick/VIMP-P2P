@@ -22,6 +22,21 @@
 
 Игровые параметры (карта, лимит игроков, таймеры, friendly fire) переменными окружения не задаются: их выбирает создатель комнаты в лобби, а дефолты живут в `packages/engine/src/config/hostDefaults.js` (движковые) и `games/tanks/src/config/game.js` (игровые).
 
+### Auth-сервис (`packages/auth`)
+
+Читаются в [packages/auth/src/main.js](../../packages/auth/src/main.js) при
+`NODE_ENV=production`; при отсутствии любой из них сервис завершается при
+старте (см. [auth.md](auth.md#запуск)).
+
+| Переменная | Назначение | По умолчанию |
+| --- | --- | --- |
+| `VIMP_AUTH_DATABASE_URL` | строка подключения к PostgreSQL | `postgres://localhost:5432/vimp_auth` |
+| `VIMP_AUTH_PORT` | порт auth-сервиса | `3010` |
+| `VIMP_AUTH_PUBLIC_URL` | собственный публичный origin — для OAuth `redirect_uri`. **Обязательна** в production | — (в dev fallback на `http://localhost:PORT`) |
+| `VIMP_AUTH_ALLOWED_ORIGINS` | CSV origin'ов мастеров, которым разрешён CORS `POST /nick` и OAuth-редирект (`returnUrl`). **Обязательна** в production | `https://localhost:3002` (только в dev) |
+| `VIMP_AUTH_STATE_SECRET` | HMAC-секрет для stateless OAuth `state`. **Обязательна** в production | — |
+| `VIMP_AUTH_GITHUB_CLIENT_ID` / `VIMP_AUTH_GITHUB_CLIENT_SECRET` | реквизиты GitHub OAuth App. **Обязательны** в production | — |
+
 ## packages/engine/src/config/hostDefaults.js — движковые дефолты хоста
 
 Источник: [packages/engine/src/config/hostDefaults.js](../../packages/engine/src/config/hostDefaults.js). Движковая половина конфига хоста: лимиты, таймеры, кик-политики, спектаторский keyset (наблюдение — механизм движка). Worker хоста merge'ит её с игровым конфигом танков и применяет поверх настройки комнаты; в этапе 6 плана статический merge заменит `HostPlugin.gameConfig`.

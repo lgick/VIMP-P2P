@@ -110,6 +110,75 @@ describe('PlayerDataSync', () => {
     expect(sync.getState('p1')).toEqual({});
   });
 
+  it('flush не шлёт PUT, если load ни разу не удался (F4 — не клобберить сохранённый rank)', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    const sync = new PlayerDataSync('tanks', { fetchImpl });
+
+    await sync.load('p1', 'tok');
+    fetchImpl.mockClear();
+    await sync.flush('p1');
+
+    // flush пытается повторить load (2 GET), но PUT не шлёт — ничего не loaded
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'PUT' }));
+  });
+
+  it('flush отправляет PUT только для успешно загруженной части (rank ок, state — нет)', async () => {
+    const fetchImpl = vi.fn(async url => (url.startsWith('/auth/rank')
+      ? { ok: true, json: async () => ({ rank: 5 }) }
+      : { ok: false }));
+    const sync = new PlayerDataSync('tanks', { fetchImpl });
+
+    await sync.load('p1', 'tok');
+    fetchImpl.mockClear();
+    await sync.flush('p1');
+
+    // stateLoaded всё ещё false -> flush повторяет load() (2 GET), затем
+    // шлёт PUT только для rank (уже загруженного ранее)
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+
+    const putCalls = fetchImpl.mock.calls.filter(([, opts]) => opts.method === 'PUT');
+
+    expect(putCalls).toHaveLength(1);
+    expect(putCalls[0][0]).toBe('/auth/rank?game=tanks');
+  });
+
+  it('addRank во время загрузки не теряется под серверным rank (F9)', async () => {
+    let resolveRank;
+    const fetchImpl = vi.fn(url => {
+      if (url.startsWith('/auth/rank')) {
+        return new Promise(resolve => {
+          resolveRank = () => resolve({ ok: true, json: async () => ({ rank: 100 }) });
+        });
+      }
+
+      return Promise.resolve({ ok: true, json: async () => ({ state: {} }) });
+    });
+    const sync = new PlayerDataSync('tanks', { fetchImpl });
+
+    const loadPromise = sync.load('p1', 'tok');
+
+    sync.addRank('p1', 5);
+    resolveRank();
+    await loadPromise;
+
+    expect(sync.getRank('p1')).toBe(105);
+  });
+
+  it('defaultState клонируется на каждую запись, не расшаривается между участниками (F10)', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: false }));
+    const sync = new PlayerDataSync('tanks', { fetchImpl, defaultState: { skill: 0 } });
+
+    await sync.load('p1', 'tok1');
+    await sync.load('p2', 'tok2');
+
+    sync.getState('p1').skill = 99;
+
+    expect(sync.getState('p2')).toEqual({ skill: 0 });
+  });
+
   it('flushAll синхронизирует всех текущих участников', async () => {
     const fetchImpl = makeFetch([{ ok: true, json: async () => ({}) }]);
     const sync = new PlayerDataSync('tanks', { fetchImpl });

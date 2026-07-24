@@ -16,10 +16,23 @@ export function encodeState({ returnUrl }) {
   return `${payload}.${sign(payload)}`;
 }
 
+// сравнение подписи константного времени (F8) — обычное `!==` на строках
+// открывает тайминг-атаку на подбор HMAC байт за байтом
+function signaturesMatch(expected, actual) {
+  const expectedBuf = Buffer.from(expected);
+  const actualBuf = Buffer.from(actual);
+
+  if (expectedBuf.length !== actualBuf.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(expectedBuf, actualBuf);
+}
+
 export function decodeState(state) {
   const [payload, signature] = String(state).split('.');
 
-  if (!payload || !signature || sign(payload) !== signature) {
+  if (!payload || !signature || !signaturesMatch(sign(payload), signature)) {
     throw new Error('invalid oauth state');
   }
 

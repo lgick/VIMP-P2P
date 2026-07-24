@@ -169,11 +169,16 @@ shared instance that every master domain points at.
   ```
 
   `.env.prod` on that host needs `VIMP_AUTH_DATABASE_URL` (pointing at the
-  `postgres` service), plus the OAuth provider secrets
+  `postgres` service), the OAuth provider secrets
   (`VIMP_AUTH_GITHUB_CLIENT_ID`/`_SECRET`, see
-  [auth.md](auth.md#running)). The RS256 key pair goes under `./.keys/` on
-  the host (generated once — [auth.md](auth.md#running)); never bake it
-  into the image or commit it.
+  [auth.md](auth.md#running)), and three more the service refuses to start
+  without in production: `VIMP_AUTH_PUBLIC_URL` (its own public origin, used
+  to build the OAuth `redirect_uri` registered with the provider),
+  `VIMP_AUTH_ALLOWED_ORIGINS` (CSV of master origins — CORS on `POST /nick`
+  and the `returnUrl` allowlist for the OAuth redirect) and
+  `VIMP_AUTH_STATE_SECRET` (HMAC secret for the OAuth `state` param). The
+  RS256 key pair goes under `./.keys/` on the host (generated once —
+  [auth.md](auth.md#running)); never bake it into the image or commit it.
 
 - **Migrations.** Not run automatically on container start — apply them
   once, and again after any schema change: `docker compose exec auth node
