@@ -4,7 +4,7 @@ Guidance for Claude Code when working in this repository.
 
 ## Project Overview
 
-VIMP P2P — a multiplayer 2D real-time tank game on a P2P architecture. The
+VIMP engine — a multiplayer 2D real-time tank game on a P2P architecture. The
 authoritative match runs in a Web Worker in the room creator's browser tab
 (Rust simulation core compiled to WASM); clients render via PixiJS and
 connect over WebRTC. A lightweight Node.js master server provides the lobby,
